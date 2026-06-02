@@ -26,6 +26,7 @@
 - [x] Rank ingredients by expiry urgency
 - [x] Output top ingredients to use today
 - [x] Publish results to Home Assistant via REST webhook
+- [x] Initialize git repository and push to GitHub
 - [ ] Verify Grocy response parsing against real household data
 - [ ] Decide whether MQTT is needed in addition to webhooks
 

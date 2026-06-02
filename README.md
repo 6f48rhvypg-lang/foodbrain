@@ -46,6 +46,7 @@ Current baseline:
 - Optional Home Assistant webhook publishing
 - CLI for sample and live runs
 - Unit tests for normalization and scoring
+- Git repository initialized and pushed to `https://github.com/RSM-CEI/foodbrain`
 
 ## Quick Start
 
