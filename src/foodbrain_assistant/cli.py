@@ -8,7 +8,8 @@ from typing import Optional, Sequence
 
 from .config import load_settings
 from .grocy_client import GrocyClientError, diagnose_stock_response, parse_stock_response
-from .models import RunResult, StockItem
+from .models import Recipe, RunResult, StockItem
+from .recipes import RecipesError, parse_recipes_response
 from .service import run_once_with_source
 
 
@@ -31,6 +32,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         type=Path,
         metavar="PATH",
         help="Validate and summarize an exported Grocy /api/stock JSON response.",
+    )
+    parser.add_argument(
+        "--recipes-json",
+        type=Path,
+        metavar="PATH",
+        help="Match a local recipes JSON file against the chosen stock.",
     )
     parser.add_argument(
         "--json",
@@ -56,10 +63,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stock_items = _load_grocy_stock_json(args.grocy_stock_json)
             stock_source_name = "grocy-json"
 
+        recipes = _load_recipes_json(args.recipes_json) if args.recipes_json else None
+
         result = run_once_with_source(
             settings,
             stock_items=stock_items,
             stock_source=stock_source_name,
+            recipes=recipes,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -89,6 +99,14 @@ def _load_grocy_stock_json(path: Path) -> list[StockItem]:
         raise SystemExit(str(exc)) from exc
 
 
+def _load_recipes_json(path: Path) -> list[Recipe]:
+    payload = _load_json_file(path)
+    try:
+        return parse_recipes_response(payload)
+    except RecipesError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def _load_json_file(path: Path) -> object:
     try:
         with path.open("r", encoding="utf-8") as file:
@@ -109,6 +127,16 @@ def _print_text(result: RunResult) -> None:
             f"{urgency.reason}; score {urgency.urgency_score:g}"
         )
 
+    if result.recipe_matches:
+        print("\nCook one of these:")
+        for match in result.recipe_matches:
+            missing = ", ".join(ingredient.name for ingredient in match.missing)
+            missing_note = f"; missing: {missing}" if missing else "; nothing missing"
+            print(
+                f"- {match.recipe.name}: {match.coverage * 100:.0f}% in stock; "
+                f"score {match.score:g}{missing_note}"
+            )
+
 
 def _result_to_json(result: RunResult) -> dict[str, object]:
     return {
@@ -126,6 +154,17 @@ def _result_to_json(result: RunResult) -> dict[str, object]:
                 "reason": urgency.reason,
             }
             for urgency in result.urgent_ingredients
+        ],
+        "recipe_matches": [
+            {
+                "name": match.recipe.name,
+                "coverage": match.coverage,
+                "expiry_usefulness": match.expiry_usefulness,
+                "score": match.score,
+                "matched": [ingredient.name for ingredient in match.matched],
+                "missing": [ingredient.name for ingredient in match.missing],
+            }
+            for match in result.recipe_matches
         ],
     }
 

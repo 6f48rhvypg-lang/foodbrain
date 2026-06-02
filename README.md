@@ -44,9 +44,10 @@ Current baseline:
 - Minimal Grocy `/api/stock` client
 - Fixture-driven Grocy `/api/stock` response parser diagnostics
 - Expiry-aware ingredient urgency scoring
+- Recipe matching against stock, ranked by pantry coverage and expiry usefulness
 - Optional Home Assistant webhook publishing
 - CLI for sample and live runs
-- Unit tests for Grocy parsing, normalization, and scoring
+- Unit tests for Grocy parsing, normalization, scoring, recipe parsing, and matching
 - Git repository initialized and pushed to `https://github.com/RSM-CEI/foodbrain`
 
 ## Quick Start
@@ -82,6 +83,20 @@ payload:
 FOODBRAIN_GROCY_STOCK_JSON=.foodbrain-local/stock.json python -m unittest tests.test_grocy_real_stock_contract
 ```
 
+To match recipes against the chosen stock, pass a local recipes JSON file. The
+file is a list of recipes (or `{"recipes": [...]}`), each with a `name` and an
+`ingredients` list of plain lines (`"2 cups flour"`) or objects
+(`{"name": "Eggs", "quantity": 3, "unit": "pieces"}`). A sample lives at
+[examples/recipes.sample.json](examples/recipes.sample.json):
+
+```bash
+foodbrain --sample --recipes-json examples/recipes.sample.json
+```
+
+Recipes are ranked by how much of each recipe is already in stock (`coverage`)
+and how much soon-to-expire stock they use (`expiry_usefulness`). The same
+`--recipes-json` flag works with `--grocy-stock-json` and live Grocy runs.
+
 For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash
@@ -100,6 +115,7 @@ Optional environment variables:
 - `FOODBRAIN_HOME_ASSISTANT_WEBHOOK_URL`
 - `FOODBRAIN_EXPIRY_WINDOW_DAYS`
 - `FOODBRAIN_TOP_INGREDIENT_LIMIT`
+- `FOODBRAIN_TOP_RECIPE_LIMIT`
 
 ## Current Development Plan
 

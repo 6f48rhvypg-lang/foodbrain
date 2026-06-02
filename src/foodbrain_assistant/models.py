@@ -1,6 +1,6 @@
 """Domain models used by the recommendation service."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
@@ -25,6 +25,32 @@ class IngredientUrgency:
 
 
 @dataclass(frozen=True)
+class RecipeIngredient:
+    raw: str
+    name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class Recipe:
+    name: str
+    ingredients: list[RecipeIngredient]
+    source: str = "local"
+
+
+@dataclass(frozen=True)
+class RecipeMatch:
+    recipe: Recipe
+    matched: list[RecipeIngredient]
+    missing: list[RecipeIngredient]
+    coverage: float
+    expiry_usefulness: float
+    score: float
+
+
+@dataclass(frozen=True)
 class RunResult:
     urgent_ingredients: list[IngredientUrgency]
     source: str
+    recipe_matches: list[RecipeMatch] = field(default_factory=list)

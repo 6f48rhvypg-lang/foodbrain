@@ -13,6 +13,7 @@ class Settings:
     home_assistant_webhook_url: Optional[str]
     expiry_window_days: int = 7
     top_ingredient_limit: int = 8
+    top_recipe_limit: int = 5
 
     @property
     def grocy_enabled(self) -> bool:
@@ -30,6 +31,7 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
         ),
         expiry_window_days=_int_setting("FOODBRAIN_EXPIRY_WINDOW_DAYS", 7, file_values),
         top_ingredient_limit=_int_setting("FOODBRAIN_TOP_INGREDIENT_LIMIT", 8, file_values),
+        top_recipe_limit=_int_setting("FOODBRAIN_TOP_RECIPE_LIMIT", 5, file_values),
     )
 
 

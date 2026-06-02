@@ -35,8 +35,10 @@ Current implementation state:
 - `foodbrain_assistant.config` loads environment configuration.
 - `foodbrain_assistant.grocy_client` reads, parses, and diagnoses Grocy `/api/stock` responses with explicit parser tests.
 - `foodbrain_assistant.scoring` ranks stocked ingredients by expiry urgency.
-- `foodbrain_assistant.home_assistant` can publish a run summary to a webhook URL.
-- `foodbrain_assistant.cli` provides `foodbrain --sample`, `foodbrain --grocy-stock-json`, `foodbrain --diagnose-grocy-stock-json`, and `foodbrain` for live Grocy runs.
+- `foodbrain_assistant.recipes` loads recipes from local JSON files and parses ingredient lines into quantity, unit, and normalized name.
+- `foodbrain_assistant.matching` matches recipes against stock and ranks them by pantry coverage and expiry usefulness.
+- `foodbrain_assistant.home_assistant` can publish a run summary (including recipe matches) to a webhook URL.
+- `foodbrain_assistant.cli` provides `foodbrain --sample`, `foodbrain --grocy-stock-json`, `foodbrain --diagnose-grocy-stock-json`, `foodbrain --recipes-json`, and `foodbrain` for live Grocy runs.
 
 The first implementation intentionally has no runtime third-party dependencies so it can run on a small home server with only Python installed.
 
@@ -114,5 +116,6 @@ Inventory and expiry dates decide what matters. FlavorGraph makes the result mor
 - Python compatibility target: 3.9 and newer.
 - Live Grocy access requires `FOODBRAIN_GROCY_BASE_URL` and `FOODBRAIN_GROCY_API_KEY`.
 - Saved Grocy `/api/stock` JSON can be diagnosed with `foodbrain --diagnose-grocy-stock-json` before running recommendations against it.
+- Recipe matching is a deterministic heuristic: an ingredient and a stock item match when the word set of one contains the other's (after lowercasing and light singularization). `meal_score = coverage + 0.5 * expiry_usefulness`, where `expiry_usefulness` sums the urgency of matched stock so recipes that use up expiring items rank higher.
 - Home Assistant publishing currently uses a webhook URL; MQTT is still planned.
 - `2999-12-31` from Grocy is treated as no practical expiry date.

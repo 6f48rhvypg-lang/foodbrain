@@ -35,11 +35,12 @@ Current handoff: see [handoff.md](handoff.md) for restart commands, verification
 
 ## Phase 4: Recipe Matching
 
-- Read recipes from Grocy, Mealie, Tandoor, or local files
-- Parse ingredient lines
-- Normalize ingredient names
-- Match recipes against available stock
-- Rank recipes by pantry coverage and expiry usefulness
+- [x] Read recipes from local JSON files (Grocy/Mealie/Tandoor sources still to come)
+- [x] Parse ingredient lines (quantity, unit, name)
+- [x] Normalize ingredient names
+- [x] Match recipes against available stock
+- [x] Rank recipes by pantry coverage and expiry usefulness
+- [ ] Add a live recipe source (Grocy `/api/objects/recipes`, Mealie, or Tandoor)
 
 ## Phase 5: FlavorGraph Integration
 

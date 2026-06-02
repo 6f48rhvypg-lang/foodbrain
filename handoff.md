@@ -7,7 +7,7 @@ Current date: 2026-06-02
 - Repository: `https://github.com/RSM-CEI/foodbrain`
 - Branch: `main`
 - Latest local implementation and documentation changes are intended to be committed and pushed before continuing on another PC.
-- The Python sidecar service can read Grocy stock, score expiry urgency, print CLI output, and optionally publish a Home Assistant webhook summary.
+- The Python sidecar service can read Grocy stock, score expiry urgency, match local recipes against stock, print CLI output, and optionally publish a Home Assistant webhook summary.
 - Grocy `/api/stock` parsing now has unit tests, an automatic diagnostics command, and an optional real-data contract test.
 - Local household data exports should be saved under `.foodbrain-local/`, which is ignored by git.
 - Live Grocy credentials can be stored in a local ignored `.env` file copied from `.env.example`.
@@ -20,6 +20,17 @@ Current date: 2026-06-02
   are not committed. Re-create `.env` from `.env.example` on each machine.
 
 ## Changed In This Session
+
+- Started Phase 4 recipe matching with local recipe fixtures (the recommended next step from the previous handoff).
+- Added `foodbrain_assistant.recipes`: loads recipes from local JSON files and parses ingredient lines into quantity, unit, and normalized name.
+- Added `foodbrain_assistant.models.Recipe`, `RecipeIngredient`, and `RecipeMatch`; `RunResult` now carries `recipe_matches`.
+- Added `foodbrain_assistant.matching`: deterministic recipe-to-stock matching ranked by `coverage + 0.5 * expiry_usefulness`.
+- Added `foodbrain --recipes-json PATH`, which works with `--sample`, `--grocy-stock-json`, and live Grocy runs; recipe matches are shown in text and JSON output and included in the Home Assistant webhook payload.
+- Added `FOODBRAIN_TOP_RECIPE_LIMIT` (default 5) to `config.Settings`, `.env.example`, and README.
+- Added `examples/recipes.sample.json` and tests `tests/test_recipes.py` and `tests/test_matching.py`.
+- Test suite is now 30 tests (1 skipped: the optional real-data contract test).
+
+### Phase 3 (prior session)
 
 - Added `parse_stock_response` coverage for common Grocy stock response shapes.
 - Added `diagnose_stock_response` to summarize real Grocy payload compatibility.
@@ -40,8 +51,14 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 Expected result at handoff:
 
 ```text
-Ran 13 tests
+Ran 30 tests
 OK (skipped=1)
+```
+
+Run recipe matching against the sample stock and example recipes:
+
+```bash
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --recipes-json examples/recipes.sample.json
 ```
 
 Run the sample CLI flow:
@@ -121,16 +138,26 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .f
 
 ## Next Implementation Decision
 
-Live Grocy verification is DONE. The two remaining choices are now the next step:
+Phase 4 recipe matching is implemented against local JSON fixtures and verified
+with the sample stock. The deterministic matcher ranks recipes by pantry
+coverage plus expiry usefulness, so the "what should I cook" path works end to
+end without any third-party dependency.
 
-- Home Assistant MQTT sensors, if dashboard entities are needed (vs. keeping the
-  current webhook-only summary).
-- Begin Phase 4 recipe matching with local recipe fixtures, since stock ingestion
-  is confirmed against real data.
+Remaining Phase 4 work and the natural next steps:
 
-Recommended next: start Phase 4 recipe matching with fixtures, since the webhook
-path is enough for a daily summary and recipes unlock the core "what should I cook"
-value. Revisit MQTT only when a live HA dashboard is actually wanted.
+- Add a live recipe source: Grocy `/api/objects/recipes` (plus its
+  `recipes_pos` ingredient rows), Mealie, or Tandoor. The loader in
+  `foodbrain_assistant.recipes` already separates parsing from the file format,
+  so a `parse_grocy_recipes_response` can plug into the same `Recipe` model.
+- Verify recipe matching against a real recipe export the way stock ingestion
+  was verified (save under `.foodbrain-local/`, do not commit).
+- Tune the matching heuristic if real recipe text over- or under-matches (the
+  current rule is word-set containment with light singularization).
+- Then either Phase 5 (FlavorGraph pairing) or revisit Home Assistant MQTT if a
+  live dashboard is wanted.
+
+Recommended next: wire in the Grocy recipe endpoint so matching runs on the same
+real household data already used for stock, then verify it live.
 
 To re-run the live verification on any machine that can reach the Grocy LXC:
 

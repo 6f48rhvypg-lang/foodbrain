@@ -49,4 +49,15 @@ def _to_payload(result: RunResult) -> dict[str, object]:
             }
             for urgency in result.urgent_ingredients
         ],
+        "recipe_matches": [
+            {
+                "name": match.recipe.name,
+                "coverage": match.coverage,
+                "expiry_usefulness": match.expiry_usefulness,
+                "score": match.score,
+                "matched": [ingredient.name for ingredient in match.matched],
+                "missing": [ingredient.name for ingredient in match.missing],
+            }
+            for match in result.recipe_matches
+        ],
     }

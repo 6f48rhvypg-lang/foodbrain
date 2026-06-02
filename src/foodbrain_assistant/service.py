@@ -6,7 +6,8 @@ from typing import Optional
 from .config import Settings
 from .grocy_client import GrocyClient
 from .home_assistant import publish_webhook
-from .models import RunResult, StockItem
+from .matching import rank_recipes
+from .models import Recipe, RunResult, StockItem
 from .scoring import rank_ingredients_by_urgency
 
 
@@ -18,6 +19,7 @@ def run_once_with_source(
     settings: Settings,
     stock_items: Optional[list[StockItem]] = None,
     stock_source: str = "sample",
+    recipes: Optional[list[Recipe]] = None,
 ) -> RunResult:
     if stock_items is None:
         if not settings.grocy_enabled:
@@ -33,14 +35,27 @@ def run_once_with_source(
     else:
         source = stock_source
 
+    today = date.today()
+
+    recipe_matches = []
+    if recipes:
+        recipe_matches = rank_recipes(
+            recipes,
+            stock_items,
+            today=today,
+            expiry_window_days=settings.expiry_window_days,
+            limit=settings.top_recipe_limit,
+        )
+
     result = RunResult(
         urgent_ingredients=rank_ingredients_by_urgency(
             stock_items,
-            today=date.today(),
+            today=today,
             expiry_window_days=settings.expiry_window_days,
             limit=settings.top_ingredient_limit,
         ),
         source=source,
+        recipe_matches=recipe_matches,
     )
 
     if settings.home_assistant_webhook_url:

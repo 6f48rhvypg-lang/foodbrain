@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Spinach & Yogurt Bowl",
+    "ingredients": [
+      "1 bag spinach",
+      "1 tub greek yogurt",
+      "1 tbsp olive oil",
+      "salt to taste"
+    ]
+  },
+  {
+    "name": "Carrot Rice Pilaf",
+    "ingredients": [
+      "2 carrots, diced",
+      "1 cup rice",
+      "1 tbsp olive oil",
+      "1 tsp cumin"
+    ]
+  },
+  {
+    "name": "Pantry Fried Rice",
+    "ingredients": [
+      "1 cup rice",
+      "2 eggs",
+      "1 carrot",
+      "2 tbsp soy sauce"
+    ]
+  }
+]
