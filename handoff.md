@@ -11,6 +11,13 @@ Current date: 2026-06-02
 - Grocy `/api/stock` parsing now has unit tests, an automatic diagnostics command, and an optional real-data contract test.
 - Local household data exports should be saved under `.foodbrain-local/`, which is ignored by git.
 - Live Grocy credentials can be stored in a local ignored `.env` file copied from `.env.example`.
+- LIVE-VERIFIED (2026-06-02): Confirmed against a real self-hosted Grocy instance
+  (Proxmox LXC at `http://192.168.178.150`). `scripts/fetch_grocy_stock.py` pulled
+  the live `/api/stock`, diagnostics passed with no errors/warnings, the contract
+  test passed, and `foodbrain` produced a real recommendation. Roadmap Phase 3
+  "Verify Grocy response parsing against real household data" is now complete.
+- The real Grocy base URL and API key live only in the local ignored `.env`; they
+  are not committed. Re-create `.env` from `.env.example` on each machine.
 
 ## Changed In This Session
 
@@ -114,9 +121,24 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .f
 
 ## Next Implementation Decision
 
-The next real project step is still to verify the Grocy parser against household data. After that passes, choose between:
+Live Grocy verification is DONE. The two remaining choices are now the next step:
 
-- Home Assistant MQTT sensors, if dashboard entities are needed.
-- Recipe matching, if expiry-based stock ingestion is confirmed and webhook output is enough for now.
+- Home Assistant MQTT sensors, if dashboard entities are needed (vs. keeping the
+  current webhook-only summary).
+- Begin Phase 4 recipe matching with local recipe fixtures, since stock ingestion
+  is confirmed against real data.
+
+Recommended next: start Phase 4 recipe matching with fixtures, since the webhook
+path is enough for a daily summary and recipes unlock the core "what should I cook"
+value. Revisit MQTT only when a live HA dashboard is actually wanted.
+
+To re-run the live verification on any machine that can reach the Grocy LXC:
+
+```bash
+cp .env.example .env   # then fill in the real URL + API key
+PYTHONPATH=src python3 scripts/fetch_grocy_stock.py
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .foodbrain-local/stock.json
+PYTHONPATH=src python3 -m foodbrain_assistant.cli
+```
 
 Keep inventory parsing and scoring deterministic. Do not commit `.env`, API keys, or `.foodbrain-local/` contents.

@@ -30,7 +30,7 @@ Current handoff: see [handoff.md](handoff.md) for restart commands, verification
 - [x] Publish results to Home Assistant via REST webhook
 - [x] Initialize git repository and push to GitHub
 - [x] Add saved Grocy stock response parser diagnostic workflow
-- [ ] Verify Grocy response parsing against real household data
+- [x] Verify Grocy response parsing against real household data
 - [ ] Decide whether MQTT is needed in addition to webhooks
 
 ## Phase 4: Recipe Matching
