@@ -42,10 +42,11 @@ Current baseline:
 - Python package under `src/foodbrain_assistant`
 - Environment-based configuration
 - Minimal Grocy `/api/stock` client
+- Fixture-driven Grocy `/api/stock` response parser diagnostics
 - Expiry-aware ingredient urgency scoring
 - Optional Home Assistant webhook publishing
 - CLI for sample and live runs
-- Unit tests for normalization and scoring
+- Unit tests for Grocy parsing, normalization, and scoring
 - Git repository initialized and pushed to `https://github.com/RSM-CEI/foodbrain`
 
 ## Quick Start
@@ -58,11 +59,36 @@ python -m unittest discover -s tests
 foodbrain --sample
 ```
 
-For a live Grocy run, copy `.env.example` to `.env`, fill in the values, export them in your shell, then run:
+To verify parsing against an exported Grocy `/api/stock` response without committing
+secrets or household data, save the response as a local ignored JSON file and run
+the automatic diagnostics:
+
+```bash
+mkdir -p .foodbrain-local
+foodbrain --diagnose-grocy-stock-json .foodbrain-local/stock.json
+```
+
+The diagnostic command exits with a non-zero status when the payload shape does not
+match the parser contract. After diagnostics pass, run the recommendation flow with:
+
+```bash
+foodbrain --grocy-stock-json .foodbrain-local/stock.json --json
+```
+
+You can also run the optional real-data parser contract test without committing the
+payload:
+
+```bash
+FOODBRAIN_GROCY_STOCK_JSON=.foodbrain-local/stock.json python -m unittest tests.test_grocy_real_stock_contract
+```
+
+For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash
 foodbrain
 ```
+
+Shell-exported environment variables override values in `.env`, which is useful for one-off runs or service managers.
 
 Required environment variables for live Grocy access:
 
@@ -77,20 +103,23 @@ Optional environment variables:
 
 ## Current Development Plan
 
-1. Verify the Grocy stock response shape against a real instance.
+1. Run `foodbrain --diagnose-grocy-stock-json` or the optional `FOODBRAIN_GROCY_STOCK_JSON` contract test against an exported real household stock response.
 2. Add Home Assistant MQTT publishing if webhook automation is not enough.
 3. Add recipe matching once stock ingestion is confirmed.
 4. Add FlavorGraph embeddings after deterministic expiry and recipe scoring work.
 
 ## Next Session Handoff
 
+Use [handoff.md](handoff.md) as the primary restart note for the next session.
+
 Current repo state:
 
 - GitHub remote: `https://github.com/RSM-CEI/foodbrain`
 - Branch: `main`
-- Last known clean state: local `main` should match `origin/main`
 - Local verification command: `PYTHONPATH=src python3 -m unittest discover -s tests`
 - Sample run command: `PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample`
+- Live run command after creating `.env`: `PYTHONPATH=src python3 -m foodbrain_assistant.cli`
+- Grocy diagnostics command: `PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .foodbrain-local/stock.json`
 
 Start the next session by checking:
 
@@ -100,15 +129,18 @@ git pull --ff-only
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
+On another PC, clone or pull `https://github.com/RSM-CEI/foodbrain`, copy `.env.example` to `.env`, fill in the local Grocy URL and API key, then run the live command above. Keep `.env` and `.foodbrain-local/` private.
+
 Next implementation steps:
 
 1. Connect to a real Grocy instance by setting `FOODBRAIN_GROCY_BASE_URL` and `FOODBRAIN_GROCY_API_KEY`.
-2. Run `foodbrain` against live stock and compare the parsed output with Grocy's visible inventory.
-3. Adjust `foodbrain_assistant.grocy_client` if the real `/api/stock` response shape differs from the current parser assumptions.
-4. Decide the Home Assistant integration path:
+2. Export or save the live `/api/stock` response locally under `.foodbrain-local/`, then run `foodbrain --diagnose-grocy-stock-json .foodbrain-local/stock.json` or `FOODBRAIN_GROCY_STOCK_JSON=.foodbrain-local/stock.json python -m unittest tests.test_grocy_real_stock_contract`.
+3. Run `foodbrain` against live stock after the saved response parses correctly.
+4. Adjust `foodbrain_assistant.grocy_client` if the real `/api/stock` response shape differs from the current parser assumptions.
+5. Decide the Home Assistant integration path:
 	- Keep webhook publishing if one daily summary is enough.
 	- Add MQTT publishing if dashboard sensors/entities are needed.
-5. After stock parsing is confirmed, begin Phase 4 recipe matching with local recipe fixtures before calling live recipe APIs.
+6. After stock parsing is confirmed, begin Phase 4 recipe matching with local recipe fixtures before calling live recipe APIs.
 
 Important constraints for the next session:
 

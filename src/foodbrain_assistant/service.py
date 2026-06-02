@@ -11,10 +11,19 @@ from .scoring import rank_ingredients_by_urgency
 
 
 def run_once(settings: Settings, stock_items: Optional[list[StockItem]] = None) -> RunResult:
+    return run_once_with_source(settings, stock_items=stock_items, stock_source="sample")
+
+
+def run_once_with_source(
+    settings: Settings,
+    stock_items: Optional[list[StockItem]] = None,
+    stock_source: str = "sample",
+) -> RunResult:
     if stock_items is None:
         if not settings.grocy_enabled:
             raise ValueError(
-                "Set FOODBRAIN_GROCY_BASE_URL and FOODBRAIN_GROCY_API_KEY, or pass sample stock data."
+                "Set FOODBRAIN_GROCY_BASE_URL and FOODBRAIN_GROCY_API_KEY in the environment or .env, "
+                "or pass --sample / --grocy-stock-json."
             )
         stock_items = GrocyClient(
             base_url=settings.grocy_base_url or "",
@@ -22,7 +31,7 @@ def run_once(settings: Settings, stock_items: Optional[list[StockItem]] = None) 
         ).get_stock_items()
         source = "grocy"
     else:
-        source = "sample"
+        source = stock_source
 
     result = RunResult(
         urgent_ingredients=rank_ingredients_by_urgency(

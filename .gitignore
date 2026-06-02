@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.foodbrain-local/
 .venv/
 __pycache__/
 *.py[cod]

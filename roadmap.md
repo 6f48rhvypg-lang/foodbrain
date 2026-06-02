@@ -21,12 +21,15 @@
 
 ## Phase 3: Recommendation Service
 
+Current handoff: see [handoff.md](handoff.md) for restart commands, verification status, and the next implementation decision.
+
 - [x] Create a Python sidecar service
 - [x] Read stock from Grocy API
 - [x] Rank ingredients by expiry urgency
 - [x] Output top ingredients to use today
 - [x] Publish results to Home Assistant via REST webhook
 - [x] Initialize git repository and push to GitHub
+- [x] Add saved Grocy stock response parser diagnostic workflow
 - [ ] Verify Grocy response parsing against real household data
 - [ ] Decide whether MQTT is needed in addition to webhooks
 
