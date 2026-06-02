@@ -50,7 +50,22 @@ class RecipeMatch:
 
 
 @dataclass(frozen=True)
+class FlavorPartner:
+    name: str
+    score: float
+    in_stock: bool
+
+
+@dataclass(frozen=True)
+class FlavorSuggestion:
+    ingredient: str
+    urgency_score: float
+    partners: list[FlavorPartner]
+
+
+@dataclass(frozen=True)
 class RunResult:
     urgent_ingredients: list[IngredientUrgency]
     source: str
     recipe_matches: list[RecipeMatch] = field(default_factory=list)
+    flavor_suggestions: list[FlavorSuggestion] = field(default_factory=list)

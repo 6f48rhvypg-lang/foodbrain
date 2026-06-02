@@ -1,0 +1,23 @@
+{
+  "pairs": [
+    {"a": "spinach", "b": "garlic", "score": 0.84},
+    {"a": "spinach", "b": "feta", "score": 0.79},
+    {"a": "spinach", "b": "lemon", "score": 0.72},
+    {"a": "spinach", "b": "rice", "score": 0.61},
+    {"a": "spinach", "b": "yogurt", "score": 0.58},
+
+    {"a": "yogurt", "b": "honey", "score": 0.83},
+    {"a": "yogurt", "b": "cucumber", "score": 0.77},
+    {"a": "yogurt", "b": "mint", "score": 0.74},
+    {"a": "yogurt", "b": "berries", "score": 0.7},
+
+    {"a": "carrot", "b": "ginger", "score": 0.81},
+    {"a": "carrot", "b": "cumin", "score": 0.76},
+    {"a": "carrot", "b": "honey", "score": 0.69},
+    {"a": "carrot", "b": "rice", "score": 0.63},
+
+    {"a": "rice", "b": "soy sauce", "score": 0.8},
+    {"a": "rice", "b": "ginger", "score": 0.71},
+    {"a": "rice", "b": "peas", "score": 0.66}
+  ]
+}

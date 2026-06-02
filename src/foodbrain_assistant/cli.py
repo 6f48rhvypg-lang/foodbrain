@@ -14,6 +14,7 @@ from .grocy_client import (
     parse_stock_response,
 )
 from .models import Recipe, RunResult, StockItem
+from .pairing import PairingError, PairingGraph, load_pairings
 from .recipes import (
     RecipesError,
     diagnose_grocy_recipes,
@@ -68,6 +69,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Fetch recipes live from Grocy and match them against the chosen stock.",
     )
     parser.add_argument(
+        "--pairings-json",
+        type=Path,
+        metavar="PATH",
+        help="Suggest FlavorGraph-style pairings for urgent ingredients from a "
+        "local pairings JSON file.",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON output.",
@@ -98,12 +106,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stock_source_name = "grocy-json"
 
         recipes = _load_recipes(args, settings)
+        pairings = _load_pairings(args)
 
         result = run_once_with_source(
             settings,
             stock_items=stock_items,
             stock_source=stock_source_name,
             recipes=recipes,
+            pairings=pairings,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -174,6 +184,15 @@ def _grocy_recipes_bundle(payload: object) -> dict[str, object]:
     }
 
 
+def _load_pairings(args) -> Optional[PairingGraph]:
+    if not args.pairings_json:
+        return None
+    try:
+        return load_pairings(_load_json_file(args.pairings_json))
+    except PairingError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def _load_json_file(path: Path) -> object:
     try:
         with path.open("r", encoding="utf-8") as file:
@@ -204,6 +223,15 @@ def _print_text(result: RunResult) -> None:
                 f"score {match.score:g}{missing_note}"
             )
 
+    if result.flavor_suggestions:
+        print("\nFlavor pairings:")
+        for suggestion in result.flavor_suggestions:
+            partners = ", ".join(
+                f"{partner.name}{' (in stock)' if partner.in_stock else ''}"
+                for partner in suggestion.partners
+            )
+            print(f"- {suggestion.ingredient} pairs with: {partners}")
+
 
 def _result_to_json(result: RunResult) -> dict[str, object]:
     return {
@@ -232,6 +260,21 @@ def _result_to_json(result: RunResult) -> dict[str, object]:
                 "missing": [ingredient.name for ingredient in match.missing],
             }
             for match in result.recipe_matches
+        ],
+        "flavor_suggestions": [
+            {
+                "ingredient": suggestion.ingredient,
+                "urgency_score": suggestion.urgency_score,
+                "partners": [
+                    {
+                        "name": partner.name,
+                        "score": partner.score,
+                        "in_stock": partner.in_stock,
+                    }
+                    for partner in suggestion.partners
+                ],
+            }
+            for suggestion in result.flavor_suggestions
         ],
     }
 

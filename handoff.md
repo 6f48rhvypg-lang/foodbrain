@@ -16,12 +16,45 @@ Current date: 2026-06-02
   the live `/api/stock`, diagnostics passed with no errors/warnings, the contract
   test passed, and `foodbrain` produced a real recommendation. Roadmap Phase 3
   "Verify Grocy response parsing against real household data" is now complete.
+- LIVE-VERIFIED RECIPES (2026-06-02): `scripts/fetch_grocy_recipes.py`,
+  `--diagnose-grocy-recipes-json`, and `--grocy-recipes` all ran successfully
+  against the live instance (exit 0, no errors/warnings, real recommendation
+  produced). FINDING: the live Grocy currently has **zero recipes defined**
+  (`recipes: []`, `recipes_pos: []`); only products (Eier, Milch) and quantity
+  units (Piece, Pack) exist. The recipe-source code path is verified to handle
+  real data and degrade gracefully, but the matching heuristic itself remains
+  unverified against real recipes until some are added to Grocy.
 - The real Grocy base URL and API key live only in the local ignored `.env`; they
   are not committed. Re-create `.env` from `.env.example` on each machine.
 
 ## Changed In This Session
 
-### Grocy recipe source (latest)
+### Phase 5 FlavorGraph pairing (latest)
+
+- Added `foodbrain_assistant.pairing`: `load_pairings` builds a symmetric
+  `PairingGraph` from a local JSON bundle (`{"pairs": [{"a","b","score"}]}` or a
+  bare list); `suggest_pairings` produces pairing suggestions for the most urgent
+  stock ingredients and flags partners that are also in stock.
+- Lookup mirrors `matching`'s explainable token-containment + singularization
+  heuristic, so "Greek yogurt" resolves to the "yogurt" node and "Carrots" to
+  "carrot". Pairing is offline-first and dependency-free; the bundle is the
+  queryable form of FlavorGraph embeddings (top neighbors per ingredient) and can
+  be regenerated from real embeddings without code changes.
+- Added `FlavorPartner` and `FlavorSuggestion` models; `RunResult` now carries
+  `flavor_suggestions`.
+- Added CLI flag `--pairings-json PATH`; suggestions appear in text and JSON
+  output and in the Home Assistant webhook payload. Works with any stock/recipe
+  source.
+- Added `FOODBRAIN_TOP_PAIRING_LIMIT` (default 5, ingredients suggested for) and
+  `FOODBRAIN_PAIRING_PARTNER_LIMIT` (default 4, partners per ingredient) to
+  `config.Settings`, `.env.example`, and README.
+- Added `examples/pairings.sample.json` and `tests/test_pairing.py`. Test suite
+  is now 52 tests (1 skipped).
+- NOT yet backed by a real FlavorGraph embeddings bundle — sample pairings are
+  hand-authored. Generating a real bundle from FlavorGraph embeddings is the
+  obvious next refinement.
+
+### Grocy recipe source (earlier this session)
 
 - Added a live Grocy recipe source: `parse_grocy_recipes_response` and `diagnose_grocy_recipes` in `foodbrain_assistant.recipes` join the `recipes`, `recipes_pos`, `products`, and `quantity_units` object endpoints into the same `Recipe` model used for local files.
 - Internal meal-plan recipes (`type` != `normal`) are skipped; recipes with no resolvable ingredients are dropped rather than raising, mirroring stock parsing tolerance.
@@ -62,14 +95,16 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 Expected result at handoff:
 
 ```text
-Ran 37 tests
+Ran 52 tests
 OK (skipped=1)
 ```
 
-Run recipe matching against the sample stock and example recipes:
+Run recipe matching and flavor pairings against the sample stock:
 
 ```bash
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --recipes-json examples/recipes.sample.json
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample \
+  --recipes-json examples/recipes.sample.json \
+  --pairings-json examples/pairings.sample.json
 ```
 
 Export, diagnose, and match Grocy recipes (needs a configured `.env`):
@@ -157,31 +192,31 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .f
 
 ## Next Implementation Decision
 
-Phase 4 recipe matching is implemented for both local JSON fixtures and live
-Grocy recipes, and verified against sample/synthetic data. The deterministic
-matcher ranks recipes by pantry coverage plus expiry usefulness, so the "what
-should I cook" path works end to end.
+Phase 4 recipe matching is implemented and verified live (the household Grocy has
+products but no recipes yet — see LIVE-VERIFIED RECIPES above). Phase 5
+FlavorGraph pairing is now implemented from a local pairings bundle and verified
+against the sample stock end to end.
 
-The immediate next step is **verifying Grocy recipe matching against real
-household data**, the same way stock ingestion was verified:
+The immediate next refinement is **backing pairings with a real FlavorGraph
+embeddings bundle** instead of the hand-authored sample. FlavorGraph's published
+artifact is node embeddings; generate the bundle offline by taking, for each
+ingredient node, its top-k nearest neighbors by cosine similarity and writing
+them as `{"pairs": [{"a","b","score"}]}` into a local ignored file, then run:
 
 ```bash
-PYTHONPATH=src python3 scripts/fetch_grocy_recipes.py            # writes .foodbrain-local/recipes.json
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-recipes-json .foodbrain-local/recipes.json
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-recipes
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json .foodbrain-local/pairings.json
 ```
 
-Watch the diagnostics for `unresolved_product_count` (recipe ingredients whose
-`product_id` is missing from `products`) and `skipped_empty_recipe_count`. If
-real recipe names over- or under-match stock, tune the heuristic in
-`foodbrain_assistant.matching` (currently word-set containment with light
-singularization).
+Keep the bundle generation offline so the runtime stays dependency-free and
+deterministic. If real pairing names under-match stock, tune the token heuristic
+in `foodbrain_assistant.pairing` (it mirrors `matching`).
 
-After that, the natural choices are:
+Other open options:
 
-- Phase 5 (FlavorGraph pairing) — adds the first external-data dependency.
+- Verify recipe + pairing matching against real recipes once some are added to
+  the household Grocy.
 - Home Assistant MQTT — only if a live dashboard is wanted; the webhook summary
-  already carries recipe matches.
+  already carries recipe matches and flavor suggestions.
 - Optional: Mealie or Tandoor as additional recipe sources.
 
 To re-run the live verification on any machine that can reach the Grocy LXC:

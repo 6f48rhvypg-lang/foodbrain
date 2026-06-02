@@ -45,9 +45,10 @@ Current baseline:
 - Fixture-driven Grocy `/api/stock` response parser diagnostics
 - Expiry-aware ingredient urgency scoring
 - Recipe matching against stock, ranked by pantry coverage and expiry usefulness
+- FlavorGraph-style ingredient pairing suggestions for soon-to-expire stock
 - Optional Home Assistant webhook publishing
 - CLI for sample and live runs
-- Unit tests for Grocy parsing, normalization, scoring, recipe parsing, and matching
+- Unit tests for Grocy parsing, normalization, scoring, recipe parsing, matching, and pairing
 - Git repository initialized and pushed to `https://github.com/RSM-CEI/foodbrain`
 
 ## Quick Start
@@ -113,6 +114,25 @@ For a fully live run, fetch both stock and recipes from Grocy directly:
 foodbrain --grocy-recipes
 ```
 
+### Flavor pairings (Phase 5)
+
+To suggest compatible flavor pairings for your soon-to-expire ingredients, pass
+a pairings JSON file. The file is a list of undirected weighted pairs (or
+`{"pairs": [...]}`), each with `a`, `b`, and an optional `score` (a 0..1 flavor
+affinity). A sample lives at
+[examples/pairings.sample.json](examples/pairings.sample.json):
+
+```bash
+foodbrain --sample --pairings-json examples/pairings.sample.json
+```
+
+Pairings are looked up for the most urgent ingredients first, and partners that
+are also in stock are flagged so they are immediately actionable. This data is
+the queryable form of FlavorGraph embeddings (top neighbors per ingredient);
+the bundle can be regenerated offline from real FlavorGraph embeddings and
+dropped in without code changes. The `--pairings-json` flag combines with any
+stock and recipe source.
+
 For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash
@@ -132,13 +152,18 @@ Optional environment variables:
 - `FOODBRAIN_EXPIRY_WINDOW_DAYS`
 - `FOODBRAIN_TOP_INGREDIENT_LIMIT`
 - `FOODBRAIN_TOP_RECIPE_LIMIT`
+- `FOODBRAIN_TOP_PAIRING_LIMIT`
+- `FOODBRAIN_PAIRING_PARTNER_LIMIT`
 
 ## Current Development Plan
 
 1. Stock ingestion is confirmed against real Grocy data (Phase 3 done).
 2. Recipe matching is implemented for local files and Grocy recipes (Phase 4).
-3. Next: verify Grocy recipe matching against real household data via `foodbrain --diagnose-grocy-recipes-json` / `--grocy-recipes`.
-4. Then add FlavorGraph embeddings (Phase 5), with Home Assistant MQTT and Mealie/Tandoor sources as optional follow-ups.
+3. Grocy recipe matching is verified against the live household instance (which
+   currently has products but no recipes defined yet).
+4. FlavorGraph pairing suggestions are implemented from a local pairings bundle
+   (Phase 5). Remaining options: generate a real FlavorGraph pairings bundle
+   from embeddings, add Home Assistant MQTT, or add Mealie/Tandoor recipe sources.
 
 ## Next Session Handoff
 
