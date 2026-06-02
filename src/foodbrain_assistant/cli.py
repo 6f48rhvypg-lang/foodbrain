@@ -6,10 +6,20 @@ import json
 from pathlib import Path
 from typing import Optional, Sequence
 
-from .config import load_settings
-from .grocy_client import GrocyClientError, diagnose_stock_response, parse_stock_response
+from .config import Settings, load_settings
+from .grocy_client import (
+    GrocyClient,
+    GrocyClientError,
+    diagnose_stock_response,
+    parse_stock_response,
+)
 from .models import Recipe, RunResult, StockItem
-from .recipes import RecipesError, parse_recipes_response
+from .recipes import (
+    RecipesError,
+    diagnose_grocy_recipes,
+    parse_grocy_recipes_response,
+    parse_recipes_response,
+)
 from .service import run_once_with_source
 
 
@@ -33,11 +43,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         metavar="PATH",
         help="Validate and summarize an exported Grocy /api/stock JSON response.",
     )
-    parser.add_argument(
+    stock_source.add_argument(
+        "--diagnose-grocy-recipes-json",
+        type=Path,
+        metavar="PATH",
+        help="Validate and summarize an exported Grocy recipes bundle JSON file.",
+    )
+    recipe_source = parser.add_mutually_exclusive_group()
+    recipe_source.add_argument(
         "--recipes-json",
         type=Path,
         metavar="PATH",
         help="Match a local recipes JSON file against the chosen stock.",
+    )
+    recipe_source.add_argument(
+        "--grocy-recipes-json",
+        type=Path,
+        metavar="PATH",
+        help="Match an exported Grocy recipes bundle JSON file against the chosen stock.",
+    )
+    recipe_source.add_argument(
+        "--grocy-recipes",
+        action="store_true",
+        help="Fetch recipes live from Grocy and match them against the chosen stock.",
     )
     parser.add_argument(
         "--json",
@@ -53,6 +81,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(json.dumps(diagnostics, indent=2))
         return 1 if diagnostics["errors"] else 0
 
+    if args.diagnose_grocy_recipes_json:
+        bundle = _grocy_recipes_bundle(_load_json_file(args.diagnose_grocy_recipes_json))
+        diagnostics = diagnose_grocy_recipes(**bundle)
+        print(json.dumps(diagnostics, indent=2))
+        return 1 if diagnostics["errors"] else 0
+
     try:
         settings = load_settings()
         stock_items = None
@@ -63,7 +97,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stock_items = _load_grocy_stock_json(args.grocy_stock_json)
             stock_source_name = "grocy-json"
 
-        recipes = _load_recipes_json(args.recipes_json) if args.recipes_json else None
+        recipes = _load_recipes(args, settings)
 
         result = run_once_with_source(
             settings,
@@ -99,12 +133,45 @@ def _load_grocy_stock_json(path: Path) -> list[StockItem]:
         raise SystemExit(str(exc)) from exc
 
 
-def _load_recipes_json(path: Path) -> list[Recipe]:
-    payload = _load_json_file(path)
+def _load_recipes(args, settings: Settings) -> Optional[list[Recipe]]:
     try:
-        return parse_recipes_response(payload)
-    except RecipesError as exc:
+        if args.recipes_json:
+            return parse_recipes_response(_load_json_file(args.recipes_json))
+        if args.grocy_recipes_json:
+            bundle = _grocy_recipes_bundle(_load_json_file(args.grocy_recipes_json))
+            return parse_grocy_recipes_response(**bundle)
+        if args.grocy_recipes:
+            if not settings.grocy_enabled:
+                raise SystemExit(
+                    "Set FOODBRAIN_GROCY_BASE_URL and FOODBRAIN_GROCY_API_KEY to use "
+                    "--grocy-recipes, or pass --recipes-json / --grocy-recipes-json."
+                )
+            return GrocyClient(
+                base_url=settings.grocy_base_url or "",
+                api_key=settings.grocy_api_key or "",
+            ).get_recipes()
+    except (RecipesError, GrocyClientError) as exc:
         raise SystemExit(str(exc)) from exc
+    return None
+
+
+def _grocy_recipes_bundle(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise SystemExit(
+            "Grocy recipes bundle must be a JSON object with "
+            "'recipes', 'recipes_pos', and 'products' keys."
+        )
+    missing = [key for key in ("recipes", "recipes_pos", "products") if key not in payload]
+    if missing:
+        raise SystemExit(
+            "Grocy recipes bundle is missing required keys: " + ", ".join(missing)
+        )
+    return {
+        "recipes": payload["recipes"],
+        "positions": payload["recipes_pos"],
+        "products": payload["products"],
+        "quantity_units": payload.get("quantity_units"),
+    }
 
 
 def _load_json_file(path: Path) -> object:
@@ -112,9 +179,9 @@ def _load_json_file(path: Path) -> object:
         with path.open("r", encoding="utf-8") as file:
             return json.load(file)
     except OSError as exc:
-        raise SystemExit(f"Could not read Grocy stock JSON file: {exc}") from exc
+        raise SystemExit(f"Could not read JSON file: {exc}") from exc
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"Grocy stock JSON file was not valid JSON: {exc}") from exc
+        raise SystemExit(f"File was not valid JSON: {exc}") from exc
 
 
 def _print_text(result: RunResult) -> None:

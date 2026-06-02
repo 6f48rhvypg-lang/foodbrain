@@ -7,7 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
-from .models import StockItem
+from .models import Recipe, StockItem
+from .recipes import parse_grocy_recipes_response
 
 
 class GrocyClientError(RuntimeError):
@@ -23,6 +24,14 @@ class GrocyClient:
     def get_stock_items(self) -> list[StockItem]:
         payload = self._get_json("api/stock")
         return parse_stock_response(payload)
+
+    def get_recipes(self) -> list[Recipe]:
+        return parse_grocy_recipes_response(
+            recipes=self._get_json("api/objects/recipes"),
+            positions=self._get_json("api/objects/recipes_pos"),
+            products=self._get_json("api/objects/products"),
+            quantity_units=self._get_json("api/objects/quantity_units"),
+        )
 
     def _get_json(self, path: str) -> Any:
         url = urljoin(self.base_url, path)

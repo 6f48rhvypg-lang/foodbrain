@@ -97,6 +97,22 @@ Recipes are ranked by how much of each recipe is already in stock (`coverage`)
 and how much soon-to-expire stock they use (`expiry_usefulness`). The same
 `--recipes-json` flag works with `--grocy-stock-json` and live Grocy runs.
 
+You can also match recipes stored in Grocy itself. Export the recipe objects to
+a local ignored bundle, diagnose it, then match it against any stock source:
+
+```bash
+mkdir -p .foodbrain-local
+PYTHONPATH=src python3 scripts/fetch_grocy_recipes.py
+foodbrain --diagnose-grocy-recipes-json .foodbrain-local/recipes.json
+foodbrain --sample --grocy-recipes-json .foodbrain-local/recipes.json
+```
+
+For a fully live run, fetch both stock and recipes from Grocy directly:
+
+```bash
+foodbrain --grocy-recipes
+```
+
 For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash
@@ -119,10 +135,10 @@ Optional environment variables:
 
 ## Current Development Plan
 
-1. Run `foodbrain --diagnose-grocy-stock-json` or the optional `FOODBRAIN_GROCY_STOCK_JSON` contract test against an exported real household stock response.
-2. Add Home Assistant MQTT publishing if webhook automation is not enough.
-3. Add recipe matching once stock ingestion is confirmed.
-4. Add FlavorGraph embeddings after deterministic expiry and recipe scoring work.
+1. Stock ingestion is confirmed against real Grocy data (Phase 3 done).
+2. Recipe matching is implemented for local files and Grocy recipes (Phase 4).
+3. Next: verify Grocy recipe matching against real household data via `foodbrain --diagnose-grocy-recipes-json` / `--grocy-recipes`.
+4. Then add FlavorGraph embeddings (Phase 5), with Home Assistant MQTT and Mealie/Tandoor sources as optional follow-ups.
 
 ## Next Session Handoff
 
