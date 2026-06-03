@@ -4,29 +4,34 @@ Current date: 2026-06-03
 
 ## Start Here Next
 
-The **real FlavorGraph pairings bundle generator is done** (added
-`scripts/build_flavor_pairings.py`). It loads the public FlavorGraph node list +
-300D embedding pickle, filters to ingredient nodes, computes top-k cosine
-neighbors, and writes the `{"pairs": [...]}` bundle the runtime already consumes.
-It was run and verified end to end against the sample stock on this machine:
-6653 ingredient nodes -> 48,227 pairs at `--min-score 0.5`, and real pairings
-resolve through the token matcher (e.g. Rice -> "frozen peas and carrot (in
-stock)"). The artifacts and generated bundle live only under `.foodbrain-local/`
-(gitignored); only the script is committed.
+The **English/German ingredient alias map is done** (this session). Live Grocy
+product names like Milch/Eier/Reis now resolve to the English FlavorGraph nodes
+and English recipe ingredients. Aliasing is applied inside the shared
+`normalize_ingredient_name(name, aliases=None)` chokepoint (whole name first,
+then per token, before singularization), so one map fixes both `matching` and
+`pairing`. New `foodbrain_assistant/aliases.py` loads/validates a flat
+`{ "source": "target" }` map; the CLI auto-loads `examples/aliases.sample.json`
+plus an optional gitignored `.foodbrain-local/aliases.json` override, or takes
+`--aliases-json PATH`. Verified end to end on this machine: a scratch German
+stock (Milch/Eier/Reis) resolved Reis -> rice pairings via aliases (Milch/Eier
+have no partner only because the *sample* bundle contains just `rice`), and a
+unit test asserts Milch -> milk resolves. Test suite is now 62 (1 skipped).
 
-The single recommended next task is to **add an English/German alias map** so
-live Grocy product names (Milch, Eier, …) resolve against the English FlavorGraph
-nodes — otherwise live pairings under-match. See "Next Implementation Decision".
+The next recommended task is open — pick from "Next Implementation Decision".
+Strongest candidates: verify recipe+pairing matching against real Grocy recipes
+once some exist (household Grocy still has zero recipes), or expand the alias map
+from the real FlavorGraph node vocabulary.
 
 First commands on a fresh machine:
 
 ```bash
 git pull --ff-only
-PYTHONPATH=src python3 -m unittest discover -s tests   # expect: Ran 52 tests, OK (skipped=1)
+PYTHONPATH=src python3 -m unittest discover -s tests   # expect: Ran 62 tests, OK (skipped=1)
 PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json examples/pairings.sample.json
 # Optional: rebuild the real bundle (see "Generating a real FlavorGraph bundle" in README)
 PYTHONPATH=src python3 scripts/build_flavor_pairings.py --min-score 0.5
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json .foodbrain-local/pairings.json
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-stock-json .foodbrain-local/stock.json \
+  --pairings-json .foodbrain-local/pairings.json --aliases-json examples/aliases.sample.json
 ```
 
 ## Current State
@@ -55,7 +60,27 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json .food
 
 ## Changed In This Session
 
-### Real FlavorGraph bundle generator (latest)
+### English/German ingredient alias map (latest)
+
+- Added `foodbrain_assistant/aliases.py`: `load_aliases(payload)` validates a flat
+  `{ "source": "target" }` JSON object and normalizes both sides; `merge_aliases`
+  layers a local override over the sample. Raises `AliasError` on bad input.
+- `normalization.normalize_ingredient_name` now takes an optional `aliases` map.
+  Aliases apply after lowercasing/whitespace cleanup but before singularization,
+  whole normalized name first then per token (so `Milch` and `Bio Milch` both
+  map). `None`/absent = unchanged behavior, so the prior 52 tests stayed green.
+- Threaded the map through `matching.rank_recipes`/`match_recipe`/`_tokenize`,
+  `pairing.suggest_pairings`/`partners_for`/`_tokenize`, and
+  `service.run_once_with_source`. Pairing-bundle keys and partner names are NOT
+  aliased (they are already English); only stock/recipe names are.
+- CLI: new `--aliases-json PATH`. With no flag it auto-loads
+  `examples/aliases.sample.json` when present and layers a gitignored
+  `.foodbrain-local/aliases.json` override on top.
+- Added `examples/aliases.sample.json` (German starter map), `tests/test_aliases.py`,
+  and a German-resolution test in `tests/test_pairing.py`. Suite: 62 (1 skipped).
+- README gained a "Non-English ingredient names (alias map)" subsection.
+
+### Real FlavorGraph bundle generator (earlier)
 
 - Added `scripts/build_flavor_pairings.py`: an offline, one-off generator that
   turns the real FlavorGraph artifacts into the runtime `{"pairs": [...]}` bundle.
@@ -148,7 +173,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 Expected result at handoff:
 
 ```text
-Ran 52 tests
+Ran 62 tests
 OK (skipped=1)
 ```
 
@@ -245,77 +270,25 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .f
 
 ## Next Implementation Decision
 
-Phase 4 recipe matching is implemented and verified live (the household Grocy has
-products but no recipes yet — see LIVE-VERIFIED RECIPES above). Phase 5
-FlavorGraph pairing is implemented from a local pairings bundle, and the **real
-FlavorGraph bundle generator now exists and is verified** (see "Real FlavorGraph
-bundle generator" above). The data-generation task is therefore DONE.
+Phase 4 recipe matching is implemented and verified live. Phase 5 FlavorGraph
+pairing is implemented with a real bundle generator. The **English/German alias
+map is now also done and verified** (see "English/German ingredient alias map"
+above). All planned data/normalization tasks are therefore complete.
 
-The immediate next refinement is an **English/German alias map** so live Grocy
-product names resolve against the (English) FlavorGraph nodes. Today, `--sample`
-resolves well because the sample stock is English; live stock (Milch, Eier) will
-under-match until aliases exist. This is the **next session's task** — spec below.
-
-### TASK: English/German ingredient alias map
-
-Goal: a stock item named `Milch` should tokenize/normalize as `milk` so it
-resolves to FlavorGraph's `milk` node (and to English recipe ingredients). Keep
-it offline, deterministic, and data-driven, matching the rest of FoodBrain.
-
-Design (shared chokepoint):
-
-- `normalization.normalize_ingredient_name` (in
-  [src/foodbrain_assistant/normalization.py](src/foodbrain_assistant/normalization.py))
-  is the single function both `pairing` and `matching` already call. Apply
-  aliases **there** so one change fixes both lookups. Add an optional aliases
-  argument or a module-level applied map; simplest is a new
-  `apply_aliases(name, aliases)` helper and have callers pass the loaded map, OR
-  add `normalize_ingredient_name(name, aliases=None)` with a default of `None`
-  (no behavior change when absent — keeps the 52 existing tests green).
-- Alias matching should be on the **whole normalized name first, then per token**
-  (so both `Milch` and a multiword `Bio Milch` map). Apply aliases AFTER
-  lowercasing/whitespace cleanup but BEFORE singularization in the tokenizers in
-  `pairing._tokenize` and the matching equivalent.
-
-Steps:
-
-1. Add `examples/aliases.sample.json` — a flat `{ "german": "english" }` map:
-   `{"milch": "milk", "eier": "egg", "käse": "cheese", "butter": "butter",
-   "joghurt": "yogurt", "zwiebel": "onion", "kartoffel": "potato",
-   "möhre": "carrot", "karotte": "carrot", "apfel": "apple", "tomate": "tomato",
-   "hähnchen": "chicken", "reis": "rice", "nudeln": "pasta", "mehl": "flour"}`.
-   Support an optional local override at `.foodbrain-local/aliases.json` (merged
-   over the sample) so private mappings stay uncommitted.
-2. Add a loader (e.g. `aliases.load_aliases(payload) -> Dict[str, str]`, a new
-   tiny `foodbrain_assistant/aliases.py`, normalizing keys with the same
-   lowercasing). Validate it's a flat string->string dict; raise a clear error
-   otherwise (mirror `PairingError` style).
-3. Thread the map into `pairing` (and `matching`) lookups + the CLI:
-   add `--aliases-json PATH` to the CLI (default: load
-   `examples/aliases.sample.json` if present, plus the local override). Make it
-   combine with every stock/recipe/pairing source.
-4. Tests: `tests/test_aliases.py` (loader + `Milch -> milk` normalization) and a
-   pairing test asserting a German-named urgent item resolves to an English node.
-   Keep the no-aliases path unchanged so the suite stays green.
-
-Verify against live stock (needs a configured `.env` and the real bundle):
-
-```bash
-PYTHONPATH=src python3 scripts/build_flavor_pairings.py --min-score 0.5
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-stock-json .foodbrain-local/stock.json \
-  --pairings-json .foodbrain-local/pairings.json --aliases-json examples/aliases.sample.json
-```
-
-Expected after the change: urgent German items (e.g. Milch, Eier) now show flavor
-pairings instead of being skipped. Without `.env`, sanity-check by renaming a
-sample stock item to German in a scratch JSON and confirming it still resolves.
+There is no single mandated next task. Pick from the open options below; the
+strongest are verifying matching against real Grocy recipes (once any exist) and
+expanding the alias map from the real FlavorGraph vocabulary.
 
 To regenerate the bundle, re-download the two FlavorGraph artifacts into
 `.foodbrain-local/flavorgraph/` (see README "Generating a real FlavorGraph
 bundle") and re-run `scripts/build_flavor_pairings.py`. The generated bundle and
 the embeddings stay under `.foodbrain-local/` (gitignored); never commit them.
 
-Other open options:
+Open options:
+
+- Expand `examples/aliases.sample.json` (and/or a private
+  `.foodbrain-local/aliases.json`) from the real FlavorGraph node vocabulary so
+  more live German products resolve. Today's sample is a 16-entry starter.
 
 - Verify recipe + pairing matching against real recipes once some are added to
   the household Grocy.

@@ -159,6 +159,30 @@ top-k cosine neighbors (`--top-k`, default 10), normalizes scores to 0..1, and
 writes `{"pairs": [...]}`. The embeddings and the generated bundle are data, not
 code -- keep them under `.foodbrain-local/` and do not commit them.
 
+#### Non-English ingredient names (alias map)
+
+FlavorGraph nodes and the sample recipes are English, but a live Grocy household
+may name products in another language (Milch, Eier, ...). An alias map resolves
+those names to the English vocabulary so recipe matching and flavor pairings
+still fire. The map is a flat `{ "source": "target" }` JSON file of normalized
+names; a German starter map lives at
+[examples/aliases.sample.json](examples/aliases.sample.json).
+
+The alias map loads automatically: `examples/aliases.sample.json` is used when
+present, and an optional private `.foodbrain-local/aliases.json` (gitignored) is
+layered on top for household-specific mappings. Pass `--aliases-json PATH` to use
+a specific file instead. It combines with any stock, recipe, and pairing source.
+
+```bash
+foodbrain --grocy-stock-json .foodbrain-local/stock.json \
+  --pairings-json .foodbrain-local/pairings.json \
+  --aliases-json examples/aliases.sample.json
+```
+
+Aliasing is applied inside the shared `normalize_ingredient_name` chokepoint
+(whole name first, then per token, before singularization), so one map fixes
+both lookups. With no map, behavior is unchanged.
+
 For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash

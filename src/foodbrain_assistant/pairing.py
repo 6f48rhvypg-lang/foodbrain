@@ -50,17 +50,21 @@ class PairingGraph:
     def __len__(self) -> int:
         return len(self._partners)
 
-    def partners_for(self, name: str) -> List[Tuple[str, float]]:
+    def partners_for(
+        self, name: str, aliases: Optional[Dict[str, str]] = None
+    ) -> List[Tuple[str, float]]:
         """Return partners for a stock ingredient name.
 
         Tries an exact normalized match first, then the same token-containment
-        fallback as recipe matching ("yogurt" resolves "greek yogurt").
+        fallback as recipe matching ("yogurt" resolves "greek yogurt"). An
+        optional alias map resolves non-English names ("Milch" -> "milk") before
+        lookup so live stock matches the English pairing nodes.
         """
-        normalized = normalize_ingredient_name(name)
+        normalized = normalize_ingredient_name(name, aliases)
         if normalized in self._partners:
             return self._partners[normalized]
 
-        item_tokens = _tokenize(name)
+        item_tokens = _tokenize(name, aliases)
         if not item_tokens:
             return []
         for key, partners in self._partners.items():
@@ -95,16 +99,17 @@ def suggest_pairings(
     stock_items: Iterable[StockItem],
     ingredient_limit: int = 5,
     partner_limit: int = 4,
+    aliases: Optional[Dict[str, str]] = None,
 ) -> List[FlavorSuggestion]:
     stock_token_sets = [
-        _tokenize(item.name) for item in stock_items if item.amount > 0
+        _tokenize(item.name, aliases) for item in stock_items if item.amount > 0
     ]
 
     suggestions: List[FlavorSuggestion] = []
     for urgency in urgent_ingredients:
         if len(suggestions) >= ingredient_limit:
             break
-        partners = graph.partners_for(urgency.item.name)
+        partners = graph.partners_for(urgency.item.name, aliases)
         if not partners:
             continue
         flavor_partners = [
@@ -182,8 +187,8 @@ def _tokens_match(left: Set[str], right: Set[str]) -> bool:
     return left <= right or right <= left
 
 
-def _tokenize(name: str) -> Set[str]:
-    normalized = normalize_ingredient_name(name)
+def _tokenize(name: str, aliases: Optional[Dict[str, str]] = None) -> Set[str]:
+    normalized = normalize_ingredient_name(name, aliases)
     return {_singularize(token) for token in normalized.split() if token}
 
 

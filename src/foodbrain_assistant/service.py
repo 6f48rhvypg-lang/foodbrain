@@ -1,7 +1,7 @@
 """FoodBrain service orchestration."""
 
 from datetime import date
-from typing import Optional
+from typing import Dict, Optional
 
 from .config import Settings
 from .grocy_client import GrocyClient
@@ -22,6 +22,7 @@ def run_once_with_source(
     stock_source: str = "sample",
     recipes: Optional[list[Recipe]] = None,
     pairings: Optional[PairingGraph] = None,
+    aliases: Optional[Dict[str, str]] = None,
 ) -> RunResult:
     if stock_items is None:
         if not settings.grocy_enabled:
@@ -47,6 +48,7 @@ def run_once_with_source(
             today=today,
             expiry_window_days=settings.expiry_window_days,
             limit=settings.top_recipe_limit,
+            aliases=aliases,
         )
 
     urgent_ingredients = rank_ingredients_by_urgency(
@@ -64,6 +66,7 @@ def run_once_with_source(
             stock_items,
             ingredient_limit=settings.top_pairing_limit,
             partner_limit=settings.pairing_partner_limit,
+            aliases=aliases,
         )
 
     result = RunResult(

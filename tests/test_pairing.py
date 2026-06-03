@@ -138,6 +138,23 @@ class SuggestPairingsTest(unittest.TestCase):
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].ingredient, "Spinach")
 
+    def test_german_name_resolves_with_aliases(self) -> None:
+        graph = load_pairings({"pairs": [{"a": "milk", "b": "honey", "score": 0.8}]})
+        aliases = {"milch": "milk"}
+
+        # Without aliases the German name does not resolve.
+        self.assertEqual(
+            suggest_pairings(graph, [_urgency("Milch")], []),
+            [],
+        )
+
+        suggestions = suggest_pairings(
+            graph, [_urgency("Milch")], [], aliases=aliases
+        )
+
+        self.assertEqual(suggestions[0].ingredient, "Milch")
+        self.assertEqual([p.name for p in suggestions[0].partners], ["honey"])
+
     def test_partner_limit_caps_partners(self) -> None:
         graph = load_pairings(
             {

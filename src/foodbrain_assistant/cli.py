@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional, Sequence
 
+from .aliases import AliasError, load_aliases, merge_aliases
 from .config import Settings, load_settings
 from .grocy_client import (
     GrocyClient,
@@ -76,6 +77,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "local pairings JSON file.",
     )
     parser.add_argument(
+        "--aliases-json",
+        type=Path,
+        metavar="PATH",
+        help="Map non-English ingredient names to the English vocabulary using a "
+        "flat {\"source\": \"target\"} JSON file. Defaults to "
+        "examples/aliases.sample.json plus any .foodbrain-local/aliases.json "
+        "override when present.",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON output.",
@@ -107,6 +117,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         recipes = _load_recipes(args, settings)
         pairings = _load_pairings(args)
+        aliases = _load_aliases(args)
 
         result = run_once_with_source(
             settings,
@@ -114,6 +125,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stock_source=stock_source_name,
             recipes=recipes,
             pairings=pairings,
+            aliases=aliases,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -190,6 +202,33 @@ def _load_pairings(args) -> Optional[PairingGraph]:
     try:
         return load_pairings(_load_json_file(args.pairings_json))
     except PairingError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _load_aliases(args) -> Optional[dict[str, str]]:
+    """Resolve the alias map.
+
+    An explicit ``--aliases-json`` wins outright. Otherwise the bundled
+    ``examples/aliases.sample.json`` is used when present, with an optional
+    private ``.foodbrain-local/aliases.json`` layered on top so household-specific
+    mappings stay uncommitted. Returns ``None`` when no map is available.
+    """
+    try:
+        if args.aliases_json:
+            return load_aliases(_load_json_file(args.aliases_json))
+
+        repo_root = Path(__file__).resolve().parents[2]
+        sample = repo_root / "examples" / "aliases.sample.json"
+        override = repo_root / ".foodbrain-local" / "aliases.json"
+
+        aliases: Optional[dict[str, str]] = None
+        if sample.is_file():
+            aliases = load_aliases(_load_json_file(sample))
+        if override.is_file():
+            local = load_aliases(_load_json_file(override))
+            aliases = merge_aliases(aliases or {}, local)
+        return aliases
+    except AliasError as exc:
         raise SystemExit(str(exc)) from exc
 
 

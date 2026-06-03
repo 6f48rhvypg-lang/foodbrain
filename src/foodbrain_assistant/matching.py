@@ -16,7 +16,7 @@ is an accepted limitation for the first implementation.
 """
 
 from datetime import date
-from typing import Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .models import Recipe, RecipeIngredient, RecipeMatch, StockItem
 from .normalization import normalize_ingredient_name
@@ -33,9 +33,10 @@ def rank_recipes(
     today: date,
     expiry_window_days: int = 7,
     limit: int = 10,
+    aliases: Optional[Dict[str, str]] = None,
 ) -> List[RecipeMatch]:
-    stock_index = _build_stock_index(stock_items, today, expiry_window_days)
-    matches = [match_recipe(recipe, stock_index) for recipe in recipes]
+    stock_index = _build_stock_index(stock_items, today, expiry_window_days, aliases)
+    matches = [match_recipe(recipe, stock_index, aliases) for recipe in recipes]
     matches.sort(key=lambda match: (-match.score, -match.coverage, match.recipe.name))
     return matches[:limit]
 
@@ -43,13 +44,14 @@ def rank_recipes(
 def match_recipe(
     recipe: Recipe,
     stock_index: List[Tuple[Set[str], float]],
+    aliases: Optional[Dict[str, str]] = None,
 ) -> RecipeMatch:
     matched: List[RecipeIngredient] = []
     missing: List[RecipeIngredient] = []
     expiry_usefulness = 0.0
 
     for ingredient in recipe.ingredients:
-        urgency = _best_stock_urgency(ingredient, stock_index)
+        urgency = _best_stock_urgency(ingredient, stock_index, aliases)
         if urgency is None:
             missing.append(ingredient)
         else:
@@ -75,6 +77,7 @@ def _build_stock_index(
     stock_items: Iterable[StockItem],
     today: date,
     expiry_window_days: int,
+    aliases: Optional[Dict[str, str]] = None,
 ) -> List[Tuple[Set[str], float]]:
     index = []
     for item in stock_items:
@@ -83,15 +86,16 @@ def _build_stock_index(
         urgency = score_stock_item(
             item, today=today, expiry_window_days=expiry_window_days
         )
-        index.append((_tokenize(item.name), urgency.urgency_score))
+        index.append((_tokenize(item.name, aliases), urgency.urgency_score))
     return index
 
 
 def _best_stock_urgency(
     ingredient: RecipeIngredient,
     stock_index: List[Tuple[Set[str], float]],
+    aliases: Optional[Dict[str, str]] = None,
 ) -> Optional[float]:
-    ingredient_tokens = _tokenize(ingredient.name)
+    ingredient_tokens = _tokenize(ingredient.name, aliases)
     if not ingredient_tokens:
         return None
 
@@ -109,8 +113,8 @@ def _tokens_match(ingredient_tokens: Set[str], stock_tokens: Set[str]) -> bool:
     return ingredient_tokens <= stock_tokens or stock_tokens <= ingredient_tokens
 
 
-def _tokenize(name: str) -> Set[str]:
-    normalized = normalize_ingredient_name(name)
+def _tokenize(name: str, aliases: Optional[Dict[str, str]] = None) -> Set[str]:
+    normalized = normalize_ingredient_name(name, aliases)
     return {_singularize(token) for token in normalized.split() if token}
 
 
