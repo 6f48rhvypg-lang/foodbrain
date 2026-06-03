@@ -133,6 +133,32 @@ the bundle can be regenerated offline from real FlavorGraph embeddings and
 dropped in without code changes. The `--pairings-json` flag combines with any
 stock and recipe source.
 
+#### Generating a real FlavorGraph bundle
+
+The sample is hand-authored. To build a bundle from the real FlavorGraph
+embeddings, download the two public artifacts into `.foodbrain-local/flavorgraph/`
+(both are gitignored) and run the offline generator:
+
+```bash
+# 1. node list (in the FlavorGraph repo)
+curl -sSL -o .foodbrain-local/flavorgraph/nodes_191120.csv \
+  https://raw.githubusercontent.com/lamypark/FlavorGraph/master/input/nodes_191120.csv
+# 2. the 300D node-embedding pickle (~10MB, linked from the FlavorGraph README's
+#    "Embeddings" section) -> save as
+#    .foodbrain-local/flavorgraph/node_embeddings.pickle
+
+# 3. build the bundle (numpy required; only used by this offline script)
+PYTHONPATH=src python3 scripts/build_flavor_pairings.py --min-score 0.5
+
+# 4. use it
+foodbrain --sample --pairings-json .foodbrain-local/pairings.json
+```
+
+The generator keeps only `ingredient`-type nodes, computes each ingredient's
+top-k cosine neighbors (`--top-k`, default 10), normalizes scores to 0..1, and
+writes `{"pairs": [...]}`. The embeddings and the generated bundle are data, not
+code -- keep them under `.foodbrain-local/` and do not commit them.
+
 For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash
@@ -162,8 +188,10 @@ Optional environment variables:
 3. Grocy recipe matching is verified against the live household instance (which
    currently has products but no recipes defined yet).
 4. FlavorGraph pairing suggestions are implemented from a local pairings bundle
-   (Phase 5). Remaining options: generate a real FlavorGraph pairings bundle
-   from embeddings, add Home Assistant MQTT, or add Mealie/Tandoor recipe sources.
+   (Phase 5) and can be generated from the real FlavorGraph embeddings via
+   `scripts/build_flavor_pairings.py`. Remaining options: add Home Assistant MQTT,
+   add Mealie/Tandoor recipe sources, or add an English/German alias map so live
+   Grocy product names resolve against the (English) FlavorGraph nodes.
 
 ## Next Session Handoff
 

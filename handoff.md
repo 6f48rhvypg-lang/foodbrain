@@ -4,21 +4,29 @@ Current date: 2026-06-03
 
 ## Start Here Next
 
-Phase 5 FlavorGraph pairing is **done, committed, and pushed** (HEAD `99acbf9`,
-`main` is up to date with `origin/main`). The working tree was clean at handoff.
+The **real FlavorGraph pairings bundle generator is done** (added
+`scripts/build_flavor_pairings.py`). It loads the public FlavorGraph node list +
+300D embedding pickle, filters to ingredient nodes, computes top-k cosine
+neighbors, and writes the `{"pairs": [...]}` bundle the runtime already consumes.
+It was run and verified end to end against the sample stock on this machine:
+6653 ingredient nodes -> 48,227 pairs at `--min-score 0.5`, and real pairings
+resolve through the token matcher (e.g. Rice -> "frozen peas and carrot (in
+stock)"). The artifacts and generated bundle live only under `.foodbrain-local/`
+(gitignored); only the script is committed.
 
-The single recommended next task is to **replace the hand-authored sample
-pairings with a real FlavorGraph embeddings bundle** — details in the
-"Next Implementation Decision" section below. Everything needed (the
-`--pairings-json` loader, the `{"pairs": [...]}` format, the token matcher)
-already exists; this is a data-generation task, not a code change.
+The single recommended next task is to **add an English/German alias map** so
+live Grocy product names (Milch, Eier, …) resolve against the English FlavorGraph
+nodes — otherwise live pairings under-match. See "Next Implementation Decision".
 
-First three commands on a fresh machine:
+First commands on a fresh machine:
 
 ```bash
 git pull --ff-only
 PYTHONPATH=src python3 -m unittest discover -s tests   # expect: Ran 52 tests, OK (skipped=1)
 PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json examples/pairings.sample.json
+# Optional: rebuild the real bundle (see "Generating a real FlavorGraph bundle" in README)
+PYTHONPATH=src python3 scripts/build_flavor_pairings.py --min-score 0.5
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json .foodbrain-local/pairings.json
 ```
 
 ## Current State
@@ -47,7 +55,34 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json examp
 
 ## Changed In This Session
 
-### Phase 5 FlavorGraph pairing (latest)
+### Real FlavorGraph bundle generator (latest)
+
+- Added `scripts/build_flavor_pairings.py`: an offline, one-off generator that
+  turns the real FlavorGraph artifacts into the runtime `{"pairs": [...]}` bundle.
+  - Inputs (download into `.foodbrain-local/flavorgraph/`, both gitignored):
+    `nodes_191120.csv` (from `lamypark/FlavorGraph` repo, `input/`) and the 300D
+    node-embedding pickle (~10MB Google Drive link in the FlavorGraph README's
+    "Embeddings" section), saved as `node_embeddings.pickle`.
+  - The pickle is a `{node_id (str): numpy.float32[300]}` dict (8297 nodes). The
+    CSV `node_type` column separates `ingredient` (6653) from flavor-compound
+    nodes; only ingredient nodes are kept.
+  - numpy is used **only in the script** (offline); the package runtime stays
+    dependency-free. Cosine similarity is computed block-wise; scores clamped to
+    0..1; output deterministic and deduped to undirected pairs (max score).
+  - Flags: `--nodes-csv`, `--embeddings`, `--out` (default
+    `.foodbrain-local/pairings.json`), `--top-k` (default 10), `--min-score`
+    (default 0.0).
+  - VERIFIED on this machine: produced 48,227 pairs at `--min-score 0.5` and ran
+    end to end via `foodbrain --sample --pairings-json .foodbrain-local/pairings.json`.
+    Real names resolve through the existing token matcher and the in-stock flag
+    fires. Test suite still 52 (1 skipped); only the script is committed (no data).
+- README gained a "Generating a real FlavorGraph bundle" subsection with the
+  download + run commands.
+- KNOWN LIMITATION: FlavorGraph nodes are English; live Grocy products are German
+  (Milch, Eier). Live pairings will under-match until an alias map is added — the
+  recommended next task.
+
+### Phase 5 FlavorGraph pairing (earlier)
 
 - Added `foodbrain_assistant.pairing`: `load_pairings` builds a symmetric
   `PairingGraph` from a local JSON bundle (`{"pairs": [{"a","b","score"}]}` or a
@@ -212,40 +247,35 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --diagnose-grocy-stock-json .f
 
 Phase 4 recipe matching is implemented and verified live (the household Grocy has
 products but no recipes yet — see LIVE-VERIFIED RECIPES above). Phase 5
-FlavorGraph pairing is now implemented from a local pairings bundle and verified
-against the sample stock end to end.
+FlavorGraph pairing is implemented from a local pairings bundle, and the **real
+FlavorGraph bundle generator now exists and is verified** (see "Real FlavorGraph
+bundle generator" above). The data-generation task is therefore DONE.
 
-The immediate next refinement is **backing pairings with a real FlavorGraph
-embeddings bundle** instead of the hand-authored sample. The runtime already
-consumes the bundle; this is a one-time, offline data-generation task.
+The immediate next refinement is an **English/German alias map** so live Grocy
+product names resolve against the (English) FlavorGraph nodes. Today, `--sample`
+resolves well because the sample stock is English; live stock (Milch, Eier) will
+under-match until aliases exist.
 
 Concrete plan for the next session:
 
-1. Get FlavorGraph's published artifacts (the public repo is
-   `lamypark/FlavorGraph`): the node list (`nodes_191120.csv`, which maps node
-   ids to ingredient names) and the trained embeddings
-   (`FlavorGraph Node Embedding.pickle`).
-2. Add a one-off generator, e.g. `scripts/build_flavor_pairings.py`, that:
-   - loads the embeddings + node names,
-   - keeps only `ingredient`-type nodes (drops chemical-compound nodes),
-   - for each ingredient computes its top-k neighbors by cosine similarity,
-   - writes `{"pairs": [{"a","b","score"}]}` to a local ignored file
-     (`.foodbrain-local/pairings.json`), normalizing `score` to 0..1.
-   Heavy deps (numpy/scipy) are fine **in the script** since it runs offline; the
-   package runtime stays dependency-free. Do not commit the embeddings or the
-   generated bundle (both are large / data — keep under `.foodbrain-local/`).
-3. Run it against the sample and live stock:
+1. Add a small alias map (e.g. `Milch -> milk`, `Eier -> egg`, `Käse -> cheese`)
+   used by the pairing (and ideally matching) lookup. Keep it data-driven and
+   offline; a JSON file under `examples/` plus an optional local override is in
+   keeping with the rest of FoodBrain.
+2. Apply aliases in `foodbrain_assistant.pairing` (which mirrors `matching`'s
+   token heuristic) before normalization, so "Milch" tokenizes as "milk".
+3. Verify against live stock (needs a configured `.env` and the real bundle):
 
 ```bash
-PYTHONPATH=src python3 scripts/build_flavor_pairings.py            # writes .foodbrain-local/pairings.json
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json .foodbrain-local/pairings.json
-PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-recipes --pairings-json .foodbrain-local/pairings.json
+PYTHONPATH=src python3 scripts/build_flavor_pairings.py --min-score 0.5
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-stock-json .foodbrain-local/stock.json \
+  --pairings-json .foodbrain-local/pairings.json
 ```
 
-Note: live stock uses German product names (Milch, Eier) while FlavorGraph nodes
-are English, so few pairings will resolve until either products are renamed or a
-small alias map is added. If real pairing names under-match stock, tune the token
-heuristic in `foodbrain_assistant.pairing` (it mirrors `matching`).
+To regenerate the bundle, re-download the two FlavorGraph artifacts into
+`.foodbrain-local/flavorgraph/` (see README "Generating a real FlavorGraph
+bundle") and re-run `scripts/build_flavor_pairings.py`. The generated bundle and
+the embeddings stay under `.foodbrain-local/` (gitignored); never commit them.
 
 Other open options:
 
