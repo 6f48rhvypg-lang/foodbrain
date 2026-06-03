@@ -1,12 +1,30 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-02
+Current date: 2026-06-03
+
+## Start Here Next
+
+Phase 5 FlavorGraph pairing is **done, committed, and pushed** (HEAD `99acbf9`,
+`main` is up to date with `origin/main`). The working tree was clean at handoff.
+
+The single recommended next task is to **replace the hand-authored sample
+pairings with a real FlavorGraph embeddings bundle** — details in the
+"Next Implementation Decision" section below. Everything needed (the
+`--pairings-json` loader, the `{"pairs": [...]}` format, the token matcher)
+already exists; this is a data-generation task, not a code change.
+
+First three commands on a fresh machine:
+
+```bash
+git pull --ff-only
+PYTHONPATH=src python3 -m unittest discover -s tests   # expect: Ran 52 tests, OK (skipped=1)
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json examples/pairings.sample.json
+```
 
 ## Current State
 
 - Repository: `https://github.com/RSM-CEI/foodbrain`
-- Branch: `main`
-- Latest local implementation and documentation changes are intended to be committed and pushed before continuing on another PC.
+- Branch: `main` (pushed; HEAD `99acbf9` "Add Phase 5 FlavorGraph ingredient pairing")
 - The Python sidecar service can read Grocy stock, score expiry urgency, match local recipes against stock, print CLI output, and optionally publish a Home Assistant webhook summary.
 - Grocy `/api/stock` parsing now has unit tests, an automatic diagnostics command, and an optional real-data contract test.
 - Local household data exports should be saved under `.foodbrain-local/`, which is ignored by git.
@@ -198,18 +216,36 @@ FlavorGraph pairing is now implemented from a local pairings bundle and verified
 against the sample stock end to end.
 
 The immediate next refinement is **backing pairings with a real FlavorGraph
-embeddings bundle** instead of the hand-authored sample. FlavorGraph's published
-artifact is node embeddings; generate the bundle offline by taking, for each
-ingredient node, its top-k nearest neighbors by cosine similarity and writing
-them as `{"pairs": [{"a","b","score"}]}` into a local ignored file, then run:
+embeddings bundle** instead of the hand-authored sample. The runtime already
+consumes the bundle; this is a one-time, offline data-generation task.
+
+Concrete plan for the next session:
+
+1. Get FlavorGraph's published artifacts (the public repo is
+   `lamypark/FlavorGraph`): the node list (`nodes_191120.csv`, which maps node
+   ids to ingredient names) and the trained embeddings
+   (`FlavorGraph Node Embedding.pickle`).
+2. Add a one-off generator, e.g. `scripts/build_flavor_pairings.py`, that:
+   - loads the embeddings + node names,
+   - keeps only `ingredient`-type nodes (drops chemical-compound nodes),
+   - for each ingredient computes its top-k neighbors by cosine similarity,
+   - writes `{"pairs": [{"a","b","score"}]}` to a local ignored file
+     (`.foodbrain-local/pairings.json`), normalizing `score` to 0..1.
+   Heavy deps (numpy/scipy) are fine **in the script** since it runs offline; the
+   package runtime stays dependency-free. Do not commit the embeddings or the
+   generated bundle (both are large / data — keep under `.foodbrain-local/`).
+3. Run it against the sample and live stock:
 
 ```bash
+PYTHONPATH=src python3 scripts/build_flavor_pairings.py            # writes .foodbrain-local/pairings.json
 PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample --pairings-json .foodbrain-local/pairings.json
+PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-recipes --pairings-json .foodbrain-local/pairings.json
 ```
 
-Keep the bundle generation offline so the runtime stays dependency-free and
-deterministic. If real pairing names under-match stock, tune the token heuristic
-in `foodbrain_assistant.pairing` (it mirrors `matching`).
+Note: live stock uses German product names (Milch, Eier) while FlavorGraph nodes
+are English, so few pairings will resolve until either products are renamed or a
+small alias map is added. If real pairing names under-match stock, tune the token
+heuristic in `foodbrain_assistant.pairing` (it mirrors `matching`).
 
 Other open options:
 
