@@ -4,23 +4,30 @@ Current date: 2026-06-03
 
 ## Start Here Next
 
-The **English/German ingredient alias map is done** (this session). Live Grocy
-product names like Milch/Eier/Reis now resolve to the English FlavorGraph nodes
-and English recipe ingredients. Aliasing is applied inside the shared
-`normalize_ingredient_name(name, aliases=None)` chokepoint (whole name first,
-then per token, before singularization), so one map fixes both `matching` and
-`pairing`. New `foodbrain_assistant/aliases.py` loads/validates a flat
-`{ "source": "target" }` map; the CLI auto-loads `examples/aliases.sample.json`
-plus an optional gitignored `.foodbrain-local/aliases.json` override, or takes
-`--aliases-json PATH`. Verified end to end on this machine: a scratch German
-stock (Milch/Eier/Reis) resolved Reis -> rice pairings via aliases (Milch/Eier
-have no partner only because the *sample* bundle contains just `rice`), and a
-unit test asserts Milch -> milk resolves. Test suite is now 62 (1 skipped).
+The **German alias map was expanded this session** from a 16-entry starter to
+**144 validated entries** (`examples/aliases.sample.json`). Categories: dairy &
+eggs, produce, meat/fish, staples/bakery/pantry, herbs/spices, drinks. Every
+target was validated against the real FlavorGraph ingredient node vocabulary
+(`.foodbrain-local/flavorgraph/nodes_191120.csv`, 6653 ingredient nodes) and the
+generated pairing bundle keys, so each alias resolves to an actual node. The 7
+multiword targets that aren't bare nodes (cream cheese, mozzarella cheese,
+parmesan cheese, ground beef, olive oil, tomato paste, orange juice) were
+confirmed to be exact bundle keys. VERIFIED end to end on this machine against
+the real bundle: a German stock (Hähnchen/Knoblauch/Zwiebel/Olivenöl) resolved
+to real FlavorGraph pairings, and the in-stock cross-reference fired (Hähnchen ->
+"heads of garlic (in stock)" = Knoblauch). Suite still 62 (1 skipped). Commit
+`a0b6e49`.
+
+The alias map machinery (aliases.py, the `normalize_ingredient_name(name,
+aliases=None)` chokepoint, CLI auto-load of `examples/aliases.sample.json` +
+optional gitignored `.foodbrain-local/aliases.json` override + `--aliases-json
+PATH`) was built the prior session and is unchanged.
 
 The next recommended task is open — pick from "Next Implementation Decision".
-Strongest candidates: verify recipe+pairing matching against real Grocy recipes
-once some exist (household Grocy still has zero recipes), or expand the alias map
-from the real FlavorGraph node vocabulary.
+Strongest candidate now: verify recipe+pairing matching against real Grocy
+recipes once some exist (household Grocy still has zero recipes). The alias map
+could be grown further (it covers common terms, not the full 6653-node
+vocabulary) but diminishing returns vs. real-recipe verification.
 
 First commands on a fresh machine:
 
@@ -60,7 +67,23 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-stock-json .foodbrain-
 
 ## Changed In This Session
 
-### English/German ingredient alias map (latest)
+### Expanded German alias map to 144 entries (latest)
+
+- Grew `examples/aliases.sample.json` from 16 to 144 German->English entries.
+- Method (reproducible): loaded the 6653 ingredient nodes from the local
+  `.foodbrain-local/flavorgraph/nodes_191120.csv` and the keys of the generated
+  `.foodbrain-local/pairings.json`, authored a German candidate map by category,
+  and validated every target either as an exact bundle key or fully
+  token-resolvable (singularized) against the bundle. 0 unresolvable.
+- Fixed 7 targets to their real node names: cream cheese, mozzarella cheese,
+  parmesan cheese, ground beef, olive oil, tomato paste, orange juice.
+- README "Non-English ingredient names" note updated (16-entry -> ~144,
+  validated against the real vocabulary).
+- No code changed; the alias machinery from the prior session is untouched. The
+  prior `tests/test_aliases.py` and German-resolution test in `test_pairing.py`
+  still pass. Suite 62 (1 skipped). Commit `a0b6e49`.
+
+### English/German ingredient alias map (prior session)
 
 - Added `foodbrain_assistant/aliases.py`: `load_aliases(payload)` validates a flat
   `{ "source": "target" }` JSON object and normalizes both sides; `merge_aliases`
@@ -286,9 +309,11 @@ the embeddings stay under `.foodbrain-local/` (gitignored); never commit them.
 
 Open options:
 
-- Expand `examples/aliases.sample.json` (and/or a private
-  `.foodbrain-local/aliases.json`) from the real FlavorGraph node vocabulary so
-  more live German products resolve. Today's sample is a 16-entry starter.
+- Grow `examples/aliases.sample.json` (and/or a private
+  `.foodbrain-local/aliases.json`) further from the real FlavorGraph node
+  vocabulary. The sample now covers 144 common German terms (validated against
+  the real nodes); the full vocabulary is 6653 nodes, so rarer products still
+  miss. Diminishing returns vs. real-recipe verification.
 
 - Verify recipe + pairing matching against real recipes once some are added to
   the household Grocy.
