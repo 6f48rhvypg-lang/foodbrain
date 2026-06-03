@@ -165,8 +165,10 @@ FlavorGraph nodes and the sample recipes are English, but a live Grocy household
 may name products in another language (Milch, Eier, ...). An alias map resolves
 those names to the English vocabulary so recipe matching and flavor pairings
 still fire. The map is a flat `{ "source": "target" }` JSON file of normalized
-names; a German starter map lives at
-[examples/aliases.sample.json](examples/aliases.sample.json).
+names; a German map of ~144 common grocery terms lives at
+[examples/aliases.sample.json](examples/aliases.sample.json). Every target in it
+was validated against the real FlavorGraph ingredient vocabulary, so each alias
+resolves to an actual node.
 
 The alias map loads automatically: `examples/aliases.sample.json` is used when
 present, and an optional private `.foodbrain-local/aliases.json` (gitignored) is
