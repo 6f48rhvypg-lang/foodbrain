@@ -254,23 +254,61 @@ bundle generator" above). The data-generation task is therefore DONE.
 The immediate next refinement is an **English/German alias map** so live Grocy
 product names resolve against the (English) FlavorGraph nodes. Today, `--sample`
 resolves well because the sample stock is English; live stock (Milch, Eier) will
-under-match until aliases exist.
+under-match until aliases exist. This is the **next session's task** — spec below.
 
-Concrete plan for the next session:
+### TASK: English/German ingredient alias map
 
-1. Add a small alias map (e.g. `Milch -> milk`, `Eier -> egg`, `Käse -> cheese`)
-   used by the pairing (and ideally matching) lookup. Keep it data-driven and
-   offline; a JSON file under `examples/` plus an optional local override is in
-   keeping with the rest of FoodBrain.
-2. Apply aliases in `foodbrain_assistant.pairing` (which mirrors `matching`'s
-   token heuristic) before normalization, so "Milch" tokenizes as "milk".
-3. Verify against live stock (needs a configured `.env` and the real bundle):
+Goal: a stock item named `Milch` should tokenize/normalize as `milk` so it
+resolves to FlavorGraph's `milk` node (and to English recipe ingredients). Keep
+it offline, deterministic, and data-driven, matching the rest of FoodBrain.
+
+Design (shared chokepoint):
+
+- `normalization.normalize_ingredient_name` (in
+  [src/foodbrain_assistant/normalization.py](src/foodbrain_assistant/normalization.py))
+  is the single function both `pairing` and `matching` already call. Apply
+  aliases **there** so one change fixes both lookups. Add an optional aliases
+  argument or a module-level applied map; simplest is a new
+  `apply_aliases(name, aliases)` helper and have callers pass the loaded map, OR
+  add `normalize_ingredient_name(name, aliases=None)` with a default of `None`
+  (no behavior change when absent — keeps the 52 existing tests green).
+- Alias matching should be on the **whole normalized name first, then per token**
+  (so both `Milch` and a multiword `Bio Milch` map). Apply aliases AFTER
+  lowercasing/whitespace cleanup but BEFORE singularization in the tokenizers in
+  `pairing._tokenize` and the matching equivalent.
+
+Steps:
+
+1. Add `examples/aliases.sample.json` — a flat `{ "german": "english" }` map:
+   `{"milch": "milk", "eier": "egg", "käse": "cheese", "butter": "butter",
+   "joghurt": "yogurt", "zwiebel": "onion", "kartoffel": "potato",
+   "möhre": "carrot", "karotte": "carrot", "apfel": "apple", "tomate": "tomato",
+   "hähnchen": "chicken", "reis": "rice", "nudeln": "pasta", "mehl": "flour"}`.
+   Support an optional local override at `.foodbrain-local/aliases.json` (merged
+   over the sample) so private mappings stay uncommitted.
+2. Add a loader (e.g. `aliases.load_aliases(payload) -> Dict[str, str]`, a new
+   tiny `foodbrain_assistant/aliases.py`, normalizing keys with the same
+   lowercasing). Validate it's a flat string->string dict; raise a clear error
+   otherwise (mirror `PairingError` style).
+3. Thread the map into `pairing` (and `matching`) lookups + the CLI:
+   add `--aliases-json PATH` to the CLI (default: load
+   `examples/aliases.sample.json` if present, plus the local override). Make it
+   combine with every stock/recipe/pairing source.
+4. Tests: `tests/test_aliases.py` (loader + `Milch -> milk` normalization) and a
+   pairing test asserting a German-named urgent item resolves to an English node.
+   Keep the no-aliases path unchanged so the suite stays green.
+
+Verify against live stock (needs a configured `.env` and the real bundle):
 
 ```bash
 PYTHONPATH=src python3 scripts/build_flavor_pairings.py --min-score 0.5
 PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-stock-json .foodbrain-local/stock.json \
-  --pairings-json .foodbrain-local/pairings.json
+  --pairings-json .foodbrain-local/pairings.json --aliases-json examples/aliases.sample.json
 ```
+
+Expected after the change: urgent German items (e.g. Milch, Eier) now show flavor
+pairings instead of being skipped. Without `.env`, sanity-check by renaming a
+sample stock item to German in a scratch JSON and confirming it still resolves.
 
 To regenerate the bundle, re-download the two FlavorGraph artifacts into
 `.foodbrain-local/flavorgraph/` (see README "Generating a real FlavorGraph
