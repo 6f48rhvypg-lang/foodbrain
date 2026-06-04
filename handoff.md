@@ -2,13 +2,55 @@
 
 Current date: 2026-06-04
 
-## Start Here Next — STEPS 1 & 2 DONE, SPA IS NEXT (2026-06-04)
+## Start Here Next — STEPS 1, 2 & 3 DONE, HA EMBED IS NEXT (2026-06-04)
 
-Build order steps 1 (**Grocy write-back**) and 2 (**JSON API**) are **implemented
-and green** (suite now **96, 1 skipped**). The next session starts **step 3: the
-SPA** — wire the prototype at **[prototype/fridge-now.html](prototype/fridge-now.html)**
-to the live JSON API (it currently runs on mock data). Full blueprint in
-**[ux-design.md](ux-design.md)** (build order + architecture).
+Build order steps 1 (**Grocy write-back**), 2 (**JSON API**) and 3 (**SPA**) are
+**done**. The suite is **96, 1 skipped** (step 3 changed only the static
+prototype — no Python touched). The next session starts **step 4: embed the SPA
+as a Home Assistant webpage panel** and keep the webhook for notifications only.
+Full blueprint in **[ux-design.md](ux-design.md)** (build order + architecture).
+
+### Step 3 — SPA (DONE this session)
+
+[prototype/fridge-now.html](prototype/fridge-now.html) is no longer on mock data;
+it is wired to the live JSON API:
+
+- Replaced the hardcoded `items` array with `reload()` → `GET /api/stock`. Items
+  are mapped from API rows; `band` and `as_of` (→ `TODAY`) come from the API, so
+  the SPA grouping always matches the engine. Removed the prototype's local
+  `band()` recompute and the dead "recently added" sort chip (the API has no
+  added-date field).
+- **Connect** → `POST /api/connect`, rendered as pairings grouped per selected
+  ingredient (with the `in stock` badge) + the unlocked recipes (coverage bar,
+  matched/missing). **Ask AI** → `POST /api/build-prompt` fills the editable
+  textarea. Both show a loading state and an in-sheet error fallback.
+- Inline quick actions are optimistic with real rollback: **consume**/**toss** →
+  `POST /api/consume`|`/api/toss` (toss sends `confirm:true` after the JS
+  confirm); **edit due date** → `GET /api/product-entries` to resolve a
+  `stock_entry_id`, then `POST /api/set-due-date`. The **undo** snackbar uses the
+  `transaction_id` the write returns → `POST /api/undo` then `reload()`. Failures
+  revert the optimistic UI and show the error in the snackbar.
+- Added `esc()` and escape all Grocy-sourced strings (names/units) before
+  `innerHTML`. API base resolves to same-origin when served, `http://127.0.0.1:8123`
+  over `file://`, or `?api=` override. An offline state renders if `/api/stock`
+  is unreachable.
+- VERIFIED end-to-end against a running `--sample` server (Playwright, headless):
+  4 items in 4 bands, header stats, multi-select, and Connect all render live
+  data (Carrots → ginger/cumin/honey/rice with rice badged in-stock; recipes
+  Carrot Rice Pilaf / Pantry Fried Rice) with no console errors. Reads/connect/
+  build-prompt are fully exercised. **Writes were NOT live-verified** — against
+  `--sample` the consume call reaches the real Grocy LXC and 400s on the sample
+  id (path works, surfaces the error). Same caution as steps 1/2: writes are
+  mutating; do a deliberate manual check against a real product before relying on
+  them. README gained an "SPA (build order step 3)" subsection.
+
+### Step 4 — HA webpage panel (start here next)
+
+Serve the SPA (the server can grow a `/ui` static route — see the note in
+[server.py](src/foodbrain_assistant/server.py) docstring) and register it as a
+Home Assistant `panel_iframe` / webpage panel. Keep the existing webhook for
+notifications only. The SPA already uses same-origin when served, so serving it
+from the FoodBrain server is the cleanest path.
 
 ### Step 2 — JSON API (DONE this session)
 
@@ -40,14 +82,12 @@ to the live JSON API (it currently runs on mock data). Full blueprint in
   step 1 — writes are mutating). Reads/connect/build-prompt verified end-to-end
   over a running server with sample data.
 
-### Step 3 — SPA (start here next)
+### Housekeeping — untracked harness artifacts
 
-The prototype implements every interaction against mock data. Replace its
-in-memory `items` array + mock Connect/Ask outputs with `fetch` calls to the JSON
-API: `GET /api/stock` for the bands, `POST /api/connect` and `/api/build-prompt`
-for the action bar, and the write routes for the inline quick actions (with the
-undo snackbar wired to `/api/undo`). Then build order step 4 embeds it as an HA
-webpage panel.
+`git status` shows two untracked paths that are **not** FoodBrain code and were
+deliberately left out of the step-1/step-2 commits: `.agents/` and
+`skills-lock.json` (Claude Code skill tooling). They are safe to add to
+`.gitignore` so they stop showing as untracked; not done yet pending a decision.
 
 ### Step 1 — Grocy write-back (DONE earlier this session)
 
@@ -98,8 +138,8 @@ Agreed build order (see ux-design.md "Build order"):
    with confirm + undo semantics and a read-only-safe guard for tests. DONE.
 2. ✅ **JSON API** off the service: `stock-with-scores`, `connect(selection)`,
    `build-prompt(selection)`, plus write proxies. DONE.
-3. **SPA**: urgency-bands view, multi-select, action bar, editable prompt box. ← start here
-4. **Embed** as an HA webpage panel; keep the webhook for notifications only.
+3. ✅ **SPA**: urgency-bands view, multi-select, action bar, editable prompt box. DONE.
+4. **Embed** as an HA webpage panel; keep the webhook for notifications only. ← start here
 
 Reused as-is (the recommendation brains are done): expiry scoring → bands;
 `matching.py` + `pairing.py` (+ 144-entry alias map) → "Connect" mode;

@@ -272,6 +272,26 @@ Writes are disabled (`403`) unless `FOODBRAIN_GROCY_BASE_URL` and
 `GrocyClient` only for write/entry calls. CORS is permissive so the SPA can be
 developed from a separate dev origin.
 
+#### SPA (build order step 3)
+
+[`prototype/fridge-now.html`](prototype/fridge-now.html) is the single-file SPA —
+the urgency-bands fridge view with multi-select, the Connect/Ask action bar, the
+editable prompt box, and inline quick actions (consume / toss / edit due date)
+with an undo snackbar. It is now wired to the JSON API above (no more mock data):
+
+- `GET /api/stock` populates the bands; `band` and `as_of` come straight from the
+  API so the grouping always matches the engine.
+- `POST /api/connect` and `POST /api/build-prompt` back the action bar.
+- `POST /api/consume` / `/api/toss` / `/api/set-due-date` (via
+  `GET /api/product-entries`) back the inline actions; `POST /api/undo` backs the
+  snackbar using the `transaction_id` the write returns.
+
+Start the API (see above), then open the file. Over `file://` it defaults to
+`http://127.0.0.1:8123`; when served from the FoodBrain server it uses the same
+origin. Point it elsewhere with `?api=http://host:port`. Writes hit the live
+Grocy LXC, so they need a configured `.env` and otherwise surface the API error
+in the snackbar. Step 4 will embed this as a Home Assistant webpage panel.
+
 ## Current Development Plan
 
 1. Stock ingestion is confirmed against real Grocy data (Phase 3 done).

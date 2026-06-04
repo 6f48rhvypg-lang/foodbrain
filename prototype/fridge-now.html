@@ -394,6 +394,26 @@
     to { opacity: 0; transform: translateX(-30px); height: 0; padding-top: 0; padding-bottom: 0; margin: 0; border-width: 0; }
   }
 
+  /* connect — pairings grouped by selected ingredient */
+  .pgroup { margin-bottom: 14px; }
+  .pgroup .pgi {
+    font-family: "Fraunces", serif; font-weight: 600; font-size: 15px;
+    color: var(--ink); margin-bottom: 7px;
+  }
+  .cgroup .empty, .sheet-error {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+    color: var(--ink-dim); line-height: 1.5; padding: 8px 0;
+  }
+  .sheet-error b { color: var(--hot); }
+  .loading {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    color: var(--ink-faint); letter-spacing: .14em; padding: 18px 2px;
+  }
+  .recipe .miss { color: var(--ink-faint); }
+
+  /* snackbar error variant */
+  .snack.error { border-color: color-mix(in srgb, var(--hot) 45%, var(--hairline)); }
+
   .hint {
     text-align: center; margin-top: 34px;
     font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
@@ -421,7 +441,6 @@
       <div class="chip" data-sort="name">name</div>
       <div class="chip" data-sort="qty">quantity</div>
       <div class="chip" data-sort="location">location</div>
-      <div class="chip" data-sort="added">recently added</div>
     </div>
 
     <main id="shelves"><!-- rendered --></main>
@@ -463,42 +482,63 @@
 
 <script>
 /* ============================================================
-   Prototype data — German household stock (matches FoodBrain's
-   real Grocy + alias-map setup). dueDays = days from today;
-   negative = overdue. staple items have due:null.
-   ============================================================ */
-const TODAY = new Date('2026-06-04');
-let items = [
-  { id:1,  name:'Joghurt',          qty:'1 Becher', loc:'Fridge', due:-1, added:9 },
-  { id:2,  name:'Hähnchenbrust',    qty:'300 g',    loc:'Fridge', due:0,  added:2 },
-  { id:3,  name:'Frischkäse',       qty:'1 Pack',   loc:'Fridge', due:-2, added:12 },
-  { id:4,  name:'Zucchini',         qty:'2 Stück',  loc:'Fridge', due:3,  added:3 },
-  { id:5,  name:'Feta',             qty:'1 Pack',   loc:'Fridge', due:5,  added:6 },
-  { id:6,  name:'Karotten',         qty:'4 Stück',  loc:'Fridge', due:4,  added:6 },
-  { id:7,  name:'Eier',             qty:'6 Stück',  loc:'Fridge', due:6,  added:5 },
-  { id:8,  name:'Milch',            qty:'1 L',      loc:'Fridge', due:10, added:1 },
-  { id:9,  name:'Butter',           qty:'1 Pack',   loc:'Fridge', due:20, added:8 },
-  { id:10, name:'Olivenöl',         qty:'1 Flasche',loc:'Pantry', due:null, added:30 },
-  { id:11, name:'Nudeln',           qty:'2 Pack',   loc:'Pantry', due:null, added:25 },
-  { id:12, name:'Reis',             qty:'1 kg',     loc:'Pantry', due:null, added:40 },
-  { id:13, name:'Knoblauch',        qty:'1 Knolle', loc:'Pantry', due:null, added:20 },
-  { id:14, name:'Zwiebel',          qty:'3 Stück',  loc:'Pantry', due:null, added:14 },
-  { id:15, name:'Tomatenmark',      qty:'1 Dose',   loc:'Pantry', due:null, added:50 },
-  { id:16, name:'Mehl',             qty:'1 kg',     loc:'Pantry', due:null, added:60 },
-];
+   FoodBrain — Fridge Now (live SPA, build order step 3)
 
+   This view is now backed by the FoodBrain JSON API (step 2):
+     GET  /api/stock            -> the bands view
+     POST /api/connect          -> pairings + unlocked recipes
+     POST /api/build-prompt     -> the editable Ask-AI prompt
+     POST /api/consume | /toss  -> inline quick actions (+ undo)
+     GET  /api/product-entries  -> resolve a stock entry for...
+     POST /api/set-due-date     -> ...the edit-due-date flow
+     POST /api/undo             -> the snackbar Undo
+
+   Item shape (mapped from /api/stock rows):
+     { id, name, qty, loc, due, band, urgency, reason, bestBefore }
+   `due` = days_until_expiry (null = staple). `band` comes straight
+   from the API so the SPA grouping always matches the engine.
+   ============================================================ */
+
+/* ---- API base: same-origin when served; dev server over file:// ---- */
+const API_BASE = (() => {
+  const override = new URLSearchParams(location.search).get('api');
+  if (override) return override.replace(/\/+$/, '');
+  if (location.protocol === 'file:') return 'http://127.0.0.1:8123';
+  return ''; // served from the FoodBrain server itself
+})();
+
+class ApiError extends Error {
+  constructor(status, message){ super(message); this.status = status; }
+}
+async function apiGet(path){
+  const r = await fetch(API_BASE + path);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiError(r.status, data.error || r.statusText);
+  return data;
+}
+async function apiPost(path, body){
+  const r = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiError(r.status, data.error || r.statusText);
+  return data;
+}
+
+/* ---- escape dynamic strings (names/units come from Grocy) ---- */
+const ESC = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ESC[c]); }
+
+/* ---- state ---- */
+let TODAY = new Date();
+let items = [];
 const selected = new Set();
 let currentSort = 'urgency';
 let staplesCollapsed = true;
-let pendingRemove = null; // for undo
+let pendingUndo = null; // { transaction_id } for the snackbar Undo
 
-/* ---- bands ---- */
-function band(d){
-  if (d === null) return 'staple';
-  if (d <= 0) return 'hot';
-  if (d <= 7) return 'warm';
-  return 'cool';
-}
 const BANDS = {
   hot:   { label:'Eat today / overdue', c:'var(--hot)',   g:'var(--hot-glow)'  },
   warm:  { label:'This week',           c:'var(--warm)',  g:'var(--warm-glow)' },
@@ -506,26 +546,44 @@ const BANDS = {
   staple:{ label:'Staples',             c:'var(--staple)',g:'transparent'      },
 };
 
+/* ---- map an /api/stock row to the view item shape ---- */
+function mapItem(row){
+  return {
+    id: String(row.product_id),
+    name: row.name,
+    qty: formatQty(row.amount, row.unit),
+    loc: row.location || '—',
+    due: row.days_until_expiry,   // null for staples
+    band: row.band,
+    urgency: row.urgency_score,
+    reason: row.reason,
+    bestBefore: row.best_before_date,
+  };
+}
+function formatQty(amount, unit){
+  const a = Number.isInteger(amount) ? amount : Number(Number(amount).toFixed(2));
+  return unit ? `${a} ${unit}` : `${a}`;
+}
+
 function dueLabel(d){
-  if (d === null) return '—';
-  if (d < 0)  return `in ${d}d`;
+  if (d === null || d === undefined) return '—';
+  if (d < 0)  return `${-d}d ago`;
   if (d === 0) return 'today';
   return `in ${d}d`;
 }
 
 /* ---- sorting within a band ---- */
+const dueRank = i => i.due === null || i.due === undefined ? 9999 : i.due;
 function sortItems(arr){
   const a = [...arr];
   switch(currentSort){
     case 'name':     a.sort((x,y)=>x.name.localeCompare(y.name)); break;
     case 'qty':      a.sort((x,y)=>x.qty.localeCompare(y.qty)); break;
     case 'location': a.sort((x,y)=>x.loc.localeCompare(y.loc) || dueRank(x)-dueRank(y)); break;
-    case 'added':    a.sort((x,y)=>x.added-y.added); break;
     default:         a.sort((x,y)=>dueRank(x)-dueRank(y));
   }
   return a;
 }
-const dueRank = i => i.due === null ? 9999 : i.due;
 
 /* ---- render ---- */
 const shelvesEl = document.getElementById('shelves');
@@ -536,7 +594,7 @@ function render(){
   let delay = 0;
 
   order.forEach(key=>{
-    const inBand = sortItems(items.filter(i=>band(i.due)===key));
+    const inBand = sortItems(items.filter(i=>i.band===key));
     if (!inBand.length && key!=='staple') return;
 
     const meta = BANDS[key];
@@ -561,12 +619,13 @@ function render(){
     shelf.appendChild(list);
 
     // empty-fridge hero nudge under the fresh shelf
-    if (key==='cool' && items.filter(i=>band(i.due)==='cool').length <= 2){
+    if (key==='cool' && items.filter(i=>i.band==='cool').length <= 2){
+      const staples = items.filter(i=>i.band==='staple').map(i=>i.name).slice(0,4);
       const n = document.createElement('div');
       n.className = 'nudge';
       n.innerHTML = `<div class="k">◈ fridge looking thin</div>
-        <p>Not much fresh left — but you've got <b>Knoblauch, Zwiebel, Nudeln & Tomatenmark</b> in the pantry.
-        Select your leftovers and hit <b>Connect</b> for a combo.</p>`;
+        <p>Not much fresh left${ staples.length ? ` — but you've got <b>${esc(staples.join(', '))}</b> in your staples` : '' }.
+        Select what you have and hit <b>Connect</b> for a combo.</p>`;
       shelf.appendChild(n);
     }
     shelvesEl.appendChild(shelf);
@@ -575,25 +634,25 @@ function render(){
   // header stats
   document.getElementById('totalN').textContent = items.length + ' items';
   document.getElementById('urgentN').textContent =
-    items.filter(i=>['hot','warm'].includes(band(i.due))).length;
+    items.filter(i=>i.band==='hot' || i.band==='warm').length;
   syncBar();
 }
 
 function itemEl(it, meta, delay){
   const el = document.createElement('div');
-  const isStaple = it.due === null;
+  const isStaple = it.due === null || it.due === undefined;
   el.className = 'item' + (selected.has(it.id)?' selected':'');
   el.style.setProperty('--c', meta.c);
   el.style.setProperty('--g', meta.g);
   el.style.animationDelay = delay.toFixed(2)+'s';
   el.dataset.id = it.id;
 
-  const overdue = it.due !== null && it.due <= 0;
+  const overdue = !isStaple && it.due <= 0;
   el.innerHTML = `
     <div class="check">✓</div>
     <div class="body">
-      <div class="name">${it.name}</div>
-      <div class="meta"><span>${it.qty}</span><span class="loc">· ${it.loc}</span></div>
+      <div class="name">${esc(it.name)}</div>
+      <div class="meta"><span>${esc(it.qty)}</span><span class="loc">· ${esc(it.loc)}</span></div>
     </div>
     ${ isStaple ? '' : `<div class="due ${overdue?'overdue':''}" style="--c:${meta.c};--g:${meta.g}">${dueLabel(it.due)}</div>`}
     <div class="actions">
@@ -629,38 +688,57 @@ document.getElementById('clearSel').addEventListener('click', ()=>{
   selected.clear(); document.querySelectorAll('.item.selected').forEach(e=>e.classList.remove('selected')); syncBar();
 });
 
-/* ---- write-back: consume (with undo) ---- */
+/* ---- write-back: consume / toss (optimistic, real undo) ---- */
 function consume(it, el){
-  removeWithUndo(it, el, `Used <b>${it.name}</b>`);
+  writeRemove(it, el, '/api/consume', { product_id: it.id, amount: 1 }, `Used <b>${esc(it.name)}</b>`);
 }
 function toss(it, el){
   if (!confirm(`Toss ${it.name}? This removes it from inventory.`)) return;
-  removeWithUndo(it, el, `Tossed <b>${it.name}</b>`);
+  writeRemove(it, el, '/api/toss', { product_id: it.id, amount: 1, confirm: true }, `Tossed <b>${esc(it.name)}</b>`);
 }
-function removeWithUndo(it, el, msg){
-  const idx = items.findIndex(x=>x.id===it.id);
-  pendingRemove = { it, idx };
+async function writeRemove(it, el, path, body, msg){
+  el.classList.add('removing');               // optimistic
   selected.delete(it.id);
-  el.classList.add('removing');
-  setTimeout(()=>{ items = items.filter(x=>x.id!==it.id); render(); }, 300);
-  showSnack(msg);
+  try {
+    const res = await apiPost(path, body);
+    setTimeout(()=>{ items = items.filter(x=>x.id!==it.id); render(); }, 300);
+    showSnack(msg, res.undoable ? res.transaction_id : null);
+  } catch (err){
+    el.classList.remove('removing');           // revert
+    showError(err);
+  }
 }
 
 /* ---- snackbar / undo ---- */
 let snackTimer;
-function showSnack(html){
+function showSnack(html, transactionId = null){
+  pendingUndo = transactionId ? { transaction_id: transactionId } : null;
   const s = document.getElementById('snack');
+  s.classList.remove('error');
   document.getElementById('snackText').innerHTML = html;
+  document.getElementById('snackUndo').style.display = pendingUndo ? '' : 'none';
   s.classList.add('show');
   clearTimeout(snackTimer);
-  snackTimer = setTimeout(()=>{ s.classList.remove('show'); pendingRemove=null; }, 4200);
+  snackTimer = setTimeout(()=>{ s.classList.remove('show'); pendingUndo=null; }, pendingUndo ? 5200 : 3600);
 }
-document.getElementById('snackUndo').addEventListener('click', ()=>{
-  if (pendingRemove){
-    items.splice(Math.min(pendingRemove.idx, items.length), 0, pendingRemove.it);
-    pendingRemove = null; render();
-  }
+function showError(err){
+  const msg = err instanceof ApiError ? err.message : (err && err.message) || 'Request failed';
+  pendingUndo = null;
+  const s = document.getElementById('snack');
+  document.getElementById('snackText').innerHTML = `⚠ ${esc(msg)}`;
+  document.getElementById('snackUndo').style.display = 'none';
+  s.classList.add('error','show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(()=>{ s.classList.remove('show','error'); }, 5000);
+}
+document.getElementById('snackUndo').addEventListener('click', async ()=>{
+  const undo = pendingUndo; pendingUndo = null;
   document.getElementById('snack').classList.remove('show');
+  if (!undo || !undo.transaction_id) return;
+  try {
+    await apiPost('/api/undo', { transaction_id: undo.transaction_id });
+    await reload();
+  } catch (err){ showError(err); }
 });
 
 /* ---- edit-date popover ---- */
@@ -676,18 +754,44 @@ function openPop(it, anchor){
   pop.classList.add('show');
 }
 function closePop(){ document.getElementById('pop').classList.remove('show'); popItem=null; }
+
+function isoFromOffset(days){
+  const d = new Date(TODAY); d.setDate(d.getDate() + days);
+  return isoFromDate(d);
+}
+function isoFromDate(d){
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/* Resolve a stock entry for the product, then write the new due date. */
+async function applyDueDate(it, isoDate){
+  closePop();
+  try {
+    const { entries } = await apiGet('/api/product-entries?product_id=' + encodeURIComponent(it.id));
+    if (!entries || !entries.length) throw new ApiError(404, `${it.name} has no stock entries to date`);
+    const entry = entries[0]; // earliest entry as returned by Grocy
+    const res = await apiPost('/api/set-due-date', {
+      stock_entry_id: entry.stock_entry_id,
+      best_before_date: isoDate,
+      product_id: it.id,
+    });
+    await reload();
+    showSnack(`<b>${esc(it.name)}</b> → due ${esc(isoDate)}`, res.undoable ? res.transaction_id : null);
+  } catch (err){
+    showError(err);
+  }
+}
 document.querySelectorAll('#pop .grid .chip').forEach(c=>{
   c.addEventListener('click', ()=>{
     if (!popItem) return;
-    popItem.due = parseInt(c.dataset.add,10);
-    closePop(); render(); showSnack(`<b>${popItem.name}</b> → due ${dueLabel(popItem.due)}`);
+    applyDueDate(popItem, isoFromOffset(parseInt(c.dataset.add,10)));
   });
 });
 document.getElementById('dateInput').addEventListener('change', e=>{
-  if (!popItem) return;
-  const d = e.target.valueAsDate;
-  popItem.due = Math.round((d - TODAY)/86400000);
-  closePop(); render(); showSnack(`<b>${popItem.name}</b> → due ${dueLabel(popItem.due)}`);
+  if (!popItem || !e.target.valueAsDate) return;
+  applyDueDate(popItem, isoFromDate(e.target.valueAsDate));
 });
 document.addEventListener('click', e=>{
   const pop = document.getElementById('pop');
@@ -708,25 +812,32 @@ const sheet = document.getElementById('sheet');
 function openSheet(html){ sheet.innerHTML = `<div class="grip"></div>`+html; scrim.classList.add('show'); sheet.classList.add('show'); }
 function closeSheet(){ scrim.classList.remove('show'); sheet.classList.remove('show'); }
 scrim.addEventListener('click', closeSheet);
-
+function wireClose(){ const b = document.getElementById('closeSheet'); if (b) b.addEventListener('click', closeSheet); }
 function selectedNames(){ return [...selected].map(id=>items.find(i=>i.id===id)?.name).filter(Boolean); }
 
-document.getElementById('askBtn').addEventListener('click', ()=>{
+/* Ask AI — fetch the editable prompt from the API, then copy it. */
+document.getElementById('askBtn').addEventListener('click', async ()=>{
+  const sel = [...selected];
   const names = selectedNames();
-  const list = names.join(', ');
-  const prompt =
-`I have these ingredients to use up: ${list}.
-Suggest 3 simple dinners I can make tonight using mostly these, plus common pantry staples (oil, onion, garlic, pasta, rice, spices).
-Keep it quick (under 30 min), list ingredients and short steps for each.`;
   openSheet(`
     <h3>Ask AI</h3>
     <div class="h3sub">editable prompt · ${names.length} ingredient${names.length>1?'s':''}</div>
-    <textarea id="prompt">${prompt}</textarea>
+    <div class="loading">building prompt…</div>`);
+  let data;
+  try { data = await apiPost('/api/build-prompt', { selection: sel }); }
+  catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>Ask AI</h3>
+    <div class="sheet-error"><b>Couldn't build the prompt.</b><br>${esc(err.message)}</div>
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Close</button></div>`; wireClose(); return; }
+
+  openSheet(`
+    <h3>Ask AI</h3>
+    <div class="h3sub">editable prompt · ${names.length} ingredient${names.length>1?'s':''}</div>
+    <textarea id="prompt">${esc(data.prompt)}</textarea>
     <div class="row">
       <button class="btn ghost" id="closeSheet">Close</button>
       <button class="btn solid" id="copyBtn">Copy prompt</button>
     </div>`);
-  document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  wireClose();
   document.getElementById('copyBtn').addEventListener('click', e=>{
     navigator.clipboard.writeText(document.getElementById('prompt').value).then(()=>{
       e.target.textContent='Copied ✓'; setTimeout(()=>e.target.textContent='Copy prompt',1600);
@@ -734,42 +845,84 @@ Keep it quick (under 30 min), list ingredients and short steps for each.`;
   });
 });
 
-document.getElementById('connectBtn').addEventListener('click', ()=>{
+/* Connect — pairings among the selection + the recipes it unlocks. */
+document.getElementById('connectBtn').addEventListener('click', async ()=>{
+  const sel = [...selected];
   const names = selectedNames();
-  // mock FoodBrain output (real version calls pairing.py + matching.py)
-  const pairs = [
-    { n:'Knoblauch', inStock:true,  score:.91 },
-    { n:'Olivenöl',  inStock:true,  score:.88 },
-    { n:'Tomate',    inStock:false, score:.84 },
-    { n:'Basilikum', inStock:false, score:.79 },
-  ];
-  const recipes = [
-    { n:'Gemüsepfanne mit Feta', cov:.86, m:'uses Zucchini, Feta, Zwiebel · 1 expiring' },
-    { n:'Nudeln mit Zucchini',   cov:.72, m:'uses Zucchini, Knoblauch, Nudeln' },
-  ];
   openSheet(`
     <h3>Connect</h3>
-    <div class="h3sub">FoodBrain · ${names.join(' + ')}</div>
+    <div class="h3sub">FoodBrain · ${esc(names.join(' + '))}</div>
+    <div class="loading">connecting…</div>`);
+  let data;
+  try { data = await apiPost('/api/connect', { selection: sel }); }
+  catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>Connect</h3>
+    <div class="sheet-error"><b>Couldn't connect.</b><br>${esc(err.message)}</div>
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Close</button></div>`; wireClose(); return; }
+  renderConnect(data);
+});
+
+function renderConnect(data){
+  const names = data.selection || [];
+  const pairings = data.pairings || [];
+  const recipes = data.recipes || [];
+
+  const pairingHtml = pairings.length
+    ? pairings.map(p=>`
+        <div class="pgroup">
+          <div class="pgi">${esc(p.ingredient)}</div>
+          ${(p.partners||[]).map(pt=>`<div class="pair">
+            <span class="pn">${esc(pt.name)}</span>${pt.in_stock?'<span class="instock">in stock</span>':''}
+            <span class="score">${Number(pt.score).toFixed(2)}</span></div>`).join('')}
+        </div>`).join('')
+    : `<div class="empty">No flavor pairings for this selection${pairings === null ? '' : ' (no pairing bundle loaded)'}.</div>`;
+
+  const recipeHtml = recipes.length
+    ? recipes.map(r=>{
+        const matched = (r.matched||[]).join(', ');
+        const missing = (r.missing||[]).length ? ` · <span class="miss">missing ${esc(r.missing.join(', '))}</span>` : '';
+        return `<div class="recipe">
+          <div class="rn">${esc(r.name)}</div>
+          <div class="rm">uses ${esc(matched)}${missing}</div>
+          <div class="bar"><i style="width:${Math.round((r.coverage||0)*100)}%"></i></div></div>`;
+      }).join('')
+    : `<div class="empty">No recipes unlocked yet — add recipes to Grocy to see matches.</div>`;
+
+  openSheet(`
+    <h3>Connect</h3>
+    <div class="h3sub">FoodBrain · ${esc(names.join(' + '))}</div>
     <div class="cgroup">
       <div class="k">◈ Flavor pairings</div>
-      ${pairs.map(p=>`<div class="pair">
-        <span class="pn">${p.n}</span>${p.inStock?'<span class="instock">in stock</span>':''}
-        <span class="score">${p.score.toFixed(2)}</span></div>`).join('')}
+      ${pairingHtml}
     </div>
     <div class="cgroup">
       <div class="k">◈ Recipes you can make</div>
-      ${recipes.map(r=>`<div class="recipe">
-        <div class="rn">${r.n}</div><div class="rm">${r.m}</div>
-        <div class="bar"><i style="width:${Math.round(r.cov*100)}%"></i></div></div>`).join('')}
+      ${recipeHtml}
     </div>
     <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Close</button></div>`);
-  document.getElementById('closeSheet').addEventListener('click', closeSheet);
-});
+  wireClose();
+}
+
+/* ---- load / reload from the API ---- */
+async function reload(){
+  let data;
+  try { data = await apiGet('/api/stock'); }
+  catch (err){
+    shelvesEl.innerHTML = `<div class="nudge"><div class="k">◈ offline</div>
+      <p>Couldn't reach the FoodBrain API at <b>${esc(API_BASE || location.origin)}</b>.
+      Start it with <b>python -m foodbrain_assistant.server --sample …</b>, or open this page
+      with <b>?api=http://host:8123</b>.</p></div>`;
+    showError(err);
+    return;
+  }
+  TODAY = data.as_of ? new Date(data.as_of) : new Date();
+  items = (data.items || []).map(mapItem);
+  document.getElementById('dateStr').textContent =
+    TODAY.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  render();
+}
 
 /* ---- init ---- */
-document.getElementById('dateStr').textContent =
-  TODAY.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
-render();
+reload();
 </script>
 </body>
 </html>
