@@ -10,3 +10,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Claude Code skill tooling (not FoodBrain code)
+.agents/
+skills-lock.json
