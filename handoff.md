@@ -2,15 +2,51 @@
 
 Current date: 2026-06-04
 
-## Start Here Next — STEPS 1, 2 & 3 DONE, HA EMBED IS NEXT (2026-06-04)
+## Start Here Next — STEPS 1–4 DONE; LIVE WIRE-UP IS NEXT (2026-06-04)
 
-Build order steps 1 (**Grocy write-back**), 2 (**JSON API**) and 3 (**SPA**) are
-**done**. The suite is **96, 1 skipped** (step 3 changed only the static
-prototype — no Python touched). The next session starts **step 4: embed the SPA
-as a Home Assistant webpage panel** and keep the webhook for notifications only.
+Build order steps 1 (**Grocy write-back**), 2 (**JSON API**), 3 (**SPA**) and 4
+(**HA webpage panel**) are all **done**. The suite is **100, 1 skipped**. The
+core build order from ux-design.md is complete. The next session is no longer a
+build step — it is **live wire-up + verification on the household network**:
+
+1. Run the server bound to the LAN on the FoodBrain host:
+   `PYTHONPATH=src python3 -m foodbrain_assistant.server --host 0.0.0.0 --port 8123`
+   (with a configured `.env` so writes work, plus `--pairings-json` / `--recipes-json`).
+2. Add the `panel_iframe` block (README "HA webpage panel (build order step 4)")
+   to the household HA `configuration.yaml`, restart HA, confirm the sidebar panel
+   loads and reads live Grocy stock through the same origin.
+3. **Live-verify writes** end-to-end (consume / toss / edit-due-date / undo)
+   against a real Grocy product — these are still NOT live-verified (carried over
+   from steps 1–3; writes are mutating, so do a deliberate manual check).
+4. Mixed-content caveat: if HA is HTTPS, put the FoodBrain server behind the same
+   TLS / reverse proxy so the panel URL is HTTPS too (HA blocks mixed content).
+
 Full blueprint in **[ux-design.md](ux-design.md)** (build order + architecture).
 
-### Step 3 — SPA (DONE this session)
+### Step 4 — HA webpage panel (DONE this session)
+
+The FoodBrain server now serves the SPA itself, same-origin with the API, so it
+embeds as an HA `panel_iframe` with no CORS in production:
+
+- [server.py](src/foodbrain_assistant/server.py): `make_handler(api, ui_html=None)`
+  gained `/`, `/ui`, `/ui/`, `/index.html` → serve the SPA via a new `_send_html`
+  (Content-Type `text/html`); when `ui_html` is `None` those routes 404 (pure-API
+  server, unchanged behavior). New `_load_ui(args)` auto-detects the in-repo
+  `prototype/fridge-now.html` (override with `--ui-file PATH`); `main()` prints the
+  `/ui` URL when the SPA is served. The SPA's existing same-origin resolution
+  (`API_BASE=''` when served) needed no change.
+- README gained a "HA webpage panel (build order step 4)" subsection with the
+  `panel_iframe` YAML + the `--host 0.0.0.0` LAN-bind note + the HTTPS caveat.
+- Tests: 4 new in [tests/test_api.py](tests/test_api.py) — `UiServingTest` (root +
+  `/ui` serve the bytes with the right content-type; API still works alongside the
+  UI) and a 404 case when no bundle is loaded. Suite **100 (1 skipped)**.
+- VERIFIED in a real headless browser (Playwright): the SPA served at `/ui`
+  **same-origin, no `?api=` override** loaded live `--sample` data (4 items across
+  all 4 bands, header stats) with **zero console errors**, and a Connect POST
+  rendered its result group — confirming the same-origin path the HA panel will use.
+  **Writes were NOT live-verified** (same standing caution as steps 1–3).
+
+### Step 3 — SPA (DONE earlier this session)
 
 [prototype/fridge-now.html](prototype/fridge-now.html) is no longer on mock data;
 it is wired to the live JSON API:
@@ -44,15 +80,7 @@ it is wired to the live JSON API:
   mutating; do a deliberate manual check against a real product before relying on
   them. README gained an "SPA (build order step 3)" subsection.
 
-### Step 4 — HA webpage panel (start here next)
-
-Serve the SPA (the server can grow a `/ui` static route — see the note in
-[server.py](src/foodbrain_assistant/server.py) docstring) and register it as a
-Home Assistant `panel_iframe` / webpage panel. Keep the existing webhook for
-notifications only. The SPA already uses same-origin when served, so serving it
-from the FoodBrain server is the cleanest path.
-
-### Step 2 — JSON API (DONE this session)
+### Step 2 — JSON API (DONE earlier this session)
 
 - New **[api.py](src/foodbrain_assistant/api.py)** = transport-agnostic
   `FoodBrainAPI` (a frozen dataclass) holding settings + a `stock_provider`
@@ -139,7 +167,8 @@ Agreed build order (see ux-design.md "Build order"):
 2. ✅ **JSON API** off the service: `stock-with-scores`, `connect(selection)`,
    `build-prompt(selection)`, plus write proxies. DONE.
 3. ✅ **SPA**: urgency-bands view, multi-select, action bar, editable prompt box. DONE.
-4. **Embed** as an HA webpage panel; keep the webhook for notifications only. ← start here
+4. ✅ **Embed** as an HA webpage panel (server serves the SPA same-origin at
+   `/ui`); keep the webhook for notifications only. DONE. ← live wire-up next
 
 Reused as-is (the recommendation brains are done): expiry scoring → bands;
 `matching.py` + `pairing.py` (+ 144-entry alias map) → "Connect" mode;

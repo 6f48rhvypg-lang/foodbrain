@@ -1,11 +1,16 @@
-"""Dependency-free HTTP transport for the FoodBrain JSON API (build order step 2).
+"""Dependency-free HTTP transport for the FoodBrain JSON API + SPA (steps 2 & 4).
 
 A thin ``http.server`` wrapper around :class:`foodbrain_assistant.api.FoodBrainAPI`.
-The runtime stays dependency-free (stdlib only), in keeping with the project rule;
-the SPA (step 3) is a static bundle this server can later serve from ``/ui``.
+The runtime stays dependency-free (stdlib only), in keeping with the project rule.
+Step 4 adds static serving of the single-file SPA (``prototype/fridge-now.html``)
+from ``/`` and ``/ui`` so it can be embedded as a Home Assistant webpage panel
+(``panel_iframe``); the SPA already resolves the API to the same origin when
+served. See the README "HA webpage panel (build order step 4)" subsection.
 
 Routes::
 
+    GET  /                           -> the SPA (same as /ui)
+    GET  /ui                         -> the SPA
     GET  /api/health
     GET  /api/stock                  -> stock-with-scores (bands view)
     POST /api/connect                {"selection": [product_id, ...]}
@@ -36,8 +41,13 @@ from .pairing import PairingError, load_pairings
 from .recipes import RecipesError, parse_recipes_response
 
 
-def make_handler(api: FoodBrainAPI):
-    """Build a request handler class bound to a configured :class:`FoodBrainAPI`."""
+def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
+    """Build a request handler class bound to a configured :class:`FoodBrainAPI`.
+
+    ``ui_html``, when provided, is the SPA bundle served at ``/`` and ``/ui``
+    (build order step 4). When ``None`` those routes return 404, leaving a
+    pure-API server.
+    """
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "FoodBrain/0.1"
@@ -49,7 +59,15 @@ def make_handler(api: FoodBrainAPI):
             parsed = urlparse(self.path)
             route = parsed.path
             try:
-                if route == "/api/health":
+                if route in ("/", "/ui", "/ui/", "/index.html"):
+                    if ui_html is None:
+                        raise ApiError(
+                            404,
+                            "SPA is not served by this instance "
+                            "(start with the prototype present or pass --ui-file)",
+                        )
+                    self._send_html(ui_html)
+                elif route == "/api/health":
                     self._send(200, {"ok": True})
                 elif route == "/api/stock":
                     self._send(200, api.stock_with_scores())
@@ -115,6 +133,14 @@ def make_handler(api: FoodBrainAPI):
             if not isinstance(parsed, dict):
                 raise ApiError(400, "request body must be a JSON object")
             return parsed
+
+        def _send_html(self, body: bytes) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
 
         def _send(self, status: int, payload: Optional[dict]) -> None:
             data = b"" if payload is None else json.dumps(payload).encode("utf-8")
@@ -263,6 +289,26 @@ def _load_aliases(args):
         raise SystemExit(str(exc)) from exc
 
 
+def _load_ui(args) -> Optional[bytes]:
+    """Load the SPA bundle (build order step 4).
+
+    Uses ``--ui-file PATH`` when given; otherwise auto-detects the in-repo
+    ``prototype/fridge-now.html``. Returns ``None`` (pure-API server) only when
+    neither is found and ``--ui-file`` was not requested.
+    """
+    path = args.ui_file
+    if path is None:
+        repo_root = Path(__file__).resolve().parents[2]
+        candidate = repo_root / "prototype" / "fridge-now.html"
+        path = candidate if candidate.is_file() else None
+    if path is None:
+        return None
+    try:
+        return Path(path).read_bytes()
+    except OSError as exc:
+        raise SystemExit(f"Could not read UI file: {exc}") from exc
+
+
 def _load_json(path: Path):
     try:
         with Path(path).open("r", encoding="utf-8") as file:
@@ -286,12 +332,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--recipes-json", type=Path, metavar="PATH")
     parser.add_argument("--pairings-json", type=Path, metavar="PATH")
     parser.add_argument("--aliases-json", type=Path, metavar="PATH")
+    parser.add_argument(
+        "--ui-file", type=Path, metavar="PATH",
+        help="Serve this SPA HTML at / and /ui (defaults to the in-repo prototype).",
+    )
     args = parser.parse_args(argv)
 
     settings = load_settings()
     api = build_api(args, settings)
-    httpd = ThreadingHTTPServer((args.host, args.port), make_handler(api))
-    print(f"FoodBrain API serving on http://{args.host}:{args.port} (source: {api.source})")
+    ui_html = _load_ui(args)
+    httpd = ThreadingHTTPServer((args.host, args.port), make_handler(api, ui_html))
+    base = f"http://{args.host}:{args.port}"
+    print(f"FoodBrain API serving on {base} (source: {api.source})")
+    if ui_html is not None:
+        print(f"FoodBrain SPA serving on {base}/ui")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

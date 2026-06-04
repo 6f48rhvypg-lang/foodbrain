@@ -290,7 +290,44 @@ Start the API (see above), then open the file. Over `file://` it defaults to
 `http://127.0.0.1:8123`; when served from the FoodBrain server it uses the same
 origin. Point it elsewhere with `?api=http://host:port`. Writes hit the live
 Grocy LXC, so they need a configured `.env` and otherwise surface the API error
-in the snackbar. Step 4 will embed this as a Home Assistant webpage panel.
+in the snackbar.
+
+#### HA webpage panel (build order step 4)
+
+The FoodBrain server now serves the SPA itself at `/` and `/ui`, on the same
+origin as the API — so it can be embedded directly as a Home Assistant webpage
+panel (`panel_iframe`). No extra dev origin, no CORS in production. Run the same
+server command as above and the startup banner prints both URLs:
+
+```text
+FoodBrain API serving on http://127.0.0.1:8123 (source: ...)
+FoodBrain SPA serving on http://127.0.0.1:8123/ui
+```
+
+The in-repo `prototype/fridge-now.html` is auto-detected; override it with
+`--ui-file PATH`. For Home Assistant to reach it, bind to the LAN, e.g.:
+
+```bash
+PYTHONPATH=src python3 -m foodbrain_assistant.server --host 0.0.0.0 --port 8123
+```
+
+Then register it as a panel in Home Assistant's `configuration.yaml` (HA host
+must be able to reach the FoodBrain host on that port):
+
+```yaml
+panel_iframe:
+  foodbrain:
+    title: "FoodBrain"
+    icon: mdi:fridge
+    url: "http://<foodbrain-host>:8123/ui"
+    require_admin: false
+```
+
+Restart Home Assistant; "FoodBrain" appears in the sidebar. The existing
+Home Assistant webhook stays in place for notifications only — the panel is
+the interactive surface, the webhook is the daily summary nudge. (Note: HA blocks
+mixed content, so if your HA is served over HTTPS, put the FoodBrain server behind
+the same reverse proxy / TLS so the panel URL is also HTTPS.)
 
 ## Current Development Plan
 

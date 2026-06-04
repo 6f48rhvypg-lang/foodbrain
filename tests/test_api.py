@@ -286,6 +286,53 @@ class HttpSmokeTest(unittest.TestCase):
             self._get("/api/nope")
         self.assertEqual(ctx.exception.code, 404)
 
+    def test_ui_routes_404_without_bundle(self) -> None:
+        # This server was built without a UI bundle, so / and /ui are 404.
+        for path in ("/", "/ui"):
+            with self.assertRaises(HTTPError) as ctx:
+                self._get(path)
+            self.assertEqual(ctx.exception.code, 404)
+
+
+class UiServingTest(unittest.TestCase):
+    """The SPA bundle is served at / and /ui when make_handler gets ui_html."""
+
+    UI = b"<!doctype html><title>FoodBrain SPA</title>"
+
+    def setUp(self) -> None:
+        api = _api(write_client_factory=lambda: _FakeClient())
+        self.httpd = ThreadingHTTPServer(
+            ("127.0.0.1", 0), make_handler(api, self.UI)
+        )
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self) -> None:
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=2)
+
+    def _fetch(self, path: str):
+        with urlopen(f"http://127.0.0.1:{self.port}{path}") as response:
+            return response.status, response.headers.get("Content-Type"), response.read()
+
+    def test_root_serves_spa(self) -> None:
+        status, ctype, body = self._fetch("/")
+        self.assertEqual(status, 200)
+        self.assertEqual(ctype, "text/html; charset=utf-8")
+        self.assertEqual(body, self.UI)
+
+    def test_ui_serves_spa(self) -> None:
+        status, _ctype, body = self._fetch("/ui")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, self.UI)
+
+    def test_api_still_works_with_ui(self) -> None:
+        status, _ctype, body = self._fetch("/api/health")
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body.decode("utf-8"))["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()
