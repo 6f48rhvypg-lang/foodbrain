@@ -2,7 +2,34 @@
 
 Current date: 2026-06-03
 
-## Start Here Next
+## Start Here Next — DIRECTION CHANGE (2026-06-04)
+
+NEW PRIORITY set by the user at end of last session: before any more
+recipe/FlavorGraph integration, **step back and design the app UX around the
+user's actual kitchen workflow**, focused on an *easy overview of what's in the
+fridge*. The user will describe their kitchen workflow at the start of next
+session; brainstorm together how the app should look/behave around it. They have
+"very precise ideas" for the recipe integration that come AFTER this — do not
+jump ahead to recipes.
+
+Context that informed this: last session I gave the user a Grocy daily-life
+workflow (locations as physical places, quantity-unit conversions as the
+foundation for later recipe matching, scan-in/scan-out via the Grocy Android
+app, track perishables religiously + ignore shelf-stable staples, "due soon"
+window for waste prevention). FoodBrain already turns raw Grocy stock into a
+ranked "use these first" list with expiry scoring — that ranked view is the
+natural daily-driver and a likely centerpiece of whatever UX we design. The
+user liked the current state ("this sounds actually pretty nice").
+
+So next session: (1) listen to the kitchen workflow, (2) brainstorm UX/overview
+design around it, (3) THEN map their precise recipe ideas onto it. Real-recipe
+verification (below) is still blocked on Grocy having zero recipes, but it is no
+longer the lead task — the UX/overview design is.
+
+The code state below is current and green (HEAD e79713e, pushed). No code work
+is pending; next session likely starts as a design conversation.
+
+## Prior Start-Here (superseded by the direction change above)
 
 The **German alias map was expanded this session** from a 16-entry starter to
 **144 validated entries** (`examples/aliases.sample.json`). Categories: dairy &
