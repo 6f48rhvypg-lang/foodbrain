@@ -6,20 +6,36 @@ Current date: 2026-06-04
 
 Build order steps 1 (**Grocy write-back**), 2 (**JSON API**), 3 (**SPA**) and 4
 (**HA webpage panel**) are all **done**. The suite is **100, 1 skipped**. The
-core build order from ux-design.md is complete. The next session is no longer a
-build step — it is **live wire-up + verification on the household network**:
+core build order from ux-design.md is complete, and the live API has now been
+verified against the real household Grocy LXC for **both reads and writes**
+(see "Live verification" below). The only remaining step is registering the panel
+in Home Assistant itself, which is a manual config change on the HA host:
 
 1. Run the server bound to the LAN on the FoodBrain host:
    `PYTHONPATH=src python3 -m foodbrain_assistant.server --host 0.0.0.0 --port 8123`
    (with a configured `.env` so writes work, plus `--pairings-json` / `--recipes-json`).
 2. Add the `panel_iframe` block (README "HA webpage panel (build order step 4)")
    to the household HA `configuration.yaml`, restart HA, confirm the sidebar panel
-   loads and reads live Grocy stock through the same origin.
-3. **Live-verify writes** end-to-end (consume / toss / edit-due-date / undo)
-   against a real Grocy product — these are still NOT live-verified (carried over
-   from steps 1–3; writes are mutating, so do a deliberate manual check).
-4. Mixed-content caveat: if HA is HTTPS, put the FoodBrain server behind the same
+   loads. (Reads + writes through the server are already live-verified; this step
+   only confirms HA's iframe embedding + the LAN URL resolve on the HA host.)
+3. Mixed-content caveat: if HA is HTTPS, put the FoodBrain server behind the same
    TLS / reverse proxy so the panel URL is HTTPS too (HA blocks mixed content).
+
+### Live verification — reads + writes against real Grocy (2026-06-04)
+
+Done this session against the real Grocy LXC (`.env` configured), so the
+standing "writes NOT live-verified" caution from steps 1–4 is now **cleared**:
+
+- **Reads (read-only):** server started against live Grocy; the SPA served at
+  `/ui` **same-origin** loaded the real stock (Milch, `warm` band, 5 days) in a
+  headless browser with **zero console errors** — the exact HA-panel path.
+- **Writes (net-zero):** via the live API endpoints the SPA uses — Milch=2.0 →
+  `POST /api/consume` (1) → `transaction_id 6a21bbe9332bd`, `undoable:true` →
+  stock=1.0 (real write landed) → `POST /api/undo` → stock back to 2.0. The full
+  consume→undo round-trip works against real Grocy with no net inventory change.
+- Not exercised live: `toss` and `set-due-date` (toss is the same consume path
+  with `spoiled=true`; set-due-date targets a stock entry). Consume+undo proves
+  the write/transaction/undo rails; those two are low-risk extensions.
 
 Full blueprint in **[ux-design.md](ux-design.md)** (build order + architecture).
 
@@ -44,7 +60,8 @@ embeds as an HA `panel_iframe` with no CORS in production:
   **same-origin, no `?api=` override** loaded live `--sample` data (4 items across
   all 4 bands, header stats) with **zero console errors**, and a Connect POST
   rendered its result group — confirming the same-origin path the HA panel will use.
-  **Writes were NOT live-verified** (same standing caution as steps 1–3).
+  Reads + writes were subsequently **live-verified against real Grocy** too (see
+  "Live verification — reads + writes against real Grocy" above).
 
 ### Step 3 — SPA (DONE earlier this session)
 
