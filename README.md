@@ -49,7 +49,7 @@ Current baseline:
 - Optional Home Assistant webhook publishing
 - CLI for sample and live runs
 - Unit tests for Grocy parsing, normalization, scoring, recipe parsing, matching, and pairing
-- Git repository initialized and pushed to `https://github.com/RSM-CEI/foodbrain`
+- Git repository initialized and pushed to `https://github.com/6f48rhvypg-lang/foodbrain`
 
 ## Quick Start
 
@@ -347,7 +347,7 @@ Use [handoff.md](handoff.md) as the primary restart note for the next session.
 
 Current repo state:
 
-- GitHub remote: `https://github.com/RSM-CEI/foodbrain`
+- GitHub remote: `https://github.com/6f48rhvypg-lang/foodbrain`
 - Branch: `main`
 - Local verification command: `PYTHONPATH=src python3 -m unittest discover -s tests`
 - Sample run command: `PYTHONPATH=src python3 -m foodbrain_assistant.cli --sample`
@@ -362,7 +362,7 @@ git pull --ff-only
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
-On another PC, clone or pull `https://github.com/RSM-CEI/foodbrain`, copy `.env.example` to `.env`, fill in the local Grocy URL and API key, then run the live command above. Keep `.env` and `.foodbrain-local/` private.
+On another PC, clone or pull `https://github.com/6f48rhvypg-lang/foodbrain`, copy `.env.example` to `.env`, fill in the local Grocy URL and API key, then run the live command above. Keep `.env` and `.foodbrain-local/` private.
 
 Next implementation steps:
 

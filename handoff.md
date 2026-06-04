@@ -244,7 +244,7 @@ PYTHONPATH=src python3 -m foodbrain_assistant.cli --grocy-stock-json .foodbrain-
 
 ## Current State
 
-- Repository: `https://github.com/RSM-CEI/foodbrain`
+- Repository: `https://github.com/6f48rhvypg-lang/foodbrain`
 - Branch: `main` (pushed; HEAD `99acbf9` "Add Phase 5 FlavorGraph ingredient pairing")
 - The Python sidecar service can read Grocy stock, score expiry urgency, match local recipes against stock, print CLI output, and optionally publish a Home Assistant webhook summary.
 - Grocy `/api/stock` parsing now has unit tests, an automatic diagnostics command, and an optional real-data contract test.
@@ -441,7 +441,7 @@ FOODBRAIN_GROCY_STOCK_JSON=.foodbrain-local/stock.json PYTHONPATH=src python3 -m
 1. Pull the latest code on the other PC:
 
 ```bash
-git clone https://github.com/RSM-CEI/foodbrain.git
+git clone https://github.com/6f48rhvypg-lang/foodbrain.git
 cd foodbrain
 ```
 
