@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
-from .models import Recipe, StockItem
+from .models import Recipe, StockEntry, StockItem
 from .recipes import parse_grocy_recipes_response
 
 
@@ -15,11 +15,22 @@ class GrocyClientError(RuntimeError):
     pass
 
 
+class GrocyWriteDisabledError(GrocyClientError):
+    """Raised when a write is attempted on a read-only client."""
+
+
 class GrocyClient:
-    def __init__(self, base_url: str, api_key: str, timeout_seconds: int = 10) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout_seconds: int = 10,
+        allow_writes: bool = False,
+    ) -> None:
         self.base_url = base_url.rstrip("/") + "/"
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        self.allow_writes = allow_writes
 
     def get_stock_items(self) -> list[StockItem]:
         payload = self._get_json("api/stock")
@@ -33,18 +44,123 @@ class GrocyClient:
             quantity_units=self._get_json("api/objects/quantity_units"),
         )
 
+    def get_product_entries(self, product_id: str) -> list[StockEntry]:
+        """Read the individual stock entries for a product (needed to edit a due date)."""
+        payload = self._get_json(f"api/stock/products/{product_id}/entries")
+        return parse_stock_entries_response(payload)
+
+    # --- writes -----------------------------------------------------------
+
+    def consume_product(
+        self, product_id: str, amount: float = 1.0, *, spoiled: bool = False
+    ) -> Any:
+        """Consume stock. Set ``spoiled`` for a toss/waste removal.
+
+        Returns the Grocy response, which carries the transaction id used for undo.
+        """
+        return self._write_json(
+            f"api/stock/products/{product_id}/consume",
+            "POST",
+            {
+                "amount": amount,
+                "transaction_type": "consume",
+                "spoiled": spoiled,
+            },
+        )
+
+    def open_product(self, product_id: str, amount: float = 1.0) -> Any:
+        return self._write_json(
+            f"api/stock/products/{product_id}/open",
+            "POST",
+            {"amount": amount},
+        )
+
+    def set_entry_due_date(self, stock_entry_id: str, best_before_date: date) -> Any:
+        return self._write_json(
+            f"api/stock/entry/{stock_entry_id}",
+            "PUT",
+            {"best_before_date": best_before_date.isoformat()},
+        )
+
+    def undo_transaction(self, transaction_id: str) -> Any:
+        return self._write_json(
+            f"api/stock/transactions/{transaction_id}/undo",
+            "POST",
+            None,
+        )
+
     def _get_json(self, path: str) -> Any:
         url = urljoin(self.base_url, path)
         request = Request(url, headers={"GROCY-API-KEY": self.api_key})
+        return self._send(request)
+
+    def _write_json(self, path: str, method: str, body: Optional[dict[str, Any]]) -> Any:
+        if not self.allow_writes:
+            raise GrocyWriteDisabledError(
+                f"refusing to {method} {path}: client is read-only "
+                "(construct GrocyClient with allow_writes=True to enable writes)"
+            )
+        url = urljoin(self.base_url, path)
+        data = json.dumps(body).encode("utf-8") if body is not None else b""
+        request = Request(
+            url,
+            data=data,
+            headers={
+                "GROCY-API-KEY": self.api_key,
+                "Content-Type": "application/json",
+            },
+            method=method,
+        )
+        return self._send(request, allow_empty=True)
+
+    def _send(self, request: Request, allow_empty: bool = False) -> Any:
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
+                raw = response.read().decode("utf-8")
         except HTTPError as exc:
             raise GrocyClientError(f"Grocy request failed with HTTP {exc.code}") from exc
         except URLError as exc:
             raise GrocyClientError(f"Grocy request failed: {exc.reason}") from exc
+        if allow_empty and not raw.strip():
+            return None
+        try:
+            return json.loads(raw)
         except json.JSONDecodeError as exc:
             raise GrocyClientError("Grocy response was not valid JSON") from exc
+
+
+def parse_stock_entries_response(payload: Any) -> list[StockEntry]:
+    if not isinstance(payload, list):
+        raise GrocyClientError(
+            "Grocy /api/stock/products/{id}/entries response was not a list"
+        )
+
+    entries: list[StockEntry] = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            raise GrocyClientError(f"Grocy stock entry {index} was not an object")
+        entry_id = str(row.get("id") or "")
+        if not entry_id:
+            raise GrocyClientError(f"Grocy stock entry {index} is missing an id")
+        entries.append(
+            StockEntry(
+                stock_entry_id=entry_id,
+                product_id=str(row.get("product_id") or ""),
+                amount=_parse_amount(row.get("amount")),
+                best_before_date=_parse_date(row.get("best_before_date")),
+                opened=bool(_parse_amount(row.get("open")) > 0 or row.get("opened")),
+            )
+        )
+    return entries
+
+
+def extract_transaction_id(response: Any) -> Optional[str]:
+    """Pull the transaction id from a Grocy consume/open response (used for undo)."""
+    rows = response if isinstance(response, list) else [response]
+    for row in rows:
+        if isinstance(row, dict) and row.get("transaction_id"):
+            return str(row["transaction_id"])
+    return None
 
 
 def parse_stock_response(payload: Any) -> list[StockItem]:

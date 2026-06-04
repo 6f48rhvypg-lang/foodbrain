@@ -17,6 +17,17 @@ class StockItem:
 
 
 @dataclass(frozen=True)
+class StockEntry:
+    """A single Grocy stock entry (one product can have several with distinct due dates)."""
+
+    stock_entry_id: str
+    product_id: str
+    amount: float
+    best_before_date: Optional[date]
+    opened: bool = False
+
+
+@dataclass(frozen=True)
 class IngredientUrgency:
     item: StockItem
     days_until_expiry: Optional[int]
