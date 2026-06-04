@@ -1,33 +1,121 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-03
+Current date: 2026-06-04
 
-## Start Here Next — DIRECTION CHANGE (2026-06-04)
+## Start Here Next — STEPS 1 & 2 DONE, SPA IS NEXT (2026-06-04)
 
-NEW PRIORITY set by the user at end of last session: before any more
-recipe/FlavorGraph integration, **step back and design the app UX around the
-user's actual kitchen workflow**, focused on an *easy overview of what's in the
-fridge*. The user will describe their kitchen workflow at the start of next
-session; brainstorm together how the app should look/behave around it. They have
-"very precise ideas" for the recipe integration that come AFTER this — do not
-jump ahead to recipes.
+Build order steps 1 (**Grocy write-back**) and 2 (**JSON API**) are **implemented
+and green** (suite now **96, 1 skipped**). The next session starts **step 3: the
+SPA** — wire the prototype at **[prototype/fridge-now.html](prototype/fridge-now.html)**
+to the live JSON API (it currently runs on mock data). Full blueprint in
+**[ux-design.md](ux-design.md)** (build order + architecture).
 
-Context that informed this: last session I gave the user a Grocy daily-life
-workflow (locations as physical places, quantity-unit conversions as the
-foundation for later recipe matching, scan-in/scan-out via the Grocy Android
-app, track perishables religiously + ignore shelf-stable staples, "due soon"
-window for waste prevention). FoodBrain already turns raw Grocy stock into a
-ranked "use these first" list with expiry scoring — that ranked view is the
-natural daily-driver and a likely centerpiece of whatever UX we design. The
-user liked the current state ("this sounds actually pretty nice").
+### Step 2 — JSON API (DONE this session)
 
-So next session: (1) listen to the kitchen workflow, (2) brainstorm UX/overview
-design around it, (3) THEN map their precise recipe ideas onto it. Real-recipe
-verification (below) is still blocked on Grocy having zero recipes, but it is no
-longer the lead task — the UX/overview design is.
+- New **[api.py](src/foodbrain_assistant/api.py)** = transport-agnostic
+  `FoodBrainAPI` (a frozen dataclass) holding settings + a `stock_provider`
+  callable + optional `recipes`/`pairings`/`aliases` + a `write_client_factory`.
+  Every operation returns a JSON-serializable dict and is unit-testable without a
+  socket. Operations:
+  - `stock_with_scores()` — bands view; scores every in-stock item and tags its
+    band (`hot`≤0d, `warm`≤window, `cool`>window, `staple`=no due date), matching
+    the prototype thresholds. Returns `items` (sorted most-urgent-first) +
+    `summary` (counts).
+  - `connect(selection)` — `selection` is a list of **product ids**; resolves to
+    stock items, returns flavor pairings among them (`pairing.suggest_pairings`)
+    + the recipes that selection *unlocks* (recipes that call for ≥1 selected
+    item, ranked by `matching.rank_recipes` against full stock).
+  - `build_prompt(selection)` — editable LLM prompt text; **no LLM call**.
+  - `consume` / `toss` / `set_due_date` / `undo` / `product_entries` — proxies
+    onto `writeback.py`. `ApiError(status, message)` carries the HTTP status;
+    toss-without-confirm → 409, writes-disabled → 403, Grocy failure → 502.
+- New **[server.py](src/foodbrain_assistant/server.py)** = thin stdlib
+  `http.server` transport (runtime stays dependency-free). Routes + a `--sample` /
+  `--stock-json` / live-Grocy bootstrap; permissive CORS for SPA dev. Run:
+  `python3 -m foodbrain_assistant.server --sample --pairings-json examples/pairings.sample.json --recipes-json examples/recipes.sample.json`.
+- README gained a "JSON API (build order step 2)" subsection with the route table.
+- Tests: **[tests/test_api.py](tests/test_api.py)** (22 new) — pure `FoodBrainAPI`
+  unit tests + a real-socket HTTP smoke test via `make_handler`. Suite **96 (1 skipped)**.
+- NOT yet live-verified for **writes** against the real Grocy LXC (same caution as
+  step 1 — writes are mutating). Reads/connect/build-prompt verified end-to-end
+  over a running server with sample data.
 
-The code state below is current and green (HEAD e79713e, pushed). No code work
-is pending; next session likely starts as a design conversation.
+### Step 3 — SPA (start here next)
+
+The prototype implements every interaction against mock data. Replace its
+in-memory `items` array + mock Connect/Ask outputs with `fetch` calls to the JSON
+API: `GET /api/stock` for the bands, `POST /api/connect` and `/api/build-prompt`
+for the action bar, and the write routes for the inline quick actions (with the
+undo snackbar wired to `/api/undo`). Then build order step 4 embeds it as an HA
+webpage panel.
+
+### Step 1 — Grocy write-back (DONE earlier this session)
+
+- `GrocyClient` is now **read-only by default**; pass `allow_writes=True` to
+  enable writes. Any write on a read-only client raises `GrocyWriteDisabledError`
+  (the dry-run/test guard from the design).
+- New write primitives on `GrocyClient`: `consume_product(id, amount, spoiled=)`,
+  `open_product`, `set_entry_due_date(entry_id, date)`, `undo_transaction(tx_id)`,
+  plus read helper `get_product_entries(product_id)` → `list[StockEntry]` (needed
+  because due-date edits target a stock *entry*, not the product).
+- New `writeback.py` module = the safety rails: `consume()` / `toss()` return a
+  `WriteOutcome` with the Grocy `transaction_id`; `undo(client, outcome)` reverses
+  it. `toss()` raises `ConfirmationRequired` unless `confirm=True` (confirm on
+  destructive). `set_due_date()` too.
+- New `StockEntry` model; `extract_transaction_id()` + `parse_stock_entries_response()`
+  helpers in `grocy_client.py`.
+- Tests: `tests/test_grocy_writeback.py` (12 new). Suite now **74 (1 skipped)**.
+- README gained a "Grocy write-back" subsection.
+- NOT yet live-verified against the real Grocy LXC (writes are mutating; left for
+  a deliberate manual check). Request-building is unit-tested via a mocked
+  `urlopen`. The HTTP endpoints used are the standard Grocy stock API
+  (`/api/stock/products/{id}/consume|open`, `/api/stock/entry/{id}`,
+  `/api/stock/transactions/{tx}/undo`) — confirm these against the household
+  Grocy version before wiring the SPA.
+
+### Original UX-design context (still current)
+
+The fridge-overview UX was brainstormed and **agreed** earlier. The prototype
+mocks the data + Connect/Ask outputs but implements every interaction; it is the
+SPA seed for step 3.
+
+Decisions locked (details + rationale in ux-design.md):
+
+- **UI surface:** FoodBrain serves its **own SPA**, embedded in Home Assistant as
+  a webpage panel. HA becomes host + notifier; FoodBrain owns the screen. (Chosen
+  over native Lovelace/HACS cards and over a custom JS Lovelace card, because
+  multi-select, live re-sort, and an editable prompt box are native web-app
+  behavior and miserable as Lovelace YAML.)
+- **"Ask AI" mode:** build-and-**copy an editable prompt** (no LLM call yet).
+  Zero AI infra; Ollama/cloud stays a future toggle behind the same prompt box.
+- **Grocy write-back:** full quick actions — **consume / toss-remove / edit due
+  date** inline. The service stops being read-only; writes need a safety rail
+  (confirm on destructive, undo on consume).
+
+Agreed build order (see ux-design.md "Build order"):
+
+1. ✅ **Grocy write-back** in the Python service (consume / open / edit-due-date)
+   with confirm + undo semantics and a read-only-safe guard for tests. DONE.
+2. ✅ **JSON API** off the service: `stock-with-scores`, `connect(selection)`,
+   `build-prompt(selection)`, plus write proxies. DONE.
+3. **SPA**: urgency-bands view, multi-select, action bar, editable prompt box. ← start here
+4. **Embed** as an HA webpage panel; keep the webhook for notifications only.
+
+Reused as-is (the recommendation brains are done): expiry scoring → bands;
+`matching.py` + `pairing.py` (+ 144-entry alias map) → "Connect" mode;
+`grocy_client.py` → bands data; `home_assistant.py` webhook → notifications.
+
+The code state below is current and green (HEAD c3dbf90, pushed). No code work is
+pending from prior phases.
+
+## Prior direction note (superseded by the agreed design above)
+
+Before this session the plan was only to "step back and design the UX." That
+design conversation happened and produced ux-design.md; the section above is the
+outcome. The kitchen-workflow context that informed it: locations as physical
+places, quantity-unit conversions as the foundation for recipe matching,
+scan-in/scan-out via the Grocy Android app, track perishables religiously +
+ignore shelf-stable staples, "due soon" window for waste prevention.
 
 ## Prior Start-Here (superseded by the direction change above)
 

@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>FoodBrain — Fridge now</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     FoodBrain — Fridge Now  (interactive UX prototype)
+     Aesthetic: "inside the fridge at night" — cold frosted glass,
+     shelves of light, monospace appliance readouts, produce-color
+     urgency. Mobile-first; works on desktop. Self-contained.
+     ============================================================ */
+
+  :root {
+    /* cold fridge interior */
+    --bg-0: #07100f;
+    --bg-1: #0a1614;
+    --glass: rgba(180, 224, 220, 0.045);
+    --glass-strong: rgba(190, 230, 226, 0.085);
+    --hairline: rgba(176, 224, 218, 0.14);
+    --hairline-soft: rgba(176, 224, 218, 0.08);
+
+    --ink: #eaf6f3;
+    --ink-dim: #9fc0ba;
+    --ink-faint: #5f817b;
+
+    /* urgency temperature scale */
+    --hot: #ff5a52;      /* eat today / overdue */
+    --hot-glow: rgba(255, 90, 82, 0.45);
+    --warm: #ffb13d;     /* this week */
+    --warm-glow: rgba(255, 177, 61, 0.35);
+    --cool: #4fd6a0;     /* fresh */
+    --cool-glow: rgba(79, 214, 160, 0.30);
+    --staple: #6f8c86;   /* shelf-stable */
+
+    --accent: #7cf0c8;   /* interactive / selection */
+    --accent-ink: #04201a;
+
+    --radius: 16px;
+    --radius-sm: 11px;
+    --shelf-gap: 26px;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: "Hanken Grotesk", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(120% 70% at 50% -10%, #123028 0%, transparent 55%),
+      radial-gradient(90% 60% at 110% 0%, rgba(124,240,200,.06) 0%, transparent 50%),
+      linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* frost grain overlay */
+  body::after {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: .35; mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+  }
+
+  .app {
+    position: relative; z-index: 1;
+    max-width: 560px; margin: 0 auto;
+    padding: 28px 18px calc(150px + env(safe-area-inset-bottom));
+  }
+
+  /* ---------- header ---------- */
+  header { margin-bottom: 22px; }
+
+  .brand {
+    display: flex; align-items: baseline; gap: 10px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .26em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .brand .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px var(--accent);
+    align-self: center;
+    animation: pulse 2.6s var(--ease) infinite;
+  }
+  @keyframes pulse { 50% { opacity: .4; } }
+
+  h1 {
+    font-family: "Fraunces", serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(34px, 9vw, 46px);
+    line-height: .98;
+    letter-spacing: -.02em;
+    margin: 12px 0 6px;
+  }
+  h1 em { font-style: italic; color: var(--cool); font-weight: 500; }
+
+  .subline {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px; color: var(--ink-dim);
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+  }
+  .subline .sep { color: var(--ink-faint); }
+  .subline b { color: var(--hot); font-weight: 600; }
+
+  /* ---------- sort control ---------- */
+  .sortbar {
+    display: flex; gap: 8px; margin: 20px 0 6px;
+    overflow-x: auto; scrollbar-width: none; padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sortbar::-webkit-scrollbar { display: none; }
+  .sortbar .lbl {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: .18em; text-transform: uppercase; color: var(--ink-faint);
+    align-self: center; flex: 0 0 auto; padding-right: 2px;
+  }
+  .chip {
+    flex: 0 0 auto; cursor: pointer; user-select: none;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    color: var(--ink-dim); background: var(--glass);
+    border: 1px solid var(--hairline-soft); border-radius: 999px;
+    padding: 7px 13px; transition: all .2s var(--ease);
+    white-space: nowrap;
+  }
+  .chip:hover { color: var(--ink); border-color: var(--hairline); }
+  .chip.active {
+    color: var(--accent-ink); background: var(--accent);
+    border-color: var(--accent); font-weight: 600;
+  }
+
+  /* ---------- shelf / band ---------- */
+  .shelf { margin-top: var(--shelf-gap); }
+
+  .shelf-head {
+    display: flex; align-items: center; gap: 11px;
+    margin-bottom: 12px;
+  }
+  .temp {
+    width: 4px; height: 22px; border-radius: 4px; flex: 0 0 auto;
+    background: var(--c); box-shadow: 0 0 14px 0 var(--g);
+  }
+  .shelf-head h2 {
+    font-family: "IBM Plex Mono", monospace; font-weight: 600;
+    font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--ink);
+  }
+  .shelf-head .count {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-faint); margin-left: auto;
+  }
+  .shelf-head.tappable { cursor: pointer; }
+  .shelf-head .caret {
+    transition: transform .25s var(--ease); color: var(--ink-faint);
+    font-size: 13px;
+  }
+  .shelf.collapsed .caret { transform: rotate(-90deg); }
+  .shelf.collapsed .items { display: none; }
+
+  .items { display: flex; flex-direction: column; gap: 8px; }
+
+  /* ---------- item card ---------- */
+  .item {
+    position: relative;
+    display: flex; align-items: center; gap: 13px;
+    padding: 13px 13px 13px 15px;
+    background: var(--glass);
+    border: 1px solid var(--hairline-soft);
+    border-radius: var(--radius);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    transition: transform .18s var(--ease), border-color .2s, background .2s;
+    cursor: pointer; overflow: hidden;
+    animation: rise .5s var(--ease) backwards;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  .item:active { transform: scale(.985); }
+  .item.selected {
+    border-color: var(--accent);
+    background: var(--glass-strong);
+    box-shadow: 0 0 0 1px var(--accent), 0 10px 30px -16px var(--accent);
+  }
+  /* color spine by urgency */
+  .item::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--c, transparent);
+  }
+
+  .check {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px;
+    border: 1.5px solid var(--hairline); display: grid; place-items: center;
+    transition: all .2s var(--ease); color: transparent; font-size: 13px;
+  }
+  .item.selected .check {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+  }
+
+  .item .body { flex: 1 1 auto; min-width: 0; }
+  .item .name {
+    font-family: "Fraunces", serif; font-weight: 500; font-size: 18px;
+    letter-spacing: -.01em; line-height: 1.15;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item .meta {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-faint); margin-top: 3px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .item .loc { color: var(--ink-faint); }
+
+  .due {
+    flex: 0 0 auto;
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 12px;
+    padding: 5px 9px; border-radius: 8px;
+    color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+    white-space: nowrap;
+  }
+  .due.overdue { animation: glow 1.8s var(--ease) infinite; }
+  @keyframes glow {
+    50% { box-shadow: 0 0 16px -2px var(--g); }
+  }
+
+  /* row quick actions */
+  .actions {
+    flex: 0 0 auto; display: flex; gap: 4px; margin-left: 2px;
+  }
+  .qbtn {
+    width: 34px; height: 34px; border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--hairline-soft); background: transparent;
+    color: var(--ink-dim); font-size: 15px; display: grid; place-items: center;
+    transition: all .16s var(--ease);
+  }
+  .qbtn:hover { color: var(--ink); border-color: var(--hairline); background: var(--glass); }
+  .qbtn.use:hover  { color: var(--cool); border-color: var(--cool); }
+  .qbtn.toss:hover { color: var(--hot);  border-color: var(--hot); }
+
+  /* empty-fridge nudge */
+  .nudge {
+    margin-top: 14px; padding: 16px 16px 16px 18px;
+    border: 1px dashed var(--hairline); border-radius: var(--radius);
+    background: linear-gradient(120deg, rgba(124,240,200,.06), transparent);
+  }
+  .nudge .k {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: .2em; text-transform: uppercase; color: var(--cool);
+  }
+  .nudge p { margin-top: 7px; color: var(--ink-dim); font-size: 14px; line-height: 1.45; }
+  .nudge p b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- bottom action bar (selection) ---------- */
+  .actionbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(180deg, transparent, var(--bg-0) 38%);
+    transform: translateY(140%); transition: transform .34s var(--ease);
+  }
+  .actionbar.show { transform: translateY(0); }
+  .actionbar .panel {
+    flex: 1 1 auto; display: flex; align-items: center; gap: 10px;
+    background: rgba(12,26,23,.86);
+    border: 1px solid var(--hairline);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius: 18px; padding: 10px 10px 10px 16px;
+    box-shadow: 0 18px 50px -20px #000;
+  }
+  .selcount {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-dim);
+    margin-right: auto;
+  }
+  .selcount b { color: var(--accent); font-weight: 600; }
+  .btn {
+    cursor: pointer; border: none; border-radius: 12px; padding: 11px 16px;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 14px;
+    transition: transform .15s var(--ease), filter .2s;
+  }
+  .btn:active { transform: scale(.95); }
+  .btn.ghost { background: var(--glass-strong); color: var(--ink); border: 1px solid var(--hairline); }
+  .btn.ghost:hover { filter: brightness(1.3); }
+  .btn.solid { background: var(--accent); color: var(--accent-ink); }
+  .btn.solid:hover { filter: brightness(1.08); }
+
+  /* ---------- modal / sheet ---------- */
+  .scrim {
+    position: fixed; inset: 0; z-index: 40; background: rgba(3,9,8,.6);
+    backdrop-filter: blur(3px); opacity: 0; pointer-events: none;
+    transition: opacity .25s var(--ease);
+  }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: fixed; left: 50%; bottom: 0; z-index: 41;
+    width: min(560px, 100%); transform: translate(-50%, 110%);
+    background: linear-gradient(180deg, #0d1c19, #0a1513);
+    border: 1px solid var(--hairline); border-bottom: none;
+    border-radius: 22px 22px 0 0; padding: 20px 18px calc(22px + env(safe-area-inset-bottom));
+    transition: transform .36s var(--ease);
+    box-shadow: 0 -20px 60px -24px #000; max-height: 86vh; overflow-y: auto;
+  }
+  .sheet.show { transform: translate(-50%, 0); }
+  .sheet .grip { width: 40px; height: 4px; border-radius: 4px; background: var(--hairline); margin: 0 auto 16px; }
+  .sheet h3 {
+    font-family: "Fraunces", serif; font-weight: 600; font-size: 24px;
+    letter-spacing: -.01em; margin-bottom: 4px;
+  }
+  .sheet .h3sub { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 16px; }
+
+  textarea#prompt {
+    width: 100%; min-height: 132px; resize: vertical;
+    background: var(--bg-0); color: var(--ink);
+    border: 1px solid var(--hairline); border-radius: 14px;
+    padding: 14px; font-family: "IBM Plex Mono", monospace; font-size: 13px;
+    line-height: 1.6; outline: none; transition: border-color .2s;
+  }
+  textarea#prompt:focus { border-color: var(--accent); }
+  .sheet .row { display: flex; gap: 10px; margin-top: 14px; }
+  .sheet .row .btn { flex: 1; }
+
+  /* connect results */
+  .cgroup { margin-top: 4px; }
+  .cgroup + .cgroup { margin-top: 20px; }
+  .cgroup .k {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px;
+  }
+  .pair {
+    display: flex; align-items: center; gap: 10px; padding: 11px 12px;
+    border: 1px solid var(--hairline-soft); border-radius: 12px; margin-bottom: 7px;
+    background: var(--glass);
+  }
+  .pair .pn { font-family: "Fraunces", serif; font-size: 16px; font-weight: 500; }
+  .pair .instock {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--cool);
+    border: 1px solid color-mix(in srgb, var(--cool) 40%, transparent);
+    padding: 2px 7px; border-radius: 6px; margin-left: 4px;
+  }
+  .pair .score { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint); }
+  .recipe { padding: 13px 14px; border: 1px solid var(--hairline-soft); border-radius: 13px; margin-bottom: 8px; background: var(--glass); }
+  .recipe .rn { font-family: "Fraunces", serif; font-size: 18px; font-weight: 600; }
+  .recipe .rm { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-dim); margin-top: 5px; }
+  .recipe .bar { height: 5px; border-radius: 4px; background: var(--hairline-soft); margin-top: 9px; overflow: hidden; }
+  .recipe .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--warm), var(--cool)); border-radius: 4px; }
+
+  /* edit-date popover */
+  .pop {
+    position: fixed; z-index: 45; transform: translateY(8px) scale(.96);
+    opacity: 0; pointer-events: none; transform-origin: top right;
+    background: #0e1d1a; border: 1px solid var(--hairline);
+    border-radius: 14px; padding: 12px; width: 230px;
+    box-shadow: 0 20px 50px -18px #000; transition: all .2s var(--ease);
+  }
+  .pop.show { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+  .pop .pk { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px; }
+  .pop .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .pop .grid .chip { justify-self: stretch; text-align: center; }
+  .pop input[type=date] {
+    margin-top: 9px; width: 100%; background: var(--bg-0); color: var(--ink);
+    border: 1px solid var(--hairline); border-radius: 9px; padding: 8px;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color-scheme: dark;
+  }
+
+  /* snackbar (undo) */
+  .snack {
+    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom));
+    transform: translate(-50%, 200%); z-index: 50;
+    display: flex; align-items: center; gap: 14px;
+    background: #11201d; border: 1px solid var(--hairline);
+    border-radius: 13px; padding: 12px 14px 12px 16px;
+    box-shadow: 0 18px 50px -20px #000; transition: transform .34s var(--ease);
+    max-width: calc(100% - 32px);
+  }
+  .snack.show { transform: translate(-50%, 0); }
+  .snack .st { font-size: 13.5px; color: var(--ink); }
+  .snack .st b { font-weight: 600; }
+  .snack .undo {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--accent);
+    cursor: pointer; padding: 4px 8px; border-radius: 8px; border: 1px solid transparent;
+  }
+  .snack .undo:hover { border-color: var(--accent); }
+
+  .removing { animation: collapseOut .32s var(--ease) forwards; }
+  @keyframes collapseOut {
+    to { opacity: 0; transform: translateX(-30px); height: 0; padding-top: 0; padding-bottom: 0; margin: 0; border-width: 0; }
+  }
+
+  .hint {
+    text-align: center; margin-top: 34px;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--ink-faint); letter-spacing: .12em;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand"><span class="dot"></span> FoodBrain · Kühlschrank</div>
+      <h1>Fridge <em>now</em></h1>
+      <div class="subline">
+        <span id="dateStr"></span>
+        <span class="sep">/</span>
+        <span><b id="urgentN">0</b> need eating soon</span>
+        <span class="sep">/</span>
+        <span id="totalN">0 items</span>
+      </div>
+    </header>
+
+    <div class="sortbar">
+      <span class="lbl">sort</span>
+      <div class="chip active" data-sort="urgency">due first</div>
+      <div class="chip" data-sort="name">name</div>
+      <div class="chip" data-sort="qty">quantity</div>
+      <div class="chip" data-sort="location">location</div>
+      <div class="chip" data-sort="added">recently added</div>
+    </div>
+
+    <main id="shelves"><!-- rendered --></main>
+
+    <div class="hint">tap an item to select · multi-select to connect or ask</div>
+  </div>
+
+  <!-- selection action bar -->
+  <div class="actionbar" id="actionbar">
+    <div class="panel">
+      <span class="selcount"><b id="selN">0</b> selected</span>
+      <button class="btn ghost" id="clearSel">clear</button>
+      <button class="btn ghost" id="connectBtn">Connect</button>
+      <button class="btn solid" id="askBtn">Ask&nbsp;AI</button>
+    </div>
+  </div>
+
+  <!-- scrim + sheet -->
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet"></div>
+
+  <!-- edit-date popover -->
+  <div class="pop" id="pop">
+    <div class="pk">Edit due date</div>
+    <div class="grid">
+      <div class="chip" data-add="1">+1 day</div>
+      <div class="chip" data-add="3">+3 days</div>
+      <div class="chip" data-add="7">+1 week</div>
+      <div class="chip" data-add="0">today</div>
+    </div>
+    <input type="date" id="dateInput" />
+  </div>
+
+  <!-- snackbar -->
+  <div class="snack" id="snack">
+    <span class="st" id="snackText"></span>
+    <span class="undo" id="snackUndo">Undo</span>
+  </div>
+
+<script>
+/* ============================================================
+   Prototype data — German household stock (matches FoodBrain's
+   real Grocy + alias-map setup). dueDays = days from today;
+   negative = overdue. staple items have due:null.
+   ============================================================ */
+const TODAY = new Date('2026-06-04');
+let items = [
+  { id:1,  name:'Joghurt',          qty:'1 Becher', loc:'Fridge', due:-1, added:9 },
+  { id:2,  name:'Hähnchenbrust',    qty:'300 g',    loc:'Fridge', due:0,  added:2 },
+  { id:3,  name:'Frischkäse',       qty:'1 Pack',   loc:'Fridge', due:-2, added:12 },
+  { id:4,  name:'Zucchini',         qty:'2 Stück',  loc:'Fridge', due:3,  added:3 },
+  { id:5,  name:'Feta',             qty:'1 Pack',   loc:'Fridge', due:5,  added:6 },
+  { id:6,  name:'Karotten',         qty:'4 Stück',  loc:'Fridge', due:4,  added:6 },
+  { id:7,  name:'Eier',             qty:'6 Stück',  loc:'Fridge', due:6,  added:5 },
+  { id:8,  name:'Milch',            qty:'1 L',      loc:'Fridge', due:10, added:1 },
+  { id:9,  name:'Butter',           qty:'1 Pack',   loc:'Fridge', due:20, added:8 },
+  { id:10, name:'Olivenöl',         qty:'1 Flasche',loc:'Pantry', due:null, added:30 },
+  { id:11, name:'Nudeln',           qty:'2 Pack',   loc:'Pantry', due:null, added:25 },
+  { id:12, name:'Reis',             qty:'1 kg',     loc:'Pantry', due:null, added:40 },
+  { id:13, name:'Knoblauch',        qty:'1 Knolle', loc:'Pantry', due:null, added:20 },
+  { id:14, name:'Zwiebel',          qty:'3 Stück',  loc:'Pantry', due:null, added:14 },
+  { id:15, name:'Tomatenmark',      qty:'1 Dose',   loc:'Pantry', due:null, added:50 },
+  { id:16, name:'Mehl',             qty:'1 kg',     loc:'Pantry', due:null, added:60 },
+];
+
+const selected = new Set();
+let currentSort = 'urgency';
+let staplesCollapsed = true;
+let pendingRemove = null; // for undo
+
+/* ---- bands ---- */
+function band(d){
+  if (d === null) return 'staple';
+  if (d <= 0) return 'hot';
+  if (d <= 7) return 'warm';
+  return 'cool';
+}
+const BANDS = {
+  hot:   { label:'Eat today / overdue', c:'var(--hot)',   g:'var(--hot-glow)'  },
+  warm:  { label:'This week',           c:'var(--warm)',  g:'var(--warm-glow)' },
+  cool:  { label:'Fresh',               c:'var(--cool)',  g:'var(--cool-glow)' },
+  staple:{ label:'Staples',             c:'var(--staple)',g:'transparent'      },
+};
+
+function dueLabel(d){
+  if (d === null) return '—';
+  if (d < 0)  return `in ${d}d`;
+  if (d === 0) return 'today';
+  return `in ${d}d`;
+}
+
+/* ---- sorting within a band ---- */
+function sortItems(arr){
+  const a = [...arr];
+  switch(currentSort){
+    case 'name':     a.sort((x,y)=>x.name.localeCompare(y.name)); break;
+    case 'qty':      a.sort((x,y)=>x.qty.localeCompare(y.qty)); break;
+    case 'location': a.sort((x,y)=>x.loc.localeCompare(y.loc) || dueRank(x)-dueRank(y)); break;
+    case 'added':    a.sort((x,y)=>x.added-y.added); break;
+    default:         a.sort((x,y)=>dueRank(x)-dueRank(y));
+  }
+  return a;
+}
+const dueRank = i => i.due === null ? 9999 : i.due;
+
+/* ---- render ---- */
+const shelvesEl = document.getElementById('shelves');
+
+function render(){
+  const order = ['hot','warm','cool','staple'];
+  shelvesEl.innerHTML = '';
+  let delay = 0;
+
+  order.forEach(key=>{
+    const inBand = sortItems(items.filter(i=>band(i.due)===key));
+    if (!inBand.length && key!=='staple') return;
+
+    const meta = BANDS[key];
+    const shelf = document.createElement('section');
+    shelf.className = 'shelf' + (key==='staple' && staplesCollapsed ? ' collapsed' : '');
+
+    const head = document.createElement('div');
+    head.className = 'shelf-head' + (key==='staple' ? ' tappable' : '');
+    head.innerHTML = `
+      <span class="temp" style="--c:${meta.c};--g:${meta.g}"></span>
+      <h2>${meta.label}</h2>
+      <span class="count">${inBand.length}${key==='staple' ? ' <span class="caret">▾</span>' : ''}</span>`;
+    if (key==='staple') head.addEventListener('click', ()=>{ staplesCollapsed=!staplesCollapsed; render(); });
+    shelf.appendChild(head);
+
+    const list = document.createElement('div');
+    list.className = 'items';
+    inBand.forEach(it=>{
+      list.appendChild(itemEl(it, meta, delay));
+      delay += 0.04;
+    });
+    shelf.appendChild(list);
+
+    // empty-fridge hero nudge under the fresh shelf
+    if (key==='cool' && items.filter(i=>band(i.due)==='cool').length <= 2){
+      const n = document.createElement('div');
+      n.className = 'nudge';
+      n.innerHTML = `<div class="k">◈ fridge looking thin</div>
+        <p>Not much fresh left — but you've got <b>Knoblauch, Zwiebel, Nudeln & Tomatenmark</b> in the pantry.
+        Select your leftovers and hit <b>Connect</b> for a combo.</p>`;
+      shelf.appendChild(n);
+    }
+    shelvesEl.appendChild(shelf);
+  });
+
+  // header stats
+  document.getElementById('totalN').textContent = items.length + ' items';
+  document.getElementById('urgentN').textContent =
+    items.filter(i=>['hot','warm'].includes(band(i.due))).length;
+  syncBar();
+}
+
+function itemEl(it, meta, delay){
+  const el = document.createElement('div');
+  const isStaple = it.due === null;
+  el.className = 'item' + (selected.has(it.id)?' selected':'');
+  el.style.setProperty('--c', meta.c);
+  el.style.setProperty('--g', meta.g);
+  el.style.animationDelay = delay.toFixed(2)+'s';
+  el.dataset.id = it.id;
+
+  const overdue = it.due !== null && it.due <= 0;
+  el.innerHTML = `
+    <div class="check">✓</div>
+    <div class="body">
+      <div class="name">${it.name}</div>
+      <div class="meta"><span>${it.qty}</span><span class="loc">· ${it.loc}</span></div>
+    </div>
+    ${ isStaple ? '' : `<div class="due ${overdue?'overdue':''}" style="--c:${meta.c};--g:${meta.g}">${dueLabel(it.due)}</div>`}
+    <div class="actions">
+      <button class="qbtn use"  title="mark used"   data-act="use">✓</button>
+      <button class="qbtn"      title="edit date"   data-act="date">✎</button>
+      <button class="qbtn toss" title="toss/remove" data-act="toss">🗑</button>
+    </div>`;
+
+  // select on card tap (not on action buttons)
+  el.addEventListener('click', (e)=>{
+    if (e.target.closest('.qbtn')) return;
+    toggleSelect(it.id, el);
+  });
+  // quick actions
+  el.querySelector('[data-act=use]').addEventListener('click', e=>{ e.stopPropagation(); consume(it, el); });
+  el.querySelector('[data-act=toss]').addEventListener('click', e=>{ e.stopPropagation(); toss(it, el); });
+  el.querySelector('[data-act=date]').addEventListener('click', e=>{ e.stopPropagation(); openPop(it, e.currentTarget); });
+  return el;
+}
+
+/* ---- selection ---- */
+function toggleSelect(id, el){
+  if (selected.has(id)){ selected.delete(id); el.classList.remove('selected'); }
+  else { selected.add(id); el.classList.add('selected'); }
+  syncBar();
+}
+function syncBar(){
+  const bar = document.getElementById('actionbar');
+  document.getElementById('selN').textContent = selected.size;
+  bar.classList.toggle('show', selected.size>0);
+}
+document.getElementById('clearSel').addEventListener('click', ()=>{
+  selected.clear(); document.querySelectorAll('.item.selected').forEach(e=>e.classList.remove('selected')); syncBar();
+});
+
+/* ---- write-back: consume (with undo) ---- */
+function consume(it, el){
+  removeWithUndo(it, el, `Used <b>${it.name}</b>`);
+}
+function toss(it, el){
+  if (!confirm(`Toss ${it.name}? This removes it from inventory.`)) return;
+  removeWithUndo(it, el, `Tossed <b>${it.name}</b>`);
+}
+function removeWithUndo(it, el, msg){
+  const idx = items.findIndex(x=>x.id===it.id);
+  pendingRemove = { it, idx };
+  selected.delete(it.id);
+  el.classList.add('removing');
+  setTimeout(()=>{ items = items.filter(x=>x.id!==it.id); render(); }, 300);
+  showSnack(msg);
+}
+
+/* ---- snackbar / undo ---- */
+let snackTimer;
+function showSnack(html){
+  const s = document.getElementById('snack');
+  document.getElementById('snackText').innerHTML = html;
+  s.classList.add('show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(()=>{ s.classList.remove('show'); pendingRemove=null; }, 4200);
+}
+document.getElementById('snackUndo').addEventListener('click', ()=>{
+  if (pendingRemove){
+    items.splice(Math.min(pendingRemove.idx, items.length), 0, pendingRemove.it);
+    pendingRemove = null; render();
+  }
+  document.getElementById('snack').classList.remove('show');
+});
+
+/* ---- edit-date popover ---- */
+let popItem = null;
+function openPop(it, anchor){
+  popItem = it;
+  const pop = document.getElementById('pop');
+  const r = anchor.getBoundingClientRect();
+  pop.style.top = (r.bottom + 8) + 'px';
+  pop.style.left = Math.max(12, r.right - 230) + 'px';
+  const base = new Date(TODAY); base.setDate(base.getDate() + (it.due ?? 0));
+  document.getElementById('dateInput').valueAsDate = base;
+  pop.classList.add('show');
+}
+function closePop(){ document.getElementById('pop').classList.remove('show'); popItem=null; }
+document.querySelectorAll('#pop .grid .chip').forEach(c=>{
+  c.addEventListener('click', ()=>{
+    if (!popItem) return;
+    popItem.due = parseInt(c.dataset.add,10);
+    closePop(); render(); showSnack(`<b>${popItem.name}</b> → due ${dueLabel(popItem.due)}`);
+  });
+});
+document.getElementById('dateInput').addEventListener('change', e=>{
+  if (!popItem) return;
+  const d = e.target.valueAsDate;
+  popItem.due = Math.round((d - TODAY)/86400000);
+  closePop(); render(); showSnack(`<b>${popItem.name}</b> → due ${dueLabel(popItem.due)}`);
+});
+document.addEventListener('click', e=>{
+  const pop = document.getElementById('pop');
+  if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('[data-act=date]')) closePop();
+});
+
+/* ---- sort chips ---- */
+document.querySelectorAll('.sortbar .chip').forEach(c=>{
+  c.addEventListener('click', ()=>{
+    document.querySelectorAll('.sortbar .chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active'); currentSort = c.dataset.sort; render();
+  });
+});
+
+/* ---- sheet (Connect / Ask) ---- */
+const scrim = document.getElementById('scrim');
+const sheet = document.getElementById('sheet');
+function openSheet(html){ sheet.innerHTML = `<div class="grip"></div>`+html; scrim.classList.add('show'); sheet.classList.add('show'); }
+function closeSheet(){ scrim.classList.remove('show'); sheet.classList.remove('show'); }
+scrim.addEventListener('click', closeSheet);
+
+function selectedNames(){ return [...selected].map(id=>items.find(i=>i.id===id)?.name).filter(Boolean); }
+
+document.getElementById('askBtn').addEventListener('click', ()=>{
+  const names = selectedNames();
+  const list = names.join(', ');
+  const prompt =
+`I have these ingredients to use up: ${list}.
+Suggest 3 simple dinners I can make tonight using mostly these, plus common pantry staples (oil, onion, garlic, pasta, rice, spices).
+Keep it quick (under 30 min), list ingredients and short steps for each.`;
+  openSheet(`
+    <h3>Ask AI</h3>
+    <div class="h3sub">editable prompt · ${names.length} ingredient${names.length>1?'s':''}</div>
+    <textarea id="prompt">${prompt}</textarea>
+    <div class="row">
+      <button class="btn ghost" id="closeSheet">Close</button>
+      <button class="btn solid" id="copyBtn">Copy prompt</button>
+    </div>`);
+  document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  document.getElementById('copyBtn').addEventListener('click', e=>{
+    navigator.clipboard.writeText(document.getElementById('prompt').value).then(()=>{
+      e.target.textContent='Copied ✓'; setTimeout(()=>e.target.textContent='Copy prompt',1600);
+    });
+  });
+});
+
+document.getElementById('connectBtn').addEventListener('click', ()=>{
+  const names = selectedNames();
+  // mock FoodBrain output (real version calls pairing.py + matching.py)
+  const pairs = [
+    { n:'Knoblauch', inStock:true,  score:.91 },
+    { n:'Olivenöl',  inStock:true,  score:.88 },
+    { n:'Tomate',    inStock:false, score:.84 },
+    { n:'Basilikum', inStock:false, score:.79 },
+  ];
+  const recipes = [
+    { n:'Gemüsepfanne mit Feta', cov:.86, m:'uses Zucchini, Feta, Zwiebel · 1 expiring' },
+    { n:'Nudeln mit Zucchini',   cov:.72, m:'uses Zucchini, Knoblauch, Nudeln' },
+  ];
+  openSheet(`
+    <h3>Connect</h3>
+    <div class="h3sub">FoodBrain · ${names.join(' + ')}</div>
+    <div class="cgroup">
+      <div class="k">◈ Flavor pairings</div>
+      ${pairs.map(p=>`<div class="pair">
+        <span class="pn">${p.n}</span>${p.inStock?'<span class="instock">in stock</span>':''}
+        <span class="score">${p.score.toFixed(2)}</span></div>`).join('')}
+    </div>
+    <div class="cgroup">
+      <div class="k">◈ Recipes you can make</div>
+      ${recipes.map(r=>`<div class="recipe">
+        <div class="rn">${r.n}</div><div class="rm">${r.m}</div>
+        <div class="bar"><i style="width:${Math.round(r.cov*100)}%"></i></div></div>`).join('')}
+    </div>
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Close</button></div>`);
+  document.getElementById('closeSheet').addEventListener('click', closeSheet);
+});
+
+/* ---- init ---- */
+document.getElementById('dateStr').textContent =
+  TODAY.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+render();
+</script>
+</body>
+</html>

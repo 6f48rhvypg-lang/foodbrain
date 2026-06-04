@@ -185,6 +185,30 @@ Aliasing is applied inside the shared `normalize_ingredient_name` chokepoint
 (whole name first, then per token, before singularization), so one map fixes
 both lookups. With no map, behavior is unchanged.
 
+#### Grocy write-back (consume / toss / edit due date)
+
+The service can write back to Grocy, not just read. `GrocyClient` is **read-only by
+default**; construct it with `allow_writes=True` to enable the write primitives
+(`consume_product`, `open_product`, `set_entry_due_date`, `undo_transaction`).
+Any write on a read-only client raises `GrocyWriteDisabledError`, so tests and
+dry-runs cannot mutate a live Grocy by accident.
+
+The [writeback](src/foodbrain_assistant/writeback.py) module wraps those
+primitives with the two safety rails from the UX design:
+
+- **Confirm on destructive** — `writeback.toss(...)` raises `ConfirmationRequired`
+  unless called with `confirm=True`.
+- **Undo on consume** — `writeback.consume(...)` / `toss(...)` return a
+  `WriteOutcome` carrying the Grocy `transaction_id`; `writeback.undo(client,
+  outcome)` reverses it.
+
+Editing a due date targets an individual stock entry: read
+`client.get_product_entries(product_id)` to get entry ids, then call
+`writeback.set_due_date(client, entry_id, date(...))`.
+
+This is the backend muscle (build order step 1) behind the planned JSON API and
+SPA; see [ux-design.md](ux-design.md).
+
 For a live Grocy run, copy `.env.example` to `.env`, fill in the values, then run:
 
 ```bash
@@ -206,6 +230,47 @@ Optional environment variables:
 - `FOODBRAIN_TOP_RECIPE_LIMIT`
 - `FOODBRAIN_TOP_PAIRING_LIMIT`
 - `FOODBRAIN_PAIRING_PARTNER_LIMIT`
+
+#### JSON API (build order step 2)
+
+The recommendation engine and write-back rails are exposed as a small JSON API
+for the planned SPA. The runtime stays dependency-free: it is served by the
+stdlib `http.server`. The logic itself lives in a transport-agnostic
+[`FoodBrainAPI`](src/foodbrain_assistant/api.py); [`server.py`](src/foodbrain_assistant/server.py)
+is the thin HTTP wrapper.
+
+Run it against the built-in sample stock (no Grocy needed):
+
+```bash
+PYTHONPATH=src python3 -m foodbrain_assistant.server --sample \
+  --pairings-json examples/pairings.sample.json \
+  --recipes-json examples/recipes.sample.json
+```
+
+Or against live Grocy (reads from `/api/stock`; writes need a configured `.env`):
+
+```bash
+PYTHONPATH=src python3 -m foodbrain_assistant.server   # add --stock-json PATH to serve an export
+```
+
+Routes (default `http://127.0.0.1:8123`):
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /api/health` | Liveness check. |
+| `GET /api/stock` | Bands view: every item with urgency score + band (`hot`/`warm`/`cool`/`staple`). |
+| `POST /api/connect` | `{"selection": [product_id, ...]}` → flavor pairings among the selection + the recipes it unlocks. |
+| `POST /api/build-prompt` | `{"selection": [...]}` → an editable LLM prompt (no LLM call; the SPA copies it). |
+| `GET /api/product-entries?product_id=ID` | A product's stock entries (for the edit-date flow). |
+| `POST /api/consume` | `{"product_id": ID, "amount": 1}` → undoable consume. |
+| `POST /api/toss` | `{"product_id": ID, "amount": 1, "confirm": true}` → destructive; `409` without `confirm`. |
+| `POST /api/set-due-date` | `{"stock_entry_id": ID, "best_before_date": "YYYY-MM-DD"}`. |
+| `POST /api/undo` | `{"transaction_id": ID}` → reverse a consume/toss. |
+
+Writes are disabled (`403`) unless `FOODBRAIN_GROCY_BASE_URL` and
+`FOODBRAIN_GROCY_API_KEY` are configured; the API then builds a writable
+`GrocyClient` only for write/entry calls. CORS is permissive so the SPA can be
+developed from a separate dev origin.
 
 ## Current Development Plan
 
