@@ -2,24 +2,65 @@
 
 Current date: 2026-06-04
 
-## Start Here Next — STEPS 1–4 DONE; LIVE WIRE-UP IS NEXT (2026-06-04)
+## Start Here Next — ONE MANUAL HA STEP LEFT (2026-06-04)
 
-Build order steps 1 (**Grocy write-back**), 2 (**JSON API**), 3 (**SPA**) and 4
-(**HA webpage panel**) are all **done**. The suite is **100, 1 skipped**. The
-core build order from ux-design.md is complete, and the live API has now been
-verified against the real household Grocy LXC for **both reads and writes**
-(see "Live verification" below). The only remaining step is registering the panel
-in Home Assistant itself, which is a manual config change on the HA host:
+Build order steps 1–4 are **done**, the service is **deployed and live** on the
+LAN, and reads + writes are verified against real Grocy. The **only** thing left
+is a manual click-through in Home Assistant that could not be automated from the
+dev box (the HA host has no exposed FS / SSH wasn't authorized): **add the panel
+to HA's `configuration.yaml` and restart HA.**
 
-1. Run the server bound to the LAN on the FoodBrain host:
-   `PYTHONPATH=src python3 -m foodbrain_assistant.server --host 0.0.0.0 --port 8123`
-   (with a configured `.env` so writes work, plus `--pairings-json` / `--recipes-json`).
-2. Add the `panel_iframe` block (README "HA webpage panel (build order step 4)")
-   to the household HA `configuration.yaml`, restart HA, confirm the sidebar panel
-   loads. (Reads + writes through the server are already live-verified; this step
-   only confirms HA's iframe embedding + the LAN URL resolve on the HA host.)
-3. Mixed-content caveat: if HA is HTTPS, put the FoodBrain server behind the same
-   TLS / reverse proxy so the panel URL is HTTPS too (HA blocks mixed content).
+### THE remaining step — register the HA panel (do this in the HA UI)
+
+HA (VM 102) is reached at `http://homeassistant.local:8123` — **plain HTTP, no
+TLS**, so there is **no mixed-content issue**; the `http://` panel URL works as-is.
+
+1. In HA install the **File editor** add-on (Settings → Add-ons → Add-on Store →
+   "File editor" → Install → enable "Show in sidebar" → Start). (Studio Code
+   Server or the Terminal & SSH add-on + `nano /config/configuration.yaml` also
+   work.)
+2. Open `configuration.yaml` (in `/config/`) and append, at column 0 (spaces, not
+   tabs):
+   ```yaml
+   panel_iframe:
+     foodbrain:
+       title: "FoodBrain"
+       icon: mdi:fridge
+       url: "http://192.168.178.151:8123/ui"
+       require_admin: false
+   ```
+3. Save → Developer Tools → YAML → **Check Configuration** (expect valid) → then a
+   full **Restart** (a Quick reload does NOT pick up a new panel).
+4. "FoodBrain" appears in the left sidebar; clicking it loads the fridge view
+   (the SPA, embedded same-origin with its API) inside HA.
+
+That's the whole project complete once the sidebar panel loads.
+
+### Deployment (live as of 2026-06-04)
+
+- **Host:** dedicated Debian 12 LXC **CT 105** (`foodbrain`) on Proxmox node `pve`
+  (`192.168.178.100`), DHCP IP **192.168.178.151**, unprivileged, onboot=1.
+- **Code:** cloned to `/opt/foodbrain` from the **public** repo
+  `https://github.com/6f48rhvypg-lang/foodbrain` (runtime is pure stdlib — no pip).
+- **Service:** systemd `foodbrain.service` (enabled, `active (running)`),
+  `WorkingDirectory=/opt/foodbrain`, serves on `0.0.0.0:8123` with
+  `--pairings-json examples/pairings.sample.json --recipes-json examples/recipes.sample.json`.
+  `.env` in `/opt/foodbrain/.env` holds the live Grocy URL (`http://192.168.178.150`)
+  + API key (matches the dev-box `.env`).
+- **Verified from the dev box over the LAN:** `GET /api/health` → ok;
+  `GET /api/stock` → live Grocy (Milch, warm, 5d); `GET /ui` → SPA HTML.
+- **Grocy** is CT 104 (`192.168.178.150`); **Home Assistant** is VM 102
+  (`homeassistant.local:8123`, plain HTTP).
+- Manage the service: `pct enter 105` then
+  `systemctl status|restart foodbrain`, `journalctl -u foodbrain -f`. To update:
+  `cd /opt/foodbrain && git pull && systemctl restart foodbrain`.
+
+### Repo move (2026-06-04)
+
+Canonical repo moved from the work org to the personal account:
+`https://github.com/6f48rhvypg-lang/foodbrain` (now **public**). Local `origin`
+points there; the old `RSM-CEI/foodbrain` is kept as the `rsm-cei` remote
+(backup, not deleted). README + this file updated to the new URL.
 
 ### Live verification — reads + writes against real Grocy (2026-06-04)
 
