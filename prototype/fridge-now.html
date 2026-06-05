@@ -113,6 +113,21 @@
   .subline .sep { color: var(--ink-faint); }
   .subline b { color: var(--hot); font-weight: 600; }
 
+  .syncbtn {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .04em;
+    color: var(--ink-dim); background: var(--glass);
+    border: 1px solid var(--hairline-soft); border-radius: 999px;
+    padding: 3px 11px 3px 9px; margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer; transition: color .2s, border-color .2s;
+  }
+  .syncbtn:hover { color: var(--ink); border-color: var(--hairline); }
+  .syncbtn .syncico { display: inline-block; line-height: 1; }
+  .syncbtn.syncing { color: var(--cool); border-color: var(--cool); cursor: default; }
+  .syncbtn.syncing .syncico { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   /* ---------- sort control ---------- */
   .sortbar {
     display: flex; gap: 8px; margin: 20px 0 6px;
@@ -432,6 +447,9 @@
         <span><b id="urgentN">0</b> need eating soon</span>
         <span class="sep">/</span>
         <span id="totalN">0 items</span>
+        <button id="syncBtn" class="syncbtn" type="button" title="Sync now" aria-label="Sync now">
+          <span class="syncico">↻</span><span id="syncLabel">sync</span>
+        </button>
       </div>
     </header>
 
@@ -918,8 +936,54 @@ async function reload(){
   items = (data.items || []).map(mapItem);
   document.getElementById('dateStr').textContent =
     TODAY.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  lastSynced = Date.now();
+  renderSyncLabel();
   render();
 }
+
+/* ---- sync: manual button, focus refresh, slow background fallback ---- */
+let lastSynced = null;
+let syncing = false;
+
+function renderSyncLabel(){
+  const label = document.getElementById('syncLabel');
+  if (!label) return;
+  if (syncing){ label.textContent = 'syncing…'; return; }
+  if (!lastSynced){ label.textContent = 'sync'; return; }
+  const mins = Math.floor((Date.now() - lastSynced) / 60000);
+  label.textContent =
+    mins < 1 ? 'just now' :
+    mins < 60 ? `${mins}m ago` :
+    `${Math.floor(mins / 60)}h ago`;
+}
+
+async function syncNow(){
+  if (syncing) return;
+  syncing = true;
+  const btn = document.getElementById('syncBtn');
+  btn?.classList.add('syncing');
+  renderSyncLabel();
+  try { await reload(); }
+  finally {
+    syncing = false;
+    btn?.classList.remove('syncing');
+    renderSyncLabel();
+  }
+}
+
+document.getElementById('syncBtn').addEventListener('click', syncNow);
+
+// Background sync if forgotten: re-fetch every 5 hours while the panel is open.
+const BACKGROUND_SYNC_MS = 5 * 60 * 60 * 1000;
+setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, BACKGROUND_SYNC_MS);
+
+// Refresh when the panel becomes visible again (e.g. switching back on the phone).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') syncNow();
+});
+
+// Keep the "Xm ago" freshness label honest without re-fetching.
+setInterval(renderSyncLabel, 60000);
 
 /* ---- init ---- */
 reload();
