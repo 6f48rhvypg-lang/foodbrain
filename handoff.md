@@ -1,40 +1,36 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-04
+Current date: 2026-06-05
 
-## Start Here Next — ONE MANUAL HA STEP LEFT (2026-06-04)
+## PROJECT COMPLETE (2026-06-05)
 
 Build order steps 1–4 are **done**, the service is **deployed and live** on the
-LAN, and reads + writes are verified against real Grocy. The **only** thing left
-is a manual click-through in Home Assistant that could not be automated from the
-dev box (the HA host has no exposed FS / SSH wasn't authorized): **add the panel
-to HA's `configuration.yaml` and restart HA.**
+LAN, reads + writes are verified against real Grocy, and the **FoodBrain panel is
+now registered in Home Assistant and loads in the sidebar.** Nothing is pending.
 
-### THE remaining step — register the HA panel (do this in the HA UI)
+### How the HA panel was actually registered (the YAML way is DEAD)
 
-HA (VM 102) is reached at `http://homeassistant.local:8123` — **plain HTTP, no
-TLS**, so there is **no mixed-content issue**; the `http://` panel URL works as-is.
+The original plan was a `panel_iframe:` block in `configuration.yaml`. **That no
+longer works** — `panel_iframe` was deprecated and **removed** from Home
+Assistant; on HA Core 2026.6.0 the config check fails with
+`Integration error: panel_iframe - Integration 'panel_iframe' not found.` Do NOT
+use it.
 
-1. In HA install the **File editor** add-on (Settings → Add-ons → Add-on Store →
-   "File editor" → Install → enable "Show in sidebar" → Start). (Studio Code
-   Server or the Terminal & SSH add-on + `nano /config/configuration.yaml` also
-   work.)
-2. Open `configuration.yaml` (in `/config/`) and append, at column 0 (spaces, not
-   tabs):
-   ```yaml
-   panel_iframe:
-     foodbrain:
-       title: "FoodBrain"
-       icon: mdi:fridge
-       url: "http://192.168.178.151:8123/ui"
-       require_admin: false
-   ```
-3. Save → Developer Tools → YAML → **Check Configuration** (expect valid) → then a
-   full **Restart** (a Quick reload does NOT pick up a new panel).
-4. "FoodBrain" appears in the left sidebar; clicking it loads the fridge view
-   (the SPA, embedded same-origin with its API) inside HA.
+The working replacement is the built-in **"Webpage" (Webseite) dashboard** — no
+YAML, no restart:
 
-That's the whole project complete once the sidebar panel loads.
+1. **Settings (Einstellungen) → Dashboards → Add Dashboard (Dashboard
+   hinzufügen) → "Webpage" (Webseite).**
+2. Fill in: Title `FoodBrain`, Icon `mdi:fridge`, URL
+   `http://192.168.178.151:8123/ui`.
+3. Save. It appears in the left sidebar immediately and loads the fridge SPA.
+
+HA (VM 102) is plain HTTP (`http://homeassistant.local:8123`), so there's no
+mixed-content issue, and the FoodBrain server sets no `X-Frame-Options`/CSP, so
+the iframe embed works. **Verified working in the sidebar 2026-06-05.**
+
+If you previously added the `panel_iframe:` block, delete it from
+`configuration.yaml` to clear the config warning.
 
 ### Deployment (live as of 2026-06-04)
 
