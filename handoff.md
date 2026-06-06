@@ -2,7 +2,29 @@
 
 Current date: 2026-06-06
 
-## ACTIVE TASK (2026-06-06): Voice intake — built & pushed, NOT yet deployed
+## ✅ COMPLETE (2026-06-06): Voice intake — deployed, HTTPS live, keys rotated
+
+**DEPLOYED AND LIVE.** CT 105 is on `66b0a75`, `foodbrain.service` active,
+`GET /api/health` → `intake_enabled: true`. **HTTPS via Tailscale** is up:
+`/dev/net/tun` added to `/etc/pve/lxc/105.conf`, container rebooted, Tailscale
+installed (`tailscale serve --bg 8123`). Phone URL:
+**`https://foodbrain.tailcf4b7e.ts.net/ui`** (tailnet `tailcf4b7e`, CT 105 IP
+`100.117.235.50`). Verified over the real cert: health + `/ui` + a live
+`/api/intake/understand` parse ("half a liter of milk and three carrots" →
+matched **Milch** exact, **Carrot** new).
+
+**Keys rotated** (2026-06-06): new Grocy + OpenRouter keys generated, propagated
+to both `.env` files (dev box + CT 105), and verified live (stock read 200,
+intake parse 200). NOTE: the rotated OpenRouter key was first pasted with a
+stray trailing `#` — removed; OpenRouter keys are `sk-or-v1-` + 64 hex, and the
+dotenv loader keeps inline `#` literally (only whole-line `#` = comment).
+
+**CT 104 stray `tailscale serve` cleaned up.** Remaining optional: point the HA
+"Webpage" dashboard at the https URL; build the photo-intake next slice.
+
+The original step-by-step (now done) is preserved below for reference.
+
+### ORIGINAL TASK (2026-06-06): Voice intake — built & pushed, NOT yet deployed
 
 **The user's goal:** stop filling Grocy by hand. Instead, stand at the fridge,
 **talk into the phone** ("half a liter of milk, opened, good for ~4 days, and
