@@ -108,6 +108,9 @@ _SYSTEM_PROMPT = (
     "Only put a question in 'questions' when an answer would materially change "
     "what gets stored (e.g. quantity or whether something is open). Do not ask "
     "about things you can reasonably assume.\n\n"
+    "Write the 'summary' text and every entry in 'questions' in German "
+    "(the user's app is German), regardless of the transcript language. "
+    "Product names stay as the user said them.\n\n"
     "Respond with ONLY a JSON object of this shape:\n"
     '{"items": [{"name": str, "quantity": number, "unit": str|null, '
     '"opened": bool, "freshness_days": number|null, "location": str|null, '
@@ -140,6 +143,9 @@ _EDIT_SYSTEM_PROMPT = (
     "  confidence     - 0..1, how sure you are.\n\n"
     "Only put a question in 'questions' when the answer changes what happens (e.g. "
     "how much, or which item). Do not ask about things you can reasonably assume.\n\n"
+    "Write the 'summary' text and every entry in 'questions' in German "
+    "(the user's app is German), regardless of the transcript language. "
+    "Product names stay as the user said them.\n\n"
     "Respond with ONLY a JSON object of this shape:\n"
     '{"items": [{"name": str, "action": str, "quantity": number, "unit": str|null, '
     '"freshness_days": number|null, "opened": bool, "note": str|null, '
