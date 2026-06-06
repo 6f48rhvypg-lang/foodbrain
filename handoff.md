@@ -1,6 +1,130 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-05
+Current date: 2026-06-06
+
+## ACTIVE TASK (2026-06-06): Voice intake — built & pushed, NOT yet deployed
+
+**The user's goal:** stop filling Grocy by hand. Instead, stand at the fridge,
+**talk into the phone** ("half a liter of milk, opened, good for ~4 days, and
+three carrots"), have an LLM parse it, ask clarifying questions, and write it
+into Grocy. (Also wants a photo path later — snap a shelf, get every product.
+That's the planned next slice; this session did the **voice-only slice**.)
+
+### What is DONE (code complete, tested, pushed to `main`)
+
+Commit **`66b0a75`** on `main` (pushed to `github.com/6f48rhvypg-lang/foodbrain`).
+All 118 tests pass (`PYTHONPATH=src python -m unittest discover -s tests`).
+
+New pipeline: **capture → understand → reconcile → review → commit**
+- `src/foodbrain_assistant/intake.py` — OpenRouter (OpenAI-compatible) client
+  (stdlib `urllib`, injectable `transport` for tests), strict-JSON prompt/parse,
+  product reconciliation against existing Grocy products via the shared
+  `normalize_ingredient_name` + alias rules (exact match, plus unambiguous
+  containment "fuzzy"; ambiguous → left as `new`).
+- `grocy_client.py` — `get_products`, `get_quantity_units`, `get_locations`,
+  `create_product`, `add_stock` (purchase; undoable).
+- `api.py` — `intake_understand` / `intake_commit` + `_NameResolver` (maps a
+  free-text unit/location to a Grocy id; falls back to default then first).
+- `server.py` — `POST /api/intake/understand`, `POST /api/intake/commit`;
+  `intake_enabled` flag added to `GET /api/health`; live product catalog wired.
+- `prototype/fridge-now.html` — **🎙 Add** button (top-right header), mic capture
+  via browser `SpeechRecognition`, editable review sheet (name/qty/unit/due
+  date/opened, drop rows), commit + snackbar. Add button dims if intake disabled.
+- `config.py` / `.env.example` — `FOODBRAIN_OPENROUTER_API_KEY`,
+  `FOODBRAIN_OPENROUTER_MODEL`, `FOODBRAIN_OPENROUTER_BASE_URL`,
+  `FOODBRAIN_INTAKE_DEFAULT_LOCATION` / `_UNIT`.
+- `tests/test_intake.py` — 18 tests.
+
+**Verified live (read-only) from the dev box:** with the dev-box `.env`, Gemini
+3.5 Flash via OpenRouter correctly parsed the milk/carrots sentence, matched
+"milk" → existing German product **Milch** (via alias map), and flagged carrots
+as `new` (correct — the household has no carrot product). Real Grocy products
+today: Eier, Milch, Dijon Mustard, Harissa, snackster mini gurken,
+Landjoghurt mild 1,5% Fett. **No live writes were performed.**
+
+### Config facts
+
+- **Model slug:** must be `google/gemini-3.5-flash` (user first wrote
+  `gemini-3.5-flash` with no provider prefix — that's invalid on OpenRouter;
+  fixed in dev `.env`). `google/gemini-3.5-flash` IS a real OpenRouter model.
+- **Dev-box `.env`** (`c:\Users\eiwen\foodbrain\.env`) already has
+  `FOODBRAIN_OPENROUTER_API_KEY=sk-or-v1-…` and
+  `FOODBRAIN_OPENROUTER_MODEL=google/gemini-3.5-flash`.
+- **`.env` is gitignored** → the key does NOT travel with `git pull`. It must be
+  added on CT 105 by hand.
+
+### REMAINING STEPS (do these next)
+
+**SSH access from the dev box works** (confirmed reachable, user authorized it):
+`ssh -i ~/.ssh/id_ed25519 root@192.168.178.100` (Proxmox host `pve`). Drive the
+container with `pct exec 105 -- <cmd>` (no container password needed). NOTE: the
+last SSH attempt was interrupted by the user mid-run; nothing was changed on the
+servers yet. Re-confirm authorization before connecting, or just hand the user
+copy-paste commands for their `root@pve` shell.
+
+**1. Deploy code + key to CT 105:**
+```
+pct exec 105 -- git -C /opt/foodbrain pull            # pulls 66b0a75
+pct exec 105 -- bash -c "grep -q OPENROUTER /opt/foodbrain/.env || printf 'FOODBRAIN_OPENROUTER_API_KEY=sk-or-v1-…\nFOODBRAIN_OPENROUTER_MODEL=google/gemini-3.5-flash\n' >> /opt/foodbrain/.env"
+pct exec 105 -- systemctl restart foodbrain
+pct exec 105 -- curl -s localhost:8123/api/health      # want: "intake_enabled": true
+```
+(Use the real key from the dev-box `.env`.)
+
+**2. HTTPS so the phone mic works — THIS IS REQUIRED (chosen approach: Tailscale).**
+Browsers only allow `SpeechRecognition`/mic on a **secure context** (HTTPS or
+localhost). The HA panel is plain HTTP on a LAN IP, so the 🎙 button is **blocked
+on the phone** until HTTPS. Typing still works over HTTP; understanding/writing
+are server-side and fine. User picked **Tailscale** (trusted Let's Encrypt cert
+on a `*.ts.net` name, works home + away).
+
+CT 105 is an **unprivileged LXC** → Tailscale needs `/dev/net/tun`, not exposed
+by default. On the **Proxmox host** (`root@pve`):
+```
+echo -e "lxc.cgroup2.devices.allow: c 10:200 rwm\nlxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file" >> /etc/pve/lxc/105.conf
+pct restart 105
+```
+Inside CT 105 (`pct enter 105`):
+```
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up          # prints a login URL — USER must open it in their browser (interactive; agent can't do this step)
+tailscale serve --bg 8123
+tailscale serve status # shows https://foodbrain.<tailnet>.ts.net  (CT 105 hostname is "foodbrain")
+```
+First `serve` will prompt to enable HTTPS/MagicDNS in the Tailscale admin console
+(one toggle, user clicks).
+Fallback if tun won't work: `tailscale up --tun=userspace-networking` (serve still works in userspace mode).
+
+**3. Phone:** install Tailscale app, sign in (same account), toggle ON. Open the
+`https://foodbrain.<tailnet>.ts.net/ui` URL (Add to Home Screen). Tap 🎙 Add → talk.
+Optionally update the HA "Webpage" dashboard URL to the https one (https-in-http
+iframe is allowed).
+
+### Cleanup / follow-ups
+- **Stray Tailscale serve on the GROCY box (CT 104):** while fumbling, the user
+  ran `tailscale serve --bg 80` on `grocy` (CT 104, .150) — exposed Grocy's web
+  UI over the tailnet, wrong machine/port. Clean up with `tailscale serve reset`
+  on CT 104 (clears ALL serve config there — confirm no other shares first).
+- **Rotate the OpenRouter key:** it appeared in plaintext in the chat several
+  times. Recommend regenerating it in the OpenRouter dashboard after setup and
+  updating both `.env` files. (Grocy API key also appeared; rotate if desired.)
+- **Optional prompt tweak:** model translates unmatched items to English
+  ("carrots"→"carrot"), so newly *created* products get English names even though
+  the household uses German. If user wants new products to keep the spoken
+  language, nudge the prompt in `intake.py` (`_SYSTEM_PROMPT`).
+- **Next slice:** photo intake (snap a shelf) reuses the same
+  understand→reconcile→commit pipeline with a vision model (gemini-3.5-flash is
+  multimodal, so the same key/model works).
+
+### Machine map (quick ref)
+| Machine | IP | Role |
+|---|---|---|
+| `pve` (Proxmox host) | 192.168.178.100 | has `pct`; SSH key-auth works from dev box |
+| CT 104 `grocy` | 192.168.178.150 | Grocy (has stray tailscale serve to clean) |
+| CT 105 `foodbrain` | 192.168.178.151 | FoodBrain server `/opt/foodbrain`, `foodbrain.service`, `:8123` |
+| VM 102 `homeassistant` | homeassistant.local:8123 | HA (plain HTTP); FoodBrain panel = Webpage dashboard |
+
+---
 
 ## PROJECT COMPLETE (2026-06-05)
 
