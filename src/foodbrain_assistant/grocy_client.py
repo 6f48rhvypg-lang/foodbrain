@@ -74,8 +74,12 @@ class GrocyClient:
         """Create a product master record and return its new id.
 
         Grocy needs a stock quantity unit and a default location; we reuse the
-        stock unit for purchasing with a 1:1 conversion so a freshly created
-        product can immediately take a stock-add.
+        stock unit for purchasing so a freshly created product can immediately
+        take a stock-add (purchase == stock means no conversion is needed).
+
+        Grocy 4.0 removed the ``qu_factor_purchase_to_stock`` column (unit
+        conversions now live in a separate table), so sending it makes the
+        insert fail with HTTP 400 ("table products has no column named ...").
         """
         purchase = qu_id_purchase or qu_id_stock
         response = self._write_json(
@@ -86,7 +90,6 @@ class GrocyClient:
                 "location_id": location_id,
                 "qu_id_stock": qu_id_stock,
                 "qu_id_purchase": purchase,
-                "qu_factor_purchase_to_stock": 1,
             },
         )
         created_id = response.get("created_object_id") if isinstance(response, dict) else None
