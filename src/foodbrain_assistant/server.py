@@ -20,6 +20,8 @@ Routes::
     POST /api/toss                   {"product_id": ID, "amount": 1, "confirm": true}
     POST /api/set-due-date           {"stock_entry_id": ID, "best_before_date": "YYYY-MM-DD"}
     POST /api/undo                   {"transaction_id": ID}
+    POST /api/intake/understand      {"transcript": "...", "answers": "..."}
+    POST /api/intake/commit          {"items": [{name, matched_product_id, amount, ...}]}
 
 CORS is permissive so the SPA can be developed from a separate dev origin.
 """
@@ -68,7 +70,14 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                         )
                     self._send_html(ui_html)
                 elif route == "/api/health":
-                    self._send(200, {"ok": True})
+                    self._send(
+                        200,
+                        {
+                            "ok": True,
+                            "intake_enabled": api.intake_understander is not None
+                            or getattr(api.settings, "intake_enabled", False),
+                        },
+                    )
                 elif route == "/api/stock":
                     self._send(200, api.stock_with_scores())
                 elif route == "/api/product-entries":
@@ -114,6 +123,16 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     )
                 elif route == "/api/undo":
                     self._send(200, api.undo(_require(body, "transaction_id")))
+                elif route == "/api/intake/understand":
+                    self._send(
+                        200,
+                        api.intake_understand(
+                            _require(body, "transcript"),
+                            answers=str(body.get("answers", "")),
+                        ),
+                    )
+                elif route == "/api/intake/commit":
+                    self._send(200, api.intake_commit(_items(body)))
                 else:
                     raise ApiError(404, f"no route for POST {route}")
             except ApiError as exc:
@@ -171,6 +190,13 @@ def _selection(body: dict) -> list:
     return [str(value) for value in selection]
 
 
+def _items(body: dict) -> list:
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise ApiError(400, "'items' must be a list of items to store")
+    return items
+
+
 def _require(body: dict, key: str) -> str:
     value = body.get(key)
     if value in (None, ""):
@@ -203,8 +229,24 @@ def build_api(args, settings: Settings) -> FoodBrainAPI:
         pairings=_load_pairings(args),
         aliases=_load_aliases(args),
         write_client_factory=_write_client_factory(settings),
+        product_catalog_provider=_catalog_provider(settings),
         source=source,
     )
+
+
+def _catalog_provider(settings: Settings):
+    """Live product master list for intake matching (None outside live Grocy)."""
+    if not settings.grocy_enabled:
+        return None
+
+    def catalog() -> list[dict]:
+        client = GrocyClient(
+            base_url=settings.grocy_base_url or "",
+            api_key=settings.grocy_api_key or "",
+        )
+        return client.get_products()
+
+    return catalog
 
 
 def _stock_provider(args, settings: Settings):

@@ -49,7 +49,75 @@ class GrocyClient:
         payload = self._get_json(f"api/stock/products/{product_id}/entries")
         return parse_stock_entries_response(payload)
 
+    def get_products(self) -> list[dict[str, Any]]:
+        """The product master list as ``[{"id", "name"}, ...]`` for intake matching."""
+        return parse_named_objects(self._get_json("api/objects/products"))
+
+    def get_quantity_units(self) -> list[dict[str, Any]]:
+        """Quantity units as ``[{"id", "name"}, ...]`` (for resolving a unit name)."""
+        return parse_named_objects(self._get_json("api/objects/quantity_units"))
+
+    def get_locations(self) -> list[dict[str, Any]]:
+        """Storage locations as ``[{"id", "name"}, ...]`` (fridge/freezer/pantry…)."""
+        return parse_named_objects(self._get_json("api/objects/locations"))
+
     # --- writes -----------------------------------------------------------
+
+    def create_product(
+        self,
+        name: str,
+        *,
+        qu_id_stock: str,
+        location_id: str,
+        qu_id_purchase: Optional[str] = None,
+    ) -> str:
+        """Create a product master record and return its new id.
+
+        Grocy needs a stock quantity unit and a default location; we reuse the
+        stock unit for purchasing with a 1:1 conversion so a freshly created
+        product can immediately take a stock-add.
+        """
+        purchase = qu_id_purchase or qu_id_stock
+        response = self._write_json(
+            "api/objects/products",
+            "POST",
+            {
+                "name": name,
+                "location_id": location_id,
+                "qu_id_stock": qu_id_stock,
+                "qu_id_purchase": purchase,
+                "qu_factor_purchase_to_stock": 1,
+            },
+        )
+        created_id = response.get("created_object_id") if isinstance(response, dict) else None
+        if not created_id:
+            raise GrocyClientError(
+                f"Grocy did not return a created product id for {name!r}"
+            )
+        return str(created_id)
+
+    def add_stock(
+        self,
+        product_id: str,
+        amount: float = 1.0,
+        *,
+        best_before_date: Optional[date] = None,
+        location_id: Optional[str] = None,
+    ) -> Any:
+        """Book a purchase (add stock). Undoable via the returned transaction id."""
+        body: dict[str, Any] = {
+            "amount": amount,
+            "transaction_type": "purchase",
+        }
+        # Grocy treats a missing best-before as "never expires" (2999-12-31).
+        body["best_before_date"] = (
+            best_before_date.isoformat() if best_before_date else "2999-12-31"
+        )
+        if location_id:
+            body["location_id"] = location_id
+        return self._write_json(
+            f"api/stock/products/{product_id}/add", "POST", body
+        )
 
     def consume_product(
         self, product_id: str, amount: float = 1.0, *, spoiled: bool = False
@@ -152,6 +220,27 @@ def parse_stock_entries_response(payload: Any) -> list[StockEntry]:
             )
         )
     return entries
+
+
+def parse_named_objects(payload: Any) -> list[dict[str, Any]]:
+    """Reduce a Grocy ``/api/objects/<table>`` response to ``[{"id", "name"}]``.
+
+    Used for products, quantity units, and locations during intake. Rows without
+    an id or name are skipped rather than raising, so one malformed master-data
+    row can't break the whole intake flow.
+    """
+    if not isinstance(payload, list):
+        raise GrocyClientError("Grocy /api/objects response was not a list")
+    objects: list[dict[str, Any]] = []
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        object_id = row.get("id")
+        name = row.get("name")
+        if object_id is None or not name:
+            continue
+        objects.append({"id": str(object_id), "name": str(name)})
+    return objects
 
 
 def extract_transaction_id(response: Any) -> Optional[str]:

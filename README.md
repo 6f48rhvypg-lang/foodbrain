@@ -230,6 +230,10 @@ Optional environment variables:
 - `FOODBRAIN_TOP_RECIPE_LIMIT`
 - `FOODBRAIN_TOP_PAIRING_LIMIT`
 - `FOODBRAIN_PAIRING_PARTNER_LIMIT`
+- `FOODBRAIN_OPENROUTER_API_KEY` (enables voice intake)
+- `FOODBRAIN_OPENROUTER_MODEL` (default `anthropic/claude-3.5-sonnet`)
+- `FOODBRAIN_OPENROUTER_BASE_URL` (default `https://openrouter.ai/api/v1`)
+- `FOODBRAIN_INTAKE_DEFAULT_LOCATION` / `FOODBRAIN_INTAKE_DEFAULT_UNIT` (defaults for newly created products)
 
 #### JSON API (build order step 2)
 
@@ -266,11 +270,50 @@ Routes (default `http://127.0.0.1:8123`):
 | `POST /api/toss` | `{"product_id": ID, "amount": 1, "confirm": true}` → destructive; `409` without `confirm`. |
 | `POST /api/set-due-date` | `{"stock_entry_id": ID, "best_before_date": "YYYY-MM-DD"}`. |
 | `POST /api/undo` | `{"transaction_id": ID}` → reverse a consume/toss. |
+| `POST /api/intake/understand` | `{"transcript": "...", "answers": "..."}` → spoken description → reviewable items + clarifying questions (see Voice intake). |
+| `POST /api/intake/commit` | `{"items": [...]}` → write reviewed items to Grocy (add stock, creating products as needed). |
 
 Writes are disabled (`403`) unless `FOODBRAIN_GROCY_BASE_URL` and
 `FOODBRAIN_GROCY_API_KEY` are configured; the API then builds a writable
 `GrocyClient` only for write/entry calls. CORS is permissive so the SPA can be
 developed from a separate dev origin.
+
+#### Voice intake — "talk into your phone at the fridge"
+
+Filling Grocy by hand is the tedious part. Instead, open the SPA, tap **🎙 Add**,
+and just *say what you see*: "half a liter of milk, opened, good for about four
+days, and three carrots." The flow:
+
+1. **Capture** — the browser's `SpeechRecognition` turns speech into a transcript
+   (you can also just type). No audio leaves the phone; only text is sent.
+2. **Understand** — `POST /api/intake/understand` sends the transcript plus your
+   existing Grocy product *names* to an OpenRouter (OpenAI-compatible) model,
+   which returns a structured list of items (name, quantity, unit, opened,
+   estimated freshness, location) and any **clarifying questions** worth asking.
+   The HTTP call is isolated behind an injectable transport, so the parsing and
+   matching logic is unit-tested without a network or key
+   ([intake.py](src/foodbrain_assistant/intake.py)).
+3. **Reconcile** — each item is matched to an existing product via the shared
+   `normalize_ingredient_name` + alias rules (so "Bio Milch" lands on "Milk").
+   Exact match wins; a containment match is accepted only when it's unambiguous,
+   so it never silently writes to the wrong product. Unmatched items are flagged
+   `new`.
+4. **Review & store** — the SPA shows an editable list (tweak name, quantity,
+   unit, due date, opened; drop anything wrong), then `POST /api/intake/commit`
+   adds the stock through the same writable `GrocyClient`, **creating products on
+   the fly** when needed (units/locations resolved by name, falling back to
+   `FOODBRAIN_INTAKE_DEFAULT_UNIT` / `_LOCATION` or the first available). Each add
+   is a normal Grocy purchase transaction, so it's undoable.
+
+This is the **voice-only slice**; the photo path ("snap a shelf, get every
+product") reuses the same understand → reconcile → commit pipeline with a vision
+model and is the planned next step.
+
+Enable it by setting `FOODBRAIN_OPENROUTER_API_KEY` (and optionally
+`FOODBRAIN_OPENROUTER_MODEL`). Without a key, `GET /api/health` reports
+`intake_enabled: false`, the SPA dims the Add button, and the endpoints return a
+clear `503`. `SpeechRecognition` is best supported in Chrome and iOS/macOS
+Safari; elsewhere the sheet falls back to typing.
 
 #### SPA (build order step 3)
 

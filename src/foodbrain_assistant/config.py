@@ -16,10 +16,21 @@ class Settings:
     top_recipe_limit: int = 5
     top_pairing_limit: int = 5
     pairing_partner_limit: int = 4
+    # Voice/photo intake via an OpenRouter (OpenAI-compatible) model.
+    openrouter_api_key: Optional[str] = None
+    openrouter_model: str = "anthropic/claude-3.5-sonnet"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Defaults used when intake has to create a brand-new Grocy product.
+    intake_default_location: Optional[str] = None
+    intake_default_unit: Optional[str] = None
 
     @property
     def grocy_enabled(self) -> bool:
         return bool(self.grocy_base_url and self.grocy_api_key)
+
+    @property
+    def intake_enabled(self) -> bool:
+        return bool(self.openrouter_api_key)
 
 
 def load_settings(env_file: Optional[Path] = None) -> Settings:
@@ -37,6 +48,23 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
         top_pairing_limit=_int_setting("FOODBRAIN_TOP_PAIRING_LIMIT", 5, file_values),
         pairing_partner_limit=_int_setting(
             "FOODBRAIN_PAIRING_PARTNER_LIMIT", 4, file_values
+        ),
+        openrouter_api_key=_blank_to_none(
+            _setting("FOODBRAIN_OPENROUTER_API_KEY", file_values)
+        ),
+        openrouter_model=_blank_to_none(
+            _setting("FOODBRAIN_OPENROUTER_MODEL", file_values)
+        )
+        or "anthropic/claude-3.5-sonnet",
+        openrouter_base_url=_clean_url(
+            _setting("FOODBRAIN_OPENROUTER_BASE_URL", file_values)
+        )
+        or "https://openrouter.ai/api/v1",
+        intake_default_location=_blank_to_none(
+            _setting("FOODBRAIN_INTAKE_DEFAULT_LOCATION", file_values)
+        ),
+        intake_default_unit=_blank_to_none(
+            _setting("FOODBRAIN_INTAKE_DEFAULT_UNIT", file_values)
         ),
     )
 

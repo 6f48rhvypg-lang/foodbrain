@@ -32,9 +32,17 @@ from datetime import date
 from typing import Callable, Dict, List, Optional
 
 from .grocy_client import GrocyClient, GrocyClientError, GrocyWriteDisabledError
+from .intake import (
+    IntakeError,
+    IntakeNotConfigured,
+    IntakeResult,
+    reconcile_items,
+    understand_transcript,
+)
 from .matching import _tokenize as _recipe_tokenize
 from .matching import _tokens_match, rank_recipes
 from .models import IngredientUrgency, Recipe, StockItem
+from .normalization import normalize_ingredient_name
 from .pairing import PairingGraph, suggest_pairings
 from .scoring import score_stock_item
 from .writeback import (
@@ -80,6 +88,11 @@ class FoodBrainAPI:
     write_client_factory: Optional[Callable[[], GrocyClient]] = None
     today_provider: Callable[[], date] = date.today
     source: str = "grocy"
+    # Voice intake (talk-at-the-fridge). The catalog provider returns the
+    # product master list ([{"id","name"}]); the understander is injectable so
+    # tests can stub the model call. Both default to None and degrade safely.
+    product_catalog_provider: Optional[Callable[[], List[dict]]] = None
+    intake_understander: Optional[Callable[..., IntakeResult]] = None
 
     # --- reads -----------------------------------------------------------
 
@@ -211,6 +224,107 @@ class FoodBrainAPI:
         except GrocyClientError as exc:
             raise ApiError(502, str(exc)) from exc
         return {"action": "undo", "transaction_id": transaction_id, "ok": True}
+
+    # --- voice intake ----------------------------------------------------
+
+    def intake_understand(self, transcript: str, answers: str = "") -> dict:
+        """Turn a spoken fridge description into reconciled, reviewable items."""
+        catalog = self._catalog()
+        try:
+            if self.intake_understander is not None:
+                result = self.intake_understander(
+                    transcript=transcript, catalog=catalog, answers=answers
+                )
+            else:
+                result = understand_transcript(
+                    transcript,
+                    settings=self.settings,
+                    catalog=catalog,
+                    answers=answers,
+                )
+        except IntakeNotConfigured as exc:
+            raise ApiError(503, str(exc)) from exc
+        except IntakeError as exc:
+            raise ApiError(502, str(exc)) from exc
+
+        reconciled = reconcile_items(result.items, catalog, self.aliases)
+        return {
+            "items": [item.to_dict() for item in reconciled],
+            "questions": result.questions,
+            "summary": result.summary,
+        }
+
+    def intake_commit(self, items: List[dict]) -> dict:
+        """Write the reviewed items to Grocy: add stock, creating products as needed."""
+        if not items:
+            raise ApiError(400, "no items to commit")
+        client = self._writer()
+        units = _NameResolver(client.get_quantity_units(), self.settings.intake_default_unit)
+        locations = _NameResolver(
+            client.get_locations(), self.settings.intake_default_location
+        )
+
+        results = []
+        created = 0
+        for raw in items:
+            name = str(raw.get("name") or "").strip()
+            product_id = str(raw.get("matched_product_id") or raw.get("product_id") or "")
+            amount = _amount_of(raw)
+            best_before = _optional_iso_date(raw.get("best_before_date"))
+            location_id = locations.resolve(raw.get("location"))
+            was_created = False
+            try:
+                if not product_id:
+                    if not name:
+                        raise ApiError(400, "a new item needs a name")
+                    product_id = client.create_product(
+                        name,
+                        qu_id_stock=units.resolve(raw.get("unit")),
+                        location_id=location_id,
+                    )
+                    was_created = True
+                    created += 1
+                add_response = client.add_stock(
+                    product_id,
+                    amount,
+                    best_before_date=best_before,
+                    location_id=location_id,
+                )
+                if raw.get("opened"):
+                    client.open_product(product_id, amount)
+            except GrocyWriteDisabledError as exc:
+                raise ApiError(403, str(exc)) from exc
+            except GrocyClientError as exc:
+                raise ApiError(502, f"failed to store {name or product_id!r}: {exc}") from exc
+
+            results.append(
+                {
+                    "name": name or product_id,
+                    "product_id": product_id,
+                    "created": was_created,
+                    "amount": amount,
+                    "best_before_date": best_before.isoformat() if best_before else None,
+                    "transaction_id": _extract_txn(add_response),
+                    "ok": True,
+                }
+            )
+
+        return {
+            "results": results,
+            "added": len(results),
+            "created_products": created,
+        }
+
+    def _catalog(self) -> List[dict]:
+        if self.product_catalog_provider is not None:
+            return self.product_catalog_provider()
+        # Sample / JSON modes have no product master list; fall back to the
+        # in-stock names so the UI still demos and can match what's on hand.
+        return [
+            {"id": item.product_id, "name": item.name}
+            for item in self.stock_provider()
+            if item.name
+        ]
 
     # --- internals -------------------------------------------------------
 
@@ -387,3 +501,57 @@ def _parse_iso_date(value: str) -> date:
         return date.fromisoformat(str(value)[:10])
     except ValueError as exc:
         raise ApiError(400, f"best_before_date must be ISO YYYY-MM-DD, got {value!r}") from exc
+
+
+def _optional_iso_date(value) -> Optional[date]:
+    if value in (None, ""):
+        return None
+    return _parse_iso_date(str(value))
+
+
+def _amount_of(raw: dict) -> float:
+    value = raw.get("amount", raw.get("quantity", 1.0))
+    try:
+        amount = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ApiError(400, f"amount must be a number, got {value!r}") from exc
+    if amount <= 0:
+        raise ApiError(400, "amount must be greater than zero")
+    return amount
+
+
+def _extract_txn(response) -> Optional[str]:
+    from .grocy_client import extract_transaction_id
+
+    return extract_transaction_id(response)
+
+
+class _NameResolver:
+    """Resolve a free-text unit/location name to a Grocy object id.
+
+    Order: exact normalized match -> configured default name -> first object.
+    Built once per commit so master-data is fetched at most once each.
+    """
+
+    def __init__(self, objects: List[dict], default_name: Optional[str]) -> None:
+        self._objects = [o for o in objects if o.get("id")]
+        self._by_norm = {
+            normalize_ingredient_name(str(o.get("name") or "")): str(o["id"])
+            for o in self._objects
+            if o.get("name")
+        }
+        self._default_name = default_name
+
+    def resolve(self, name) -> str:
+        candidate = normalize_ingredient_name(str(name or ""))
+        if candidate and candidate in self._by_norm:
+            return self._by_norm[candidate]
+        if self._default_name:
+            default_norm = normalize_ingredient_name(self._default_name)
+            if default_norm in self._by_norm:
+                return self._by_norm[default_norm]
+        if self._objects:
+            return str(self._objects[0]["id"])
+        raise ApiError(
+            502, "Grocy has no quantity units / locations to assign a new product to"
+        )
