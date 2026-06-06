@@ -227,13 +227,20 @@ class FoodBrainAPI:
 
     # --- voice intake ----------------------------------------------------
 
-    def intake_understand(self, transcript: str, answers: str = "") -> dict:
-        """Turn a spoken fridge description into reconciled, reviewable items."""
+    def intake_understand(
+        self, transcript: str, answers: str = "", mode: str = "add"
+    ) -> dict:
+        """Turn a spoken fridge description into reconciled, reviewable items.
+
+        ``mode`` is ``"add"`` (stock new food) or ``"edit"`` (change food you
+        already have: consume / toss / correct a date).
+        """
+        mode = "edit" if mode == "edit" else "add"
         catalog = self._catalog()
         try:
             if self.intake_understander is not None:
                 result = self.intake_understander(
-                    transcript=transcript, catalog=catalog, answers=answers
+                    transcript=transcript, catalog=catalog, answers=answers, mode=mode
                 )
             else:
                 result = understand_transcript(
@@ -241,6 +248,7 @@ class FoodBrainAPI:
                     settings=self.settings,
                     catalog=catalog,
                     answers=answers,
+                    mode=mode,
                 )
         except IntakeNotConfigured as exc:
             raise ApiError(503, str(exc)) from exc
@@ -255,64 +263,136 @@ class FoodBrainAPI:
         }
 
     def intake_commit(self, items: List[dict]) -> dict:
-        """Write the reviewed items to Grocy: add stock, creating products as needed."""
+        """Write the reviewed items to Grocy.
+
+        Each item carries an ``action``: ``"add"`` (default) stocks it (creating
+        the product if new); the edit actions act on an item you already have —
+        ``"consume"`` books usage (undoable), ``"toss"`` waste-removes it, and
+        ``"set_date"`` corrects its best-before date.
+        """
         if not items:
             raise ApiError(400, "no items to commit")
         client = self._writer()
-        units = _NameResolver(client.get_quantity_units(), self.settings.intake_default_unit)
-        locations = _NameResolver(
-            client.get_locations(), self.settings.intake_default_location
-        )
+
+        # Master data (units/locations) is only needed when we might add/create.
+        resolvers: Optional[tuple] = None
+        if any(_action_of(raw) == "add" for raw in items):
+            resolvers = (
+                _NameResolver(client.get_quantity_units(), self.settings.intake_default_unit),
+                _NameResolver(client.get_locations(), self.settings.intake_default_location),
+            )
 
         results = []
-        created = 0
+        counts = {"added": 0, "created_products": 0, "changed": 0}
         for raw in items:
-            name = str(raw.get("name") or "").strip()
-            product_id = str(raw.get("matched_product_id") or raw.get("product_id") or "")
-            amount = _amount_of(raw)
-            best_before = _optional_iso_date(raw.get("best_before_date"))
-            location_id = locations.resolve(raw.get("location"))
-            was_created = False
+            action = _action_of(raw)
             try:
-                if not product_id:
-                    if not name:
-                        raise ApiError(400, "a new item needs a name")
-                    product_id = client.create_product(
-                        name,
-                        qu_id_stock=units.resolve(raw.get("unit")),
-                        location_id=location_id,
-                    )
-                    was_created = True
-                    created += 1
-                add_response = client.add_stock(
-                    product_id,
-                    amount,
-                    best_before_date=best_before,
-                    location_id=location_id,
-                )
-                if raw.get("opened"):
-                    client.open_product(product_id, amount)
+                if action == "consume":
+                    results.append(self._commit_consume(client, raw, counts))
+                elif action == "toss":
+                    results.append(self._commit_toss(client, raw, counts))
+                elif action == "set_date":
+                    results.append(self._commit_set_date(client, raw, counts))
+                else:
+                    results.append(self._commit_add(client, raw, resolvers, counts))
             except GrocyWriteDisabledError as exc:
                 raise ApiError(403, str(exc)) from exc
             except GrocyClientError as exc:
-                raise ApiError(502, f"failed to store {name or product_id!r}: {exc}") from exc
-
-            results.append(
-                {
-                    "name": name or product_id,
-                    "product_id": product_id,
-                    "created": was_created,
-                    "amount": amount,
-                    "best_before_date": best_before.isoformat() if best_before else None,
-                    "transaction_id": _extract_txn(add_response),
-                    "ok": True,
-                }
-            )
+                name = str(raw.get("name") or "")
+                raise ApiError(502, f"failed to update {name or '?'!r}: {exc}") from exc
 
         return {
             "results": results,
-            "added": len(results),
-            "created_products": created,
+            "added": counts["added"],
+            "created_products": counts["created_products"],
+            "changed": counts["changed"],
+        }
+
+    def _commit_add(self, client, raw: dict, resolvers, counts: dict) -> dict:
+        assert resolvers is not None  # built whenever an add is present
+        units, locations = resolvers
+        name = str(raw.get("name") or "").strip()
+        product_id = _pid(raw)
+        amount = _amount_of(raw)
+        best_before = _optional_iso_date(raw.get("best_before_date"))
+        location_id = locations.resolve(raw.get("location"))
+        was_created = False
+        if not product_id:
+            if not name:
+                raise ApiError(400, "a new item needs a name")
+            product_id = client.create_product(
+                name,
+                qu_id_stock=units.resolve(raw.get("unit")),
+                location_id=location_id,
+            )
+            was_created = True
+            counts["created_products"] += 1
+        add_response = client.add_stock(
+            product_id, amount, best_before_date=best_before, location_id=location_id
+        )
+        if raw.get("opened"):
+            client.open_product(product_id, amount)
+        counts["added"] += 1
+        return {
+            "name": name or product_id,
+            "product_id": product_id,
+            "action": "add",
+            "created": was_created,
+            "amount": amount,
+            "best_before_date": best_before.isoformat() if best_before else None,
+            "transaction_id": _extract_txn(add_response),
+            "ok": True,
+        }
+
+    def _commit_consume(self, client, raw: dict, counts: dict) -> dict:
+        name = str(raw.get("name") or "").strip()
+        product_id = _require_known_product(raw, "use")
+        amount = _amount_of(raw)
+        outcome = consume(client, product_id, amount)
+        counts["changed"] += 1
+        return {
+            "name": name or product_id,
+            "product_id": product_id,
+            "action": "consume",
+            "amount": amount,
+            "transaction_id": outcome.undo_transaction_id,
+            "ok": True,
+        }
+
+    def _commit_toss(self, client, raw: dict, counts: dict) -> dict:
+        name = str(raw.get("name") or "").strip()
+        product_id = _require_known_product(raw, "toss")
+        amount = _amount_of(raw)
+        outcome = toss(client, product_id, amount, confirm=True)
+        counts["changed"] += 1
+        return {
+            "name": name or product_id,
+            "product_id": product_id,
+            "action": "toss",
+            "amount": amount,
+            "transaction_id": outcome.undo_transaction_id,
+            "ok": True,
+        }
+
+    def _commit_set_date(self, client, raw: dict, counts: dict) -> dict:
+        name = str(raw.get("name") or "").strip()
+        product_id = _require_known_product(raw, "re-date")
+        best_before = _optional_iso_date(raw.get("best_before_date"))
+        if best_before is None:
+            raise ApiError(400, f"need a date to set for {name or product_id!r}")
+        entries = client.get_product_entries(product_id)
+        if not entries:
+            raise ApiError(502, f"{name or product_id!r} has no stock entries to date")
+        set_due_date(
+            client, entries[0].stock_entry_id, best_before, product_id=product_id
+        )
+        counts["changed"] += 1
+        return {
+            "name": name or product_id,
+            "product_id": product_id,
+            "action": "set_date",
+            "best_before_date": best_before.isoformat(),
+            "ok": True,
         }
 
     def _catalog(self) -> List[dict]:
@@ -524,6 +604,28 @@ def _extract_txn(response) -> Optional[str]:
     from .grocy_client import extract_transaction_id
 
     return extract_transaction_id(response)
+
+
+_EDIT_ACTIONS = {"consume", "toss", "set_date"}
+
+
+def _action_of(raw: dict) -> str:
+    """The commit action for an item; anything but a known edit action is 'add'."""
+    action = str(raw.get("action") or "add").strip().lower()
+    return action if action in _EDIT_ACTIONS else "add"
+
+
+def _pid(raw: dict) -> str:
+    return str(raw.get("matched_product_id") or raw.get("product_id") or "")
+
+
+def _require_known_product(raw: dict, verb: str) -> str:
+    """An edit action can only target a product already in Grocy."""
+    product_id = _pid(raw)
+    if not product_id:
+        name = str(raw.get("name") or "that").strip() or "that"
+        raise ApiError(400, f"can't {verb} {name!r}: it isn't in your fridge")
+    return product_id
 
 
 class _NameResolver:

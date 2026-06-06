@@ -12,7 +12,7 @@ from foodbrain_assistant.intake import (
     reconcile_items,
     understand_transcript,
 )
-from foodbrain_assistant.models import StockItem
+from foodbrain_assistant.models import StockEntry, StockItem
 
 
 TODAY = date(2026, 6, 6)
@@ -161,6 +161,8 @@ class _FakeWriteClient:
         self.created = []
         self.added = []
         self.opened = []
+        self.consumed = []
+        self.redated = []
         self._next_id = 100
 
     def get_quantity_units(self):
@@ -192,6 +194,29 @@ class _FakeWriteClient:
         self.opened.append({"product_id": product_id, "amount": amount})
         return {}
 
+    def consume_product(self, product_id, amount=1.0, *, spoiled=False):
+        self.consumed.append(
+            {"product_id": product_id, "amount": amount, "spoiled": spoiled}
+        )
+        return [{"transaction_id": f"cx-{product_id}"}]
+
+    def get_product_entries(self, product_id):
+        return [
+            StockEntry(
+                stock_entry_id=f"entry-{product_id}",
+                product_id=product_id,
+                amount=1.0,
+                best_before_date=None,
+                opened=False,
+            )
+        ]
+
+    def set_entry_due_date(self, stock_entry_id, best_before_date):
+        self.redated.append(
+            {"stock_entry_id": stock_entry_id, "best_before_date": best_before_date}
+        )
+        return {}
+
 
 def _api(client, **overrides) -> FoodBrainAPI:
     params = dict(
@@ -210,10 +235,11 @@ class IntakeUnderstandApiTest(unittest.TestCase):
     def test_understand_uses_injected_understander_and_reconciles(self) -> None:
         seen = {}
 
-        def fake_understander(*, transcript, catalog, answers):
+        def fake_understander(*, transcript, catalog, answers, mode="add"):
             seen["transcript"] = transcript
             seen["catalog"] = catalog
             seen["answers"] = answers
+            seen["mode"] = mode
             return IntakeResult(
                 items=[IntakeItem(name="milk"), IntakeItem(name="Sourdough")],
                 questions=["q?"],
@@ -233,7 +259,7 @@ class IntakeUnderstandApiTest(unittest.TestCase):
         stock = [StockItem("9", "Butter", 1, "pack", None)]
         captured = {}
 
-        def fake_understander(*, transcript, catalog, answers):
+        def fake_understander(*, transcript, catalog, answers, mode="add"):
             captured["catalog"] = catalog
             return IntakeResult(items=[IntakeItem(name="butter")])
 
@@ -309,6 +335,116 @@ class IntakeCommitApiTest(unittest.TestCase):
                 [{"name": "Milk", "matched_product_id": "10", "quantity": 0}]
             )
         self.assertEqual(ctx.exception.status, 400)
+
+
+class EditModeUnderstandTest(unittest.TestCase):
+    def test_edit_mode_passes_mode_and_uses_edit_prompt(self) -> None:
+        seen = {}
+
+        def fake_understander(*, transcript, catalog, answers, mode="add"):
+            seen["mode"] = mode
+            return IntakeResult(items=[IntakeItem(name="Milk", action="consume")])
+
+        api = _api(_FakeWriteClient(), intake_understander=fake_understander)
+        out = api.intake_understand("finished the milk", mode="edit")
+        self.assertEqual(seen["mode"], "edit")
+        # The consume action survives reconciliation and reaches the SPA.
+        self.assertEqual(out["items"][0]["action"], "consume")
+        self.assertEqual(out["items"][0]["matched_product_id"], "10")
+
+    def test_edit_system_prompt_is_sent_to_model(self) -> None:
+        captured = {}
+
+        def transport(url, headers, body, timeout):
+            captured["body"] = json.loads(body.decode("utf-8"))
+            return _openrouter_reply({"items": [], "questions": [], "summary": ""})
+
+        understand_transcript(
+            "I used half the tomato can",
+            settings=_settings(),
+            catalog=CATALOG,
+            mode="edit",
+            transport=transport,
+        )
+        system = captured["body"]["messages"][0]["content"]
+        self.assertIn("CHANGED", system)
+        self.assertIn("consume", system)
+
+    def test_action_synonyms_normalize(self) -> None:
+        def transport(url, headers, body, timeout):
+            return _openrouter_reply(
+                {
+                    "items": [
+                        {"name": "Milk", "action": "finished"},
+                        {"name": "Eggs", "action": "threw away"},
+                        {"name": "Cheese", "action": "wat"},
+                    ],
+                    "questions": [],
+                    "summary": "",
+                }
+            )
+
+        result = understand_transcript(
+            "stuff", settings=_settings(), catalog=[], mode="edit", transport=transport
+        )
+        self.assertEqual([i.action for i in result.items], ["consume", "toss", "add"])
+
+
+class EditModeCommitTest(unittest.TestCase):
+    def test_consume_books_usage_and_is_undoable(self) -> None:
+        client = _FakeWriteClient()
+        out = _api(client).intake_commit(
+            [{"name": "Milk", "matched_product_id": "10", "action": "consume", "quantity": 0.5}]
+        )
+        self.assertEqual(out["changed"], 1)
+        self.assertEqual(out["added"], 0)
+        self.assertEqual(client.consumed[0], {"product_id": "10", "amount": 0.5, "spoiled": False})
+        self.assertEqual(out["results"][0]["transaction_id"], "cx-10")
+
+    def test_toss_waste_removes(self) -> None:
+        client = _FakeWriteClient()
+        out = _api(client).intake_commit(
+            [{"name": "Eggs", "matched_product_id": "10", "action": "toss", "quantity": 3}]
+        )
+        self.assertEqual(out["changed"], 1)
+        self.assertTrue(client.consumed[0]["spoiled"])
+        self.assertEqual(client.consumed[0]["amount"], 3)
+
+    def test_set_date_updates_first_entry(self) -> None:
+        client = _FakeWriteClient()
+        out = _api(client).intake_commit(
+            [{"name": "Milk", "matched_product_id": "10", "action": "set_date",
+              "best_before_date": "2026-06-20"}]
+        )
+        self.assertEqual(out["changed"], 1)
+        self.assertEqual(client.redated[0]["stock_entry_id"], "entry-10")
+        self.assertEqual(client.redated[0]["best_before_date"], date(2026, 6, 20))
+
+    def test_edit_without_match_is_rejected(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            _api(_FakeWriteClient()).intake_commit(
+                [{"name": "Ketchup", "action": "consume"}]
+            )
+        self.assertEqual(ctx.exception.status, 400)
+
+    def test_set_date_without_date_is_rejected(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            _api(_FakeWriteClient()).intake_commit(
+                [{"name": "Milk", "matched_product_id": "10", "action": "set_date"}]
+            )
+        self.assertEqual(ctx.exception.status, 400)
+
+    def test_mixed_add_and_edit_in_one_batch(self) -> None:
+        client = _FakeWriteClient()
+        out = _api(client).intake_commit(
+            [
+                {"name": "Milk", "matched_product_id": "10", "action": "consume", "quantity": 1},
+                {"name": "Sourdough", "unit": "Piece", "location": "Pantry", "action": "add"},
+            ]
+        )
+        self.assertEqual(out["added"], 1)
+        self.assertEqual(out["changed"], 1)
+        self.assertEqual(out["created_products"], 1)
 
 
 if __name__ == "__main__":

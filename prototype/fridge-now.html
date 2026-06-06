@@ -222,12 +222,19 @@
 
   .item .body { flex: 1 1 auto; min-width: 0; }
   .item .name {
-    font-family: "Fraunces", serif; font-weight: 500; font-size: 18px;
-    letter-spacing: -.01em; line-height: 1.15;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: "Fraunces", serif; font-weight: 500; font-size: 15px;
+    letter-spacing: -.005em; line-height: 1.2;
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+  }
+  .item .name .emoji {
+    flex: 0 0 auto; font-size: 17px; line-height: 1;
+    font-family: "Hanken Grotesk", system-ui, sans-serif;
+  }
+  .item .name .nm {
+    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .item .meta {
-    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
     color: var(--ink-faint); margin-top: 3px;
     display: flex; gap: 8px; align-items: center;
   }
@@ -235,7 +242,7 @@
 
   .due {
     flex: 0 0 auto;
-    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 12px;
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 11px;
     padding: 5px 9px; border-radius: 8px;
     color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent);
     border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
@@ -341,16 +348,43 @@
   .sheet .row { display: flex; gap: 10px; margin-top: 14px; }
   .sheet .row .btn { flex: 1; }
 
-  /* ---------- add-by-voice intake ---------- */
-  .addbtn {
-    display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
-    background: var(--accent); color: var(--accent-ink); border: none;
-    border-radius: 999px; padding: 6px 13px; cursor: pointer;
-    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 12px;
-    letter-spacing: .02em; transition: filter .2s, transform .15s var(--ease);
+  /* ---------- add / edit by-voice intake ---------- */
+  /* Two big, equal-width voice entry points right under the title. */
+  .intakebar { display: flex; gap: 10px; margin-top: 16px; }
+  .ibtn {
+    flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center;
+    gap: 9px; cursor: pointer; border-radius: 14px; padding: 13px 12px;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 15px;
+    letter-spacing: .01em; transition: filter .2s, transform .15s var(--ease), border-color .2s;
   }
-  .addbtn:hover { filter: brightness(1.08); }
-  .addbtn:active { transform: scale(.95); }
+  .ibtn .iemoji { font-size: 19px; line-height: 1; }
+  .ibtn .isub { font-weight: 500; font-size: 11px; opacity: .75; }
+  .ibtn:active { transform: scale(.97); }
+  .ibtn.add { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); }
+  .ibtn.add:hover { filter: brightness(1.08); }
+  .ibtn.edit {
+    background: var(--glass-strong); color: var(--ink); border: 1px solid var(--hairline);
+  }
+  .ibtn.edit:hover { border-color: var(--accent); filter: brightness(1.15); }
+  .ibtn[disabled] { opacity: .4; cursor: default; pointer-events: none; }
+
+  /* per-row action picker in the Edit review */
+  .iactions { display: inline-flex; gap: 5px; }
+  .iact {
+    cursor: pointer; user-select: none; font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; padding: 5px 9px; border-radius: 8px; color: var(--ink-dim);
+    background: var(--bg-0); border: 1px solid var(--hairline); transition: all .15s var(--ease);
+  }
+  .iact.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .iact.on.toss { background: var(--hot); border-color: var(--hot); color: #fff; }
+  .istock { font-size: 11px; color: var(--ink-faint); }
+  .ibadge.miss { background: rgba(255,90,82,.14); color: var(--hot); }
+  .iname-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .iname-wrap .emoji { flex: 0 0 auto; font-size: 17px; line-height: 1; }
+  .iname-wrap .iname { flex: 1 1 auto; min-width: 0; width: auto; }
+  /* Edit rows show amount for used/toss, a date field for set_date. */
+  .irow[data-mode="edit"][data-action="set_date"] .famt { display: none; }
+  .irow[data-mode="edit"]:not([data-action="set_date"]) .fdate { display: none; }
   textarea#intakeText {
     width: 100%; min-height: 110px; resize: vertical;
     background: var(--bg-0); color: var(--ink);
@@ -508,8 +542,15 @@
         <button id="syncBtn" class="syncbtn" type="button" title="Sync now" aria-label="Sync now">
           <span class="syncico">↻</span><span id="syncLabel">sync</span>
         </button>
-        <button id="addBtn" class="addbtn" type="button" title="Add by talking">
-          <span>🎙</span><span>Add</span>
+      </div>
+      <div class="intakebar">
+        <button id="addBtn" class="ibtn add" type="button" title="Talk to add after shopping">
+          <span class="iemoji">🛒</span>
+          <span>Add<span class="isub"> · after shopping</span></span>
+        </button>
+        <button id="editBtn" class="ibtn edit" type="button" title="Talk to fix or mark used">
+          <span class="iemoji">✏️</span>
+          <span>Edit<span class="isub"> · used / fix</span></span>
         </button>
       </div>
     </header>
@@ -630,6 +671,8 @@ function mapItem(row){
   return {
     id: String(row.product_id),
     name: row.name,
+    amount: Number(row.amount) || 0,   // raw numeric, for the Edit flow
+    unit: row.unit || '',
     qty: formatQty(row.amount, row.unit),
     loc: row.location || '—',
     due: row.days_until_expiry,   // null for staples
@@ -642,6 +685,50 @@ function mapItem(row){
 function formatQty(amount, unit){
   const a = Number.isInteger(amount) ? amount : Number(Number(amount).toFixed(2));
   return unit ? `${a} ${unit}` : `${a}`;
+}
+
+/* ---- pick a food emoji from the product name (German + English) ---- */
+const EMOJI_RULES = [
+  [/milch|milk|sahne|cream|joghur|yogh|yogurt|quark/, '🥛'],
+  [/käse|kaese|cheese|mozzarella|parmesan|feta/, '🧀'],
+  [/ei(er)?\b|egg/, '🥚'],
+  [/butter|marg/, '🧈'],
+  [/tomate|tomato|passata|sugo/, '🍅'],
+  [/gurke|cucumber|zucchin|zucker|courgette/, '🥒'],
+  [/karotte|möhre|moehre|carrot|rüb/, '🥕'],
+  [/zwiebel|onion|lauch|leek/, '🧅'],
+  [/knoblauch|garlic/, '🧄'],
+  [/paprika|pepper|chili|chilli|harissa/, '🌶️'],
+  [/salat|lettuce|spinat|spinach|rucola|kohl|cabbage/, '🥬'],
+  [/kartoffel|potato/, '🥔'],
+  [/apfel|apple/, '🍎'],
+  [/banane|banana/, '🍌'],
+  [/zitrone|lemon|limette|lime/, '🍋'],
+  [/orange|mandarin|clementi/, '🍊'],
+  [/beere|berry|erdbeer|strawberr|himbeer|raspberr|heidelbeer|blueberr/, '🍓'],
+  [/traube|grape/, '🍇'],
+  [/brot|brötchen|broetchen|bread|toast|baguette|sourdough/, '🍞'],
+  [/nudel|pasta|spaghetti|noodle/, '🍝'],
+  [/reis|rice/, '🍚'],
+  [/hähnchen|haehnchen|huhn|chicken|pute|turkey/, '🍗'],
+  [/rind|beef|steak|hack|schwein|pork|wurst|sausage|schinken|ham|speck|bacon|salami|landjäger|landjaeger/, '🥩'],
+  [/fisch|fish|lachs|salmon|thun|tuna|shrimp|garnele/, '🐟'],
+  [/senf|mustard|dijon/, '🥫'],
+  [/dose|can|konserve|bohne|bean|linse|lentil|kichererbse|chickpea/, '🥫'],
+  [/öl|oel|\boil\b|olive/, '🫒'],
+  [/wasser|water/, '💧'],
+  [/saft|juice/, '🧃'],
+  [/bier|beer|wein|wine/, '🍷'],
+  [/schoko|chocolate|keks|cookie|snack|chips|riegel|bar\b/, '🍫'],
+  [/honig|honey|marmelade|jam|konfit/, '🍯'],
+  [/mehl|flour|zucker\b|sugar|backen/, '🧁'],
+  [/pilz|mushroom|champignon/, '🍄'],
+  [/mais|corn/, '🌽'],
+];
+function emojiFor(name){
+  const n = String(name || '').toLowerCase();
+  for (const [re, emo] of EMOJI_RULES){ if (re.test(n)) return emo; }
+  return '🍽️';
 }
 
 function dueLabel(d){
@@ -730,7 +817,7 @@ function itemEl(it, meta, delay){
   el.innerHTML = `
     <div class="check">✓</div>
     <div class="body">
-      <div class="name">${esc(it.name)}</div>
+      <div class="name"><span class="emoji">${emojiFor(it.name)}</span><span class="nm">${esc(it.name)}</span></div>
       <div class="meta"><span>${esc(it.qty)}</span><span class="loc">· ${esc(it.loc)}</span></div>
     </div>
     ${ isStaple ? '' : `<div class="due ${overdue?'overdue':''}" style="--c:${meta.c};--g:${meta.g}">${dueLabel(it.due)}</div>`}
@@ -985,36 +1072,57 @@ function renderConnect(data){
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null, recording = false;
 
+let intakeMode = 'add'; // 'add' (after shopping) or 'edit' (used / fix)
+
+const INTAKE_COPY = {
+  add: {
+    title: 'Add to fridge',
+    sub: 'after shopping · talk or type',
+    placeholder: "What did you buy?",
+    hint: SpeechRec
+      ? `Tap the mic and say what you bought — e.g. “half a liter of milk, opened, good for about 4 days, and three carrots”.`
+      : `Speech isn’t available in this browser — just type what you bought and tap Understand.`,
+  },
+  edit: {
+    title: 'Edit fridge',
+    sub: 'used something or fix a mistake · talk or type',
+    placeholder: "What did you use, or what's wrong?",
+    hint: SpeechRec
+      ? `Tap the mic and say what changed — e.g. “I used half the tomato can, finished the milk, and the eggs are actually good for another week”.`
+      : `Speech isn’t available in this browser — just type what changed and tap Understand.`,
+  },
+};
+
 function captureSheetHtml(transcript){
+  const copy = INTAKE_COPY[intakeMode];
   const speechHint = SpeechRec
     ? `<button type="button" class="micbtn" id="micBtn" title="Hold to dictate">🎙</button>`
     : '';
-  const note = SpeechRec
-    ? `Tap the mic and say what you see — e.g. “half a liter of milk, opened, good for about 4 days, and three carrots”.`
-    : `Speech capture isn’t available in this browser — just type what you see and tap Understand.`;
   return `
-    <h3>Add to fridge</h3>
-    <div class="h3sub">talk or type · FoodBrain figures out the rest</div>
+    <h3>${esc(copy.title)}</h3>
+    <div class="h3sub">${esc(copy.sub)}</div>
     <div class="micwrap">
-      <textarea id="intakeText" placeholder="What's in the fridge?">${esc(transcript||'')}</textarea>
+      <textarea id="intakeText" placeholder="${esc(copy.placeholder)}">${esc(transcript||'')}</textarea>
       ${speechHint}
     </div>
-    <div class="micnote">${note}</div>
+    <div class="micnote">${copy.hint}</div>
     <div class="row">
       <button class="btn ghost" id="closeSheet">Close</button>
       <button class="btn solid" id="understandBtn">Understand</button>
     </div>`;
 }
 
-document.getElementById('addBtn').addEventListener('click', ()=> openIntake());
+document.getElementById('addBtn').addEventListener('click', ()=> openIntake(undefined, 'add'));
+document.getElementById('editBtn').addEventListener('click', ()=> openIntake(undefined, 'edit'));
 
-function openIntake(transcript){
+function openIntake(transcript, mode){
+  if (mode) intakeMode = mode;
   stopRecording();
   openSheet(captureSheetHtml(transcript));
   wireClose();
   const micBtn = document.getElementById('micBtn');
   if (micBtn) micBtn.addEventListener('click', toggleRecording);
-  document.getElementById('understandBtn').addEventListener('click', runUnderstand);
+  document.getElementById('understandBtn').addEventListener('click', ()=> runUnderstand());
 }
 
 function toggleRecording(){
@@ -1048,9 +1156,10 @@ function stopRecording(){
 
 async function runUnderstand(answers){
   stopRecording();
+  const title = INTAKE_COPY[intakeMode].title;
   const transcript = document.getElementById('intakeText').value.trim();
   if (!transcript){ document.getElementById('intakeText').focus(); return; }
-  openSheet(`<h3>Add to fridge</h3>
+  openSheet(`<h3>${esc(title)}</h3>
     <div class="h3sub">reading your fridge…</div>
     <div class="loading">thinking…</div>`);
   let data;
@@ -1058,9 +1167,10 @@ async function runUnderstand(answers){
     data = await apiPost('/api/intake/understand', {
       transcript,
       answers: typeof answers === 'string' ? answers : '',
+      mode: intakeMode,
     });
   } catch (err){
-    sheet.innerHTML = `<div class="grip"></div><h3>Add to fridge</h3>
+    sheet.innerHTML = `<div class="grip"></div><h3>${esc(title)}</h3>
       <div class="sheet-error"><b>Couldn't understand that.</b><br>${esc(err.message)}</div>
       <div class="row">
         <button class="btn ghost" id="closeSheet">Close</button>
@@ -1079,12 +1189,17 @@ function badgeFor(it){
   return `<span class="ibadge new">new</span>`;
 }
 
+function nameField(it){
+  return `<div class="iname-wrap"><span class="emoji">${emojiFor(it.name)}</span>
+    <input class="iname" value="${esc(it.name)}" /></div>`;
+}
+
 function reviewRow(it, i){
   const date = it.freshness_days != null ? isoFromOffset(it.freshness_days) : '';
   const qty = Number(it.quantity ?? 1);
-  return `<div class="irow" data-i="${i}" data-pid="${esc(it.matched_product_id||'')}">
+  return `<div class="irow" data-i="${i}" data-pid="${esc(it.matched_product_id||'')}" data-mode="add">
     <input type="checkbox" class="ipick" checked />
-    <input class="iname" value="${esc(it.name)}" />
+    ${nameField(it)}
     ${badgeFor(it)}
     <div class="ifields">
       <label>qty <input class="iqty" type="number" min="0" step="0.1" value="${qty}" /></label>
@@ -1096,12 +1211,51 @@ function reviewRow(it, i){
   </div>`;
 }
 
+const EDIT_ACTIONS = ['consume', 'toss', 'set_date'];
+function stockItemFor(pid){
+  return pid ? (items.find(x => x.id === String(pid)) || null) : null;
+}
+
+function editRow(it, i){
+  const pid = it.matched_product_id || '';
+  const matched = !!pid;
+  const stock = stockItemFor(pid);
+  const action = EDIT_ACTIONS.includes(it.action) ? it.action : 'consume';
+  const amt = Number(it.quantity) || (stock ? stock.amount : 1);
+  const date = it.freshness_days != null ? isoFromOffset(it.freshness_days)
+             : (stock && stock.bestBefore ? stock.bestBefore : '');
+  const badge = matched
+    ? `<span class="ibadge matched">✓ in grocy</span>`
+    : `<span class="ibadge miss">not in fridge</span>`;
+  const stockNote = stock ? `${esc(stock.qty)} in fridge` : 'can’t change — not stocked';
+  return `<div class="irow ${matched?'':'drop'}" data-i="${i}" data-pid="${esc(pid)}"
+       data-mode="edit" data-action="${action}">
+    <input type="checkbox" class="ipick" ${matched?'checked':''} ${matched?'':'disabled'} />
+    ${nameField(it)}
+    ${badge}
+    <div class="ifields">
+      <div class="iactions">
+        <span class="iact ${action==='consume'?'on':''}" data-act="consume">used</span>
+        <span class="iact toss ${action==='toss'?'on':''}" data-act="toss">toss</span>
+        <span class="iact ${action==='set_date'?'on':''}" data-act="set_date">date</span>
+      </div>
+      <label class="famt">amount <input class="iqty" type="number" min="0" step="0.1" value="${amt}" /></label>
+      <label class="fdate">good until <input class="idate" type="date" value="${date}" /></label>
+      <span class="istock">${stockNote}</span>
+      <button class="idrop" type="button" title="remove">✕</button>
+    </div>
+  </div>`;
+}
+
 function renderReview(transcript, data){
-  const items = data.items || [];
+  const list = data.items || [];
   const questions = data.questions || [];
-  if (!items.length){
-    sheet.innerHTML = `<div class="grip"></div><h3>Add to fridge</h3>
-      <div class="cgroup"><div class="empty">No items found in “${esc(transcript)}”. Try again with a bit more detail.</div></div>
+  const isEdit = intakeMode === 'edit';
+  const title = INTAKE_COPY[intakeMode].title;
+  const commitLabel = isEdit ? 'Apply changes' : 'Add to fridge';
+  if (!list.length){
+    sheet.innerHTML = `<div class="grip"></div><h3>${esc(title)}</h3>
+      <div class="cgroup"><div class="empty">Nothing recognized in “${esc(transcript)}”. Try again with a bit more detail.</div></div>
       <div class="row"><button class="btn ghost" id="closeSheet">Close</button>
         <button class="btn solid" id="backBtn">Try again</button></div>`;
     wireClose();
@@ -1115,23 +1269,39 @@ function renderReview(transcript, data){
       <input class="iname" id="answers" style="border-bottom:1px solid var(--hairline)" placeholder="answer here, then Re-check (optional)" />
     </div>` : '';
 
+  const rowFn = isEdit ? editRow : reviewRow;
+  const subText = isEdit
+    ? `${list.length} change${list.length>1?'s':''} · check & tweak, then apply`
+    : `${list.length} item${list.length>1?'s':''} · check & tweak, then store`;
+
   openSheet(`
-    <h3>Add to fridge</h3>
-    <div class="h3sub">${items.length} item${items.length>1?'s':''} · check & tweak, then store</div>
+    <h3>${esc(title)}</h3>
+    <div class="h3sub">${subText}</div>
     ${data.summary ? `<div class="micnote" style="margin-bottom:10px">${esc(data.summary)}</div>` : ''}
-    ${items.map(reviewRow).join('')}
+    ${list.map(rowFn).join('')}
     ${qHtml}
     <div class="row">
       <button class="btn ghost" id="closeSheet">Close</button>
       ${questions.length ? `<button class="btn ghost" id="recheckBtn">Re-check</button>` : ''}
-      <button class="btn solid" id="commitBtn">Add to fridge</button>
+      <button class="btn solid" id="commitBtn">${commitLabel}</button>
     </div>`);
   wireClose();
   sheet.querySelectorAll('.idrop').forEach(b=> b.addEventListener('click', e=>{
     const row = e.target.closest('.irow');
     row.classList.toggle('drop');
-    row.querySelector('.ipick').checked = !row.classList.contains('drop');
+    const pick = row.querySelector('.ipick');
+    if (!pick.disabled) pick.checked = !row.classList.contains('drop');
   }));
+  // Edit-mode: action chips (used / toss / date) switch the row's action.
+  sheet.querySelectorAll('.iactions').forEach(group=>{
+    group.querySelectorAll('.iact').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        const row = chip.closest('.irow');
+        row.dataset.action = chip.dataset.act;
+        group.querySelectorAll('.iact').forEach(c=> c.classList.toggle('on', c===chip));
+      });
+    });
+  });
   const recheck = document.getElementById('recheckBtn');
   if (recheck) recheck.addEventListener('click', ()=>{
     const ans = (document.getElementById('answers')?.value || '').trim();
@@ -1143,32 +1313,53 @@ function renderReview(transcript, data){
 function collectItems(){
   return [...sheet.querySelectorAll('.irow')]
     .filter(row => row.querySelector('.ipick').checked && !row.classList.contains('drop'))
-    .map(row => ({
-      name: row.querySelector('.iname').value.trim(),
-      matched_product_id: row.dataset.pid || null,
-      quantity: Number(row.querySelector('.iqty').value) || 1,
-      unit: row.querySelector('.iunit').value.trim() || null,
-      best_before_date: row.querySelector('.idate').value || null,
-      opened: row.querySelector('.iopen').checked,
-    }))
+    .map(row => {
+      const name = row.querySelector('.iname').value.trim();
+      const pid = row.dataset.pid || null;
+      if (row.dataset.mode === 'edit'){
+        const action = row.dataset.action || 'consume';
+        const item = { name, matched_product_id: pid, action };
+        if (action === 'set_date'){
+          item.best_before_date = row.querySelector('.idate').value || null;
+        } else {
+          item.quantity = Number(row.querySelector('.iqty').value) || 1;
+        }
+        return item;
+      }
+      return {
+        name,
+        matched_product_id: pid,
+        quantity: Number(row.querySelector('.iqty').value) || 1,
+        unit: row.querySelector('.iunit').value.trim() || null,
+        best_before_date: row.querySelector('.idate').value || null,
+        opened: row.querySelector('.iopen').checked,
+      };
+    })
     .filter(it => it.name);
 }
 
 async function runCommit(transcript){
+  const isEdit = intakeMode === 'edit';
+  const commitLabel = isEdit ? 'Apply changes' : 'Add to fridge';
   const items = collectItems();
   if (!items.length) return;
   const btn = document.getElementById('commitBtn');
-  btn.disabled = true; btn.textContent = 'Adding…';
+  btn.disabled = true; btn.textContent = isEdit ? 'Applying…' : 'Adding…';
   let data;
   try { data = await apiPost('/api/intake/commit', { items }); }
   catch (err){
-    btn.disabled = false; btn.textContent = 'Add to fridge';
+    btn.disabled = false; btn.textContent = commitLabel;
     showError(err);
     return;
   }
   closeSheet();
-  const made = data.created_products ? ` (${data.created_products} new)` : '';
-  showSnack(`Added <b>${data.added}</b> item${data.added>1?'s':''}${made} to the fridge`);
+  if (isEdit){
+    const n = data.changed || 0;
+    showSnack(`Updated <b>${n}</b> item${n===1?'':'s'} in the fridge`);
+  } else {
+    const made = data.created_products ? ` (${data.created_products} new)` : '';
+    showSnack(`Added <b>${data.added}</b> item${data.added>1?'s':''}${made} to the fridge`);
+  }
   await reload();
 }
 
@@ -1240,11 +1431,13 @@ setInterval(renderSyncLabel, 60000);
 /* ---- init ---- */
 reload();
 
-// Dim the Add button when voice intake isn't configured on the server.
+// Dim the Add/Edit buttons when voice intake isn't configured on the server.
 apiGet('/api/health').then(h => {
   if (h && h.intake_enabled === false){
-    const b = document.getElementById('addBtn');
-    if (b){ b.style.opacity = '.45'; b.title = 'Set FOODBRAIN_OPENROUTER_API_KEY to enable'; }
+    ['addBtn','editBtn'].forEach(id=>{
+      const b = document.getElementById(id);
+      if (b){ b.disabled = true; b.title = 'Set FOODBRAIN_OPENROUTER_API_KEY to enable'; }
+    });
   }
 }).catch(()=>{});
 </script>

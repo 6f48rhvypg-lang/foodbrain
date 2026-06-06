@@ -2,6 +2,34 @@
 
 Current date: 2026-06-06
 
+## ✅ Voice EDIT mode + UX polish (2026-06-06, latest)
+
+Voice now does two things, chosen from two big buttons at the top of the SPA:
+**🛒 Add** (after shopping → stock) and **✏️ Edit** (used / wrong input →
+consume / toss / fix date). Both run the same talk→understand→review→commit
+pipeline; the button just sets a `mode` (`add`|`edit`) that swaps the model's
+system prompt and the review sheet.
+
+- `intake.py`: `IntakeItem.action` (`add`/`consume`/`toss`/`set_date`), a second
+  `_EDIT_SYSTEM_PROMPT`, `understand_transcript(..., mode=)`, and action-synonym
+  normalization (`finished`→consume, `threw away`→toss, …).
+- `api.py`: `intake_understand(..., mode=)`; `intake_commit` now dispatches per
+  item action — add (create/add stock), consume, toss (confirm+undo), set_date
+  (resolves the first stock entry). Edit actions require a matched product or
+  400. Returns `added`/`created_products`/`changed`.
+- `server.py`: passes `mode` through to understand.
+- `fridge-now.html`: two-button intake bar; edit review with per-row action chips
+  (used/toss/date) + amount/date fields and a "not in fridge" guard; **smaller
+  item name font (18→15px)** so long German names fit; a **food emoji** in front
+  of each item (and each review row) via `emojiFor(name)`.
+- Tests: +9 in `tests/test_intake.py` (edit prompt, synonyms, consume/toss/
+  set_date commit, mixed batch, unmatched-edit reject). Suite **127 (1 skipped)**.
+- VERIFIED live: edit-mode understand matched real Grocy products ("milk"→Milch
+  consume, "two eggs"→Eier consume qty 2); a consume(0.5 Milch)→undo round-trip
+  was **net-zero** against real Grocy. SPA screenshotted at phone width, console
+  clean.
+
+
 ## ✅ COMPLETE (2026-06-06): Voice intake — deployed, HTTPS live, keys rotated
 
 **DEPLOYED AND LIVE.** CT 105 is on `66b0a75`, `foodbrain.service` active,

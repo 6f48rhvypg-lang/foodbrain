@@ -129,6 +129,7 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                         api.intake_understand(
                             _require(body, "transcript"),
                             answers=str(body.get("answers", "")),
+                            mode=str(body.get("mode", "add")),
                         ),
                     )
                 elif route == "/api/intake/commit":
