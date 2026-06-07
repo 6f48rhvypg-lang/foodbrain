@@ -1017,11 +1017,15 @@ document.getElementById('clearSel').addEventListener('click', exitCombine);
 
 /* ---- write-back: consume / toss (optimistic, real undo) ---- */
 function consume(it, el){
-  writeRemove(it, el, '/api/consume', { product_id: it.id, amount: 1 }, `<b>${esc(it.name)}</b> verbraucht`);
+  // Remove the whole entry: Grocy rejects amounts > current stock (e.g. 0.5),
+  // so book the full stock amount rather than a hardcoded 1.
+  const amount = Number(it.amount) || 1;
+  writeRemove(it, el, '/api/consume', { product_id: it.id, amount }, `<b>${esc(it.name)}</b> verbraucht`);
 }
 function toss(it, el){
   if (!confirm(`${it.name} wegwerfen? Wird aus dem Bestand entfernt.`)) return;
-  writeRemove(it, el, '/api/toss', { product_id: it.id, amount: 1, confirm: true }, `<b>${esc(it.name)}</b> weggeworfen`);
+  const amount = Number(it.amount) || 1;
+  writeRemove(it, el, '/api/toss', { product_id: it.id, amount, confirm: true }, `<b>${esc(it.name)}</b> weggeworfen`);
 }
 async function writeRemove(it, el, path, body, msg){
   el.classList.add('removing');               // optimistic
