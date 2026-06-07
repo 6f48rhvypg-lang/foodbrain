@@ -475,6 +475,17 @@
   .iquestions .qk { font-family: "IBM Plex Mono", monospace; font-size: 11px;
     letter-spacing: .14em; text-transform: uppercase; color: var(--warm); margin-bottom: 6px; }
   .iquestions ul { margin: 0 0 8px 16px; font-size: 13px; line-height: 1.5; }
+  .qanswer { display: flex; gap: 8px; align-items: stretch; }
+  .qanswer input { flex: 1; min-width: 0; padding: 9px 11px; font: inherit;
+    font-size: 14px; color: var(--ink); background: #fff;
+    border: 1px solid var(--warm); border-radius: 9px; }
+  .qanswer input:focus { outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(68,105,78,.15); }
+  .qrecheck { flex: none; padding: 9px 14px; font: inherit; font-size: 13px;
+    font-weight: 600; color: #fff; background: var(--warm); border: none;
+    border-radius: 9px; cursor: pointer; white-space: nowrap; }
+  .qrecheck:hover { filter: brightness(1.05); }
+  .qrecheck:active { transform: translateY(1px); }
   .irow {
     display: grid; grid-template-columns: 22px 1fr auto; gap: 8px 10px;
     align-items: center; padding: 11px 12px; border: 1px solid var(--line);
@@ -1438,11 +1449,17 @@ function stopRecording(){
   document.getElementById('micBtn')?.classList.remove('rec');
 }
 
-async function runUnderstand(answers){
+async function runUnderstand(answers, transcriptArg){
   stopRecording();
   const title = INTAKE_COPY[intakeMode].title;
-  const transcript = document.getElementById('intakeText').value.trim();
-  if (!transcript){ document.getElementById('intakeText').focus(); return; }
+  // On the first pass the transcript lives in the #intakeText textarea; on a
+  // re-check that textarea is gone (the review sheet replaced it), so the caller
+  // passes the transcript explicitly. Reading the missing element used to throw
+  // and silently abort — leaving "Erneut prüfen" doing nothing.
+  const inputEl = document.getElementById('intakeText');
+  const transcript = (transcriptArg != null ? String(transcriptArg)
+                     : (inputEl ? inputEl.value : '')).trim();
+  if (!transcript){ if (inputEl) inputEl.focus(); return; }
   openSheet(`<h3>${esc(title)}</h3>
     <div class="h3sub">lese deinen Kühlschrank…</div>
     <div class="loading">denke nach…</div>`);
@@ -1550,7 +1567,10 @@ function renderReview(transcript, data){
     <div class="iquestions">
       <div class="qk">Ein paar Rückfragen</div>
       <ul>${questions.map(q=>`<li>${esc(q)}</li>`).join('')}</ul>
-      <input class="iname" id="answers" style="border-bottom:1px solid var(--line)" placeholder="hier antworten, dann Erneut prüfen (optional)" />
+      <div class="qanswer">
+        <input id="answers" placeholder="hier antworten (optional)…" />
+        <button class="qrecheck" id="recheckBtn" type="button">Erneut prüfen</button>
+      </div>
     </div>` : '';
 
   const rowFn = isEdit ? editRow : reviewRow;
@@ -1566,7 +1586,6 @@ function renderReview(transcript, data){
     ${qHtml}
     <div class="row">
       <button class="btn ghost" id="closeSheet">Schließen</button>
-      ${questions.length ? `<button class="btn ghost" id="recheckBtn">Erneut prüfen</button>` : ''}
       <button class="btn solid" id="commitBtn">${commitLabel}</button>
     </div>`);
   wireClose();
@@ -1589,7 +1608,7 @@ function renderReview(transcript, data){
   const recheck = document.getElementById('recheckBtn');
   if (recheck) recheck.addEventListener('click', ()=>{
     const ans = (document.getElementById('answers')?.value || '').trim();
-    runUnderstand(ans);
+    runUnderstand(ans, transcript);
   });
   document.getElementById('commitBtn').addEventListener('click', ()=> runCommit(transcript));
 }
