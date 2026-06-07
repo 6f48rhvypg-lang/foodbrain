@@ -449,11 +449,11 @@
   .irow[data-mode="edit"][data-action="set_date"] .famt { display: none; }
   .irow[data-mode="edit"]:not([data-action="set_date"]) .fdate { display: none; }
   textarea#intakeText {
-    width: 100%; min-height: 110px; resize: vertical;
-    background: var(--surface-2); color: var(--ink);
+    width: 100%; min-height: 170px; max-height: 50vh; resize: vertical;
+    background: var(--surface-2); color: var(--ink); overflow-y: auto;
     border: 1px solid var(--line); border-radius: 14px;
     padding: 14px 66px 14px 14px; font-family: "IBM Plex Mono", monospace;
-    font-size: 14px; line-height: 1.6; outline: none; transition: border-color .2s;
+    font-size: 16px; line-height: 1.6; outline: none; transition: border-color .2s;
   }
   textarea#intakeText:focus { border-color: var(--accent); }
   .micwrap { position: relative; }
@@ -1303,7 +1303,9 @@ function renderConnect(data){
 /* ---- Add by voice: talk at the fridge -> understand -> review -> store ---- */
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null, recording = false;
-let committedText = '';   // finalized speech, kept across auto-restart cycles
+let committedText = '';   // banked speech, kept across auto-restart cycles
+let liveSession = '';     // text of the current recognition session (not yet banked)
+let prevResultLen = 0;    // to detect iOS truncating its results list mid-session
 let restartTimer = null;
 
 let intakeMode = 'add'; // 'add' (after shopping) or 'edit' (used / fix)
@@ -1364,9 +1366,19 @@ function toggleRecording(){
   if (!SpeechRec) return;
   const ta = document.getElementById('intakeText');
   committedText = ta && ta.value ? ta.value.trim() : '';
+  liveSession = ''; prevResultLen = 0;
   recording = true;
   document.getElementById('micBtn')?.classList.add('rec');
   startRecognition();
+}
+
+// Show text in the box and grow it to fit, so nothing the user said is hidden
+// behind a tiny scroll. Stays pinned to the newest words while recording.
+function setIntakeText(ta, text){
+  ta.value = text;
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, Math.round(window.innerHeight * 0.5)) + 'px';
+  ta.scrollTop = ta.scrollHeight;
 }
 
 // One recognition session. iOS/Safari ends a session on every pause and caps
@@ -1381,14 +1393,20 @@ function startRecognition(){
   recognition.onresult = (e)=>{
     const ta = document.getElementById('intakeText');
     if (!ta) return;
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++){
-      const seg = e.results[i][0].transcript;
-      if (e.results[i].isFinal) committedText = (committedText + ' ' + seg).trim();
-      else interim += seg;
+    // iOS Safari truncates its results list once it grows past an internal
+    // limit ("the threshold") — resultIndex/length jump back down. When that
+    // happens, bank what we have so the earlier words aren't lost.
+    if (e.results.length < prevResultLen && liveSession){
+      committedText = (committedText + ' ' + liveSession).trim();
+      liveSession = '';
     }
-    ta.value = (committedText + ' ' + interim).trim();
-    ta.scrollTop = ta.scrollHeight;
+    prevResultLen = e.results.length;
+    // Rebuild the whole session from index 0 each event (handles interim->final
+    // transitions without double-counting), then show banked + live.
+    let session = '';
+    for (let i = 0; i < e.results.length; i++) session += e.results[i][0].transcript + ' ';
+    liveSession = session.trim();
+    setIntakeText(ta, (committedText + ' ' + liveSession).trim());
   };
   recognition.onerror = (e)=>{
     // Permission denial is fatal; no-speech / network / aborted are recoverable
@@ -1396,6 +1414,10 @@ function startRecognition(){
     if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) stopRecording();
   };
   recognition.onend = ()=>{
+    // Session ended (a pause, or iOS' length cap): bank everything it heard,
+    // including words it never marked "final", then restart if still recording.
+    if (liveSession){ committedText = (committedText + ' ' + liveSession).trim(); liveSession = ''; }
+    prevResultLen = 0;
     if (!recording){ document.getElementById('micBtn')?.classList.remove('rec'); return; }
     clearTimeout(restartTimer);
     restartTimer = setTimeout(startRecognition, 200);
