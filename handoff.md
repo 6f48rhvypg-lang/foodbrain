@@ -50,6 +50,15 @@ dotenv loader keeps inline `#` literally (only whole-line `#` = comment).
 **CT 104 stray `tailscale serve` cleaned up.** Remaining optional: point the HA
 "Webpage" dashboard at the https URL; build the photo-intake next slice.
 
+**Light-overhaul redesign deployed (`a1c1fe5`)** and confirmed working on the
+phone (Safari direct to `…/ts.net/ui`). CT 105 is now on `a1c1fe5`. To update CT
+105 in future: `pct exec 105 -- git -C /opt/foodbrain pull && pct exec 105 --
+systemctl restart foodbrain` (driven from the dev box over
+`ssh root@192.168.178.100`). **Caching gotcha:** the server sends no cache
+headers for `/ui`, so Safari/PWA serve a stale copy after a deploy — bust it with
+`…/ui?v=N` or clear Website Data. Open follow-up: make `/ui` send no-cache (or
+version assets) so phones always get the latest.
+
 The original step-by-step (now done) is preserved below for reference.
 
 ### ORIGINAL TASK (2026-06-06): Voice intake — built & pushed, NOT yet deployed
