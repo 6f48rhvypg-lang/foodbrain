@@ -153,21 +153,28 @@ class FoodBrainAPI:
             "selection": [item.name for item in selected],
             "pairings": pairings,
             "recipes": recipes,
+            "pairings_loaded": self.pairings is not None,
+            "recipes_loaded": bool(self.recipes),
         }
 
-    def build_prompt(self, selection: List[str]) -> dict:
-        """An editable LLM prompt prefilled from the selection (no LLM call)."""
+    def build_prompt(
+        self, selection: List[str], preferences: Optional[dict] = None
+    ) -> dict:
+        """An editable German LLM prompt prefilled from the selection + mood.
+
+        ``preferences`` carries the "food mood" answers the SPA collects:
+        ``cuisine`` (one of :data:`_CUISINES`), ``style`` (one of
+        :data:`_STYLES`), and ``needs`` (a list drawn from :data:`_NEEDS`).
+        All are optional; the prompt degrades gracefully when none are given.
+        No LLM is called — the SPA copies the returned text.
+        """
         stock = self.stock_provider()
         selected = _resolve_selection(stock, selection)
         if not selected:
             raise ApiError(400, "selection did not match any in-stock products")
 
         listed = ", ".join(_describe_item(item) for item in selected)
-        prompt = (
-            f"I have {listed}. Suggest 3 simple dinners I can make tonight using "
-            "mostly these, plus common pantry staples. Keep them quick and "
-            "beginner-friendly, and tell me roughly how long each takes."
-        )
+        prompt = _german_prompt(listed, preferences or {})
         return {
             "selection": [item.name for item in selected],
             "prompt": prompt,
@@ -574,6 +581,77 @@ def _describe_item(item: StockItem) -> str:
     if item.unit:
         return f"{amount} {item.unit} {item.name}"
     return f"{amount} {item.name}"
+
+
+# --- "Ask-AI" German prompt builder ------------------------------------------
+# The SPA collects a short "food mood" (cuisine / style / special needs) and we
+# turn it into an editable German prompt. Keys are stable ids the frontend sends;
+# values are the natural-language fragments woven into the prompt. Unknown ids are
+# ignored so the UI and API can evolve independently.
+
+_CUISINES = {
+    "asiatisch": "asiatische",
+    "europäisch": "europäische",
+    "fusion": "Fusion-",
+    "gesund": "gesunde, nährstoffreiche",
+    "wohlfühl": "Wohlfühl- / Soulfood-",
+    "egal": "",  # no cuisine constraint -> more variety (see _prompt_count)
+}
+
+_STYLES = {
+    "einfach": "Halte sie super einfach und anfängerfreundlich, mit wenigen Schritten.",
+    "experimentell": "Sei ruhig experimentell und kreativ — überrasch mich.",
+    "schnell": "Jedes Gericht soll in etwa 30 Minuten fertig sein.",
+    "gäste": "Sie sollen sich für ein Abendessen mit Freunden eignen — etwas zum Vorzeigen.",
+}
+
+_NEEDS = {
+    "warm": "warm",
+    "kalt": "kalt",
+    "sättigend": "sättigend",
+    "leicht": "leicht",
+    "scharf": "scharf gewürzt",
+    "mild": "mild gewürzt",
+}
+
+
+def _prompt_count(cuisine: str) -> int:
+    """How many dinners to ask for. 'egal' widens the net for more variety."""
+    return 8 if cuisine == "egal" else 3
+
+
+def _join_de(parts: List[str]) -> str:
+    """German list join: 'a', 'a und b', 'a, b und c'."""
+    if len(parts) <= 1:
+        return "".join(parts)
+    return f"{', '.join(parts[:-1])} und {parts[-1]}"
+
+
+def _german_prompt(listed: str, preferences: dict) -> str:
+    cuisine = str(preferences.get("cuisine") or "").strip().lower()
+    style = str(preferences.get("style") or "").strip().lower()
+    raw_needs = preferences.get("needs") or []
+    if isinstance(raw_needs, str):
+        raw_needs = [raw_needs]
+    needs = [_NEEDS[n] for n in (str(x).strip().lower() for x in raw_needs) if n in _NEEDS]
+
+    count = _prompt_count(cuisine)
+    cuisine_word = _CUISINES.get(cuisine, "")
+    kind = f"{cuisine_word} Gerichte" if cuisine_word else "Gerichte"
+
+    sentences = [
+        f"Ich habe {listed}.",
+        f"Schlag mir {count} {kind} vor, die ich heute kochen kann — "
+        "hauptsächlich mit diesen Zutaten plus üblichen Vorratssachen.",
+    ]
+    if cuisine == "egal":
+        sentences.append("Mix gern quer durch verschiedene Küchen für mehr Abwechslung.")
+    if needs:
+        sentences.append(f"Die Gerichte sollen {_join_de(needs)} sein.")
+    if style in _STYLES:
+        sentences.append(_STYLES[style])
+    sentences.append("Sag mir bei jedem Gericht grob, wie lange es dauert.")
+    return " ".join(sentences)
 
 
 def _parse_iso_date(value: str) -> date:

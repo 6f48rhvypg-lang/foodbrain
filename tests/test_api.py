@@ -140,7 +140,23 @@ class BuildPromptTest(unittest.TestCase):
         self.assertEqual(result["selection"], ["Zucchini", "Feta"])
         self.assertIn("2 Stück Zucchini", result["prompt"])
         self.assertIn("1 Pack Feta", result["prompt"])
-        self.assertIn("3 simple dinners", result["prompt"])
+        # German by default; no mood -> 3 dishes, no cuisine word.
+        self.assertIn("Schlag mir 3 Gerichte vor", result["prompt"])
+
+    def test_prompt_weaves_in_mood(self) -> None:
+        result = _api().build_prompt(
+            ["2"],
+            {"cuisine": "asiatisch", "style": "schnell", "needs": ["scharf", "warm"]},
+        )
+        prompt = result["prompt"]
+        self.assertIn("asiatische Gerichte", prompt)
+        self.assertIn("30 Minuten", prompt)
+        self.assertIn("scharf gewürzt und warm", prompt)
+
+    def test_prompt_egal_widens_variety(self) -> None:
+        result = _api().build_prompt(["2"], {"cuisine": "egal"})
+        self.assertIn("Schlag mir 8 Gerichte vor", result["prompt"])
+        self.assertIn("quer durch verschiedene Küchen", result["prompt"])
 
     def test_prompt_empty_selection_400(self) -> None:
         with self.assertRaises(ApiError) as ctx:

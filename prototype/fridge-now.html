@@ -421,6 +421,17 @@
   .sheet .btn.ghost:hover { background: var(--bg-1); }
   .sheet .btn.solid { background: var(--accent); color: var(--accent-ink); }
 
+  /* ---------- Ask-AI food mood ---------- */
+  .moodq { margin-bottom: 16px; }
+  .moodlabel {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-faint); letter-spacing: .12em; text-transform: uppercase;
+    margin-bottom: 9px;
+  }
+  .moodlabel .opt { text-transform: none; letter-spacing: 0; color: var(--ink-faint); opacity: .7; }
+  .moodopts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .moodopts .chip { box-shadow: none; }
+
   /* ---------- voice intake ---------- */
   .iactions { display: inline-flex; gap: 5px; }
   .iact {
@@ -1121,33 +1132,96 @@ scrim.addEventListener('click', closeSheet);
 function wireClose(){ const b = document.getElementById('closeSheet'); if (b) b.addEventListener('click', closeSheet); }
 function selectedNames(){ return [...selected].map(id=>items.find(i=>i.id===id)?.name).filter(Boolean); }
 
-/* Ask AI — fetch the editable prompt from the API, then copy it. */
-document.getElementById('askBtn').addEventListener('click', async ()=>{
+/* Ask AI — collect a "food mood", then build & copy a German prompt. */
+const MOOD_GROUPS = [
+  { key: 'cuisine', label: 'Küche', multi: false, opts: [
+    ['asiatisch','Asiatisch'], ['europäisch','Europäisch'], ['fusion','Fusion'],
+    ['gesund','Gesund'], ['wohlfühl','Soulfood'], ['egal','Ist mir egal'],
+  ]},
+  { key: 'style', label: 'Stil', multi: false, opts: [
+    ['einfach','Super einfach'], ['experimentell','Experimentell'],
+    ['schnell','30 Minuten'], ['gäste','Für Freunde'],
+  ]},
+  { key: 'needs', label: 'Besonderes', sub: 'optional · mehrfach', multi: true, opts: [
+    ['warm','Warm'], ['kalt','Kalt'], ['sättigend','Sättigend'],
+    ['leicht','Leicht'], ['scharf','Scharf'], ['mild','Mild'],
+  ]},
+];
+const mood = { cuisine: 'egal', style: '', needs: new Set() };
+
+function moodSheetHtml(names){
+  const group = g => `
+    <div class="moodq">
+      <div class="moodlabel">${g.label}${g.sub?` <span class="opt">(${g.sub})</span>`:''}</div>
+      <div class="moodopts" data-group="${g.key}" data-multi="${g.multi?1:0}">
+        ${g.opts.map(([val,txt])=>{
+          const on = g.multi ? mood[g.key].has(val) : mood[g.key]===val;
+          return `<span class="chip${on?' active':''}" data-val="${val}">${txt}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  return `
+    <h3>KI fragen</h3>
+    <div class="h3sub">food mood · ${names.length} Zutat${names.length>1?'en':''}</div>
+    ${MOOD_GROUPS.map(group).join('')}
+    <div class="row">
+      <button class="btn ghost" id="closeSheet">Schließen</button>
+      <button class="btn solid" id="genBtn">Prompt erstellen</button>
+    </div>`;
+}
+
+function wireMood(){
+  sheet.querySelectorAll('.moodopts').forEach(box=>{
+    const key = box.dataset.group, multi = box.dataset.multi === '1';
+    box.querySelectorAll('.chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        const val = chip.dataset.val;
+        if (multi){
+          mood[key].has(val) ? mood[key].delete(val) : mood[key].add(val);
+          chip.classList.toggle('active');
+        } else {
+          mood[key] = (mood[key]===val) ? '' : val;
+          box.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c===chip && mood[key]===val));
+        }
+      });
+    });
+  });
+}
+
+document.getElementById('askBtn').addEventListener('click', ()=>{
   if (!selected.size) return;
   const sel = [...selected];
   const names = selectedNames();
-  openSheet(`
-    <h3>KI fragen</h3>
-    <div class="h3sub">bearbeitbarer Prompt · ${names.length} Zutat${names.length>1?'en':''}</div>
-    <div class="loading">Prompt wird erstellt…</div>`);
-  let data;
-  try { data = await apiPost('/api/build-prompt', { selection: sel }); }
-  catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>KI fragen</h3>
-    <div class="sheet-error"><b>Prompt konnte nicht erstellt werden.</b><br>${esc(err.message)}</div>
-    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`; wireClose(); return; }
-
-  openSheet(`
-    <h3>KI fragen</h3>
-    <div class="h3sub">bearbeitbarer Prompt · ${names.length} Zutat${names.length>1?'en':''}</div>
-    <textarea id="prompt">${esc(data.prompt)}</textarea>
-    <div class="row">
-      <button class="btn ghost" id="closeSheet">Schließen</button>
-      <button class="btn solid" id="copyBtn">Prompt kopieren</button>
-    </div>`);
+  openSheet(moodSheetHtml(names));
   wireClose();
-  document.getElementById('copyBtn').addEventListener('click', e=>{
-    navigator.clipboard.writeText(document.getElementById('prompt').value).then(()=>{
-      e.target.textContent='Kopiert ✓'; setTimeout(()=>e.target.textContent='Prompt kopieren',1600);
+  wireMood();
+  document.getElementById('genBtn').addEventListener('click', async ()=>{
+    const preferences = { cuisine: mood.cuisine, style: mood.style, needs: [...mood.needs] };
+    openSheet(`
+      <h3>KI fragen</h3>
+      <div class="h3sub">Prompt wird erstellt…</div>
+      <div class="loading">Prompt wird erstellt…</div>`);
+    let data;
+    try { data = await apiPost('/api/build-prompt', { selection: sel, preferences }); }
+    catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>KI fragen</h3>
+      <div class="sheet-error"><b>Prompt konnte nicht erstellt werden.</b><br>${esc(err.message)}</div>
+      <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`; wireClose(); return; }
+
+    openSheet(`
+      <h3>KI fragen</h3>
+      <div class="h3sub">bearbeitbarer Prompt · ${names.length} Zutat${names.length>1?'en':''}</div>
+      <textarea id="prompt">${esc(data.prompt)}</textarea>
+      <div class="row">
+        <button class="btn ghost" id="backToMood">Zurück</button>
+        <button class="btn solid" id="copyBtn">Prompt kopieren</button>
+      </div>`);
+    document.getElementById('backToMood').addEventListener('click', ()=>{
+      document.getElementById('askBtn').click();
+    });
+    document.getElementById('copyBtn').addEventListener('click', e=>{
+      navigator.clipboard.writeText(document.getElementById('prompt').value).then(()=>{
+        e.target.textContent='Kopiert ✓'; setTimeout(()=>e.target.textContent='Prompt kopieren',1600);
+      });
     });
   });
 });
@@ -1182,7 +1256,9 @@ function renderConnect(data){
             <span class="pn">${esc(pt.name)}</span>${pt.in_stock?'<span class="instock">auf Lager</span>':''}
             <span class="score">${Number(pt.score).toFixed(2)}</span></div>`).join('')}
         </div>`).join('')
-    : `<div class="empty">Keine Geschmacks-Kombinationen für diese Auswahl${pairings === null ? '' : ' (kein Pairing-Bundle geladen)'}.</div>`;
+    : `<div class="empty">${data.pairings_loaded === false
+        ? 'Kein Geschmacks-Bundle geladen — der Server läuft ohne Pairing-Daten.'
+        : 'Keine Geschmacks-Kombinationen für diese Auswahl gefunden.'}</div>`;
 
   const recipeHtml = recipes.length
     ? recipes.map(r=>{

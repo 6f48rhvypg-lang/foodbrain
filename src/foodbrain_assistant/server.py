@@ -14,7 +14,8 @@ Routes::
     GET  /api/health
     GET  /api/stock                  -> stock-with-scores (bands view)
     POST /api/connect                {"selection": [product_id, ...]}
-    POST /api/build-prompt           {"selection": [product_id, ...]}
+    POST /api/build-prompt           {"selection": [product_id, ...],
+                                      "preferences": {"cuisine", "style", "needs"}}
     GET  /api/product-entries?product_id=ID
     POST /api/consume                {"product_id": ID, "amount": 1}
     POST /api/toss                   {"product_id": ID, "amount": 1, "confirm": true}
@@ -97,7 +98,10 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                 if route == "/api/connect":
                     self._send(200, api.connect(_selection(body)))
                 elif route == "/api/build-prompt":
-                    self._send(200, api.build_prompt(_selection(body)))
+                    self._send(
+                        200,
+                        api.build_prompt(_selection(body), _preferences(body)),
+                    )
                 elif route == "/api/consume":
                     self._send(
                         200,
@@ -189,6 +193,12 @@ def _selection(body: dict) -> list:
     if not isinstance(selection, list):
         raise ApiError(400, "'selection' must be a list of product ids")
     return [str(value) for value in selection]
+
+
+def _preferences(body: dict) -> dict:
+    """The optional 'food mood' answers for the Ask-AI prompt builder."""
+    prefs = body.get("preferences")
+    return prefs if isinstance(prefs, dict) else {}
 
 
 def _items(body: dict) -> list:
