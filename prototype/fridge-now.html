@@ -271,8 +271,9 @@
     grid-row: 1; flex: 0 0 auto;
     width: 46px; height: 46px; border-radius: 14px;
     display: grid; place-items: center; font-size: 24px; line-height: 1;
-    background: var(--cbg);
-    border: 1px solid color-mix(in srgb, var(--c) 24%, transparent);
+    /* tile is tinted by food category (--tc/--tcbg); urgency lives on the spine + badge */
+    background: var(--tcbg, var(--cbg));
+    border: 1px solid color-mix(in srgb, var(--tc, var(--c)) 26%, transparent);
   }
 
   .item .body { grid-row: 1; min-width: 0; }
@@ -780,7 +781,7 @@ const EMOJI_RULES = [
   [/ei(er)?\b|egg/, '🥚'],
   [/butter|marg/, '🧈'],
   [/tomate|tomato|passata|sugo/, '🍅'],
-  [/gurke|cucumber|zucchin|zucker|courgette/, '🥒'],
+  [/gurke|cucumber|zucchin|courgette/, '🥒'],
   [/karotte|möhre|moehre|carrot|rüb/, '🥕'],
   [/zwiebel|onion|lauch|leek/, '🧅'],
   [/knoblauch|garlic/, '🧄'],
@@ -814,18 +815,20 @@ const EMOJI_RULES = [
 function emojiFor(name){
   const n = String(name || '').toLowerCase();
   for (const [re, emo] of EMOJI_RULES){ if (re.test(n)) return emo; }
-  return '🍽️';
+  // no specific match → use the (near-100% coverage) category icon instead of a lonely plate
+  return categoryFor(name).icon;
 }
 
 /* ---- classify a product into a food category (for the Kategorie grouping) ---- */
 const CATEGORY_RULES = [
+  // getraenk first so "Apfelsaft" reads as drink, not "apfel" → Obst
+  ['getraenk', 'Getränke', '🧃', /saft|juice|wasser|water|bier|beer|wein|wine|cola|limo|tee\b|tea|kaffee|coffee|smoothie/],
   ['obst', 'Obst', '🍎', /apfel|apple|banane|banana|zitrone|lemon|limette|lime|orange|mandarin|clementi|beere|berry|erdbeer|strawberr|himbeer|raspberr|heidelbeer|blueberr|traube|grape|birne|pear|pfirsich|peach|melone|melon|kiwi|mango|ananas|pineapple|pflaume|plum/],
   ['gemuese', 'Gemüse', '🥕', /tomate|tomato|gurke|cucumber|zucchin|courgette|karotte|möhre|moehre|carrot|rüb|zwiebel|onion|lauch|leek|knoblauch|garlic|paprika|pepper|chili|chilli|salat|lettuce|spinat|spinach|rucola|kohl|cabbage|kartoffel|potato|pilz|mushroom|champignon|mais|corn|brokkoli|broccoli|blumenkohl|cauliflower|aubergine|eggplant|sellerie|celery|bohne|bean|erbse|pea|kürbis|pumpkin|spargel|asparagus/],
-  ['milch', 'Milch & Ei', '🥚', /milch|milk|sahne|cream|joghur|yogh|yogurt|quark|käse|kaese|cheese|mozzarella|parmesan|feta|butter|marg|ei(er)?\b|egg/],
+  ['milch', 'Milch & Ei', '🥚', /milch|milk|sahne|cream|joghur|yogh|yogurt|quark|skyr|schmand|frischkäse|frischkaese|crème|creme fra|käse|kaese|cheese|mozzarella|parmesan|feta|butter|marg|ei(er)?\b|egg/],
   ['fleisch', 'Fleisch & Fisch', '🥩', /hähnchen|haehnchen|huhn|chicken|pute|turkey|rind|beef|steak|hack|schwein|pork|wurst|sausage|schinken|ham|speck|bacon|salami|landjäger|landjaeger|fisch|fish|lachs|salmon|thun|tuna|shrimp|garnele/],
   ['brot', 'Brot & Backwaren', '🍞', /brot|brötchen|broetchen|bread|toast|baguette|sourdough|keks|cookie|kuchen|cake|gebäck|croissant|mehl|flour/],
-  ['vorrat', 'Vorratsschrank', '🥫', /nudel|pasta|spaghetti|noodle|reis|rice|zucker|sugar|öl|oel|\boil\b|olive|senf|mustard|dijon|dose|can|konserve|linse|lentil|kichererbse|chickpea|honig|honey|marmelade|jam|konfit|salz|salt|gewürz|spice|essig|vinegar|sauce|soße/],
-  ['getraenk', 'Getränke', '🧃', /wasser|water|saft|juice|bier|beer|wein|wine|cola|limo|tee\b|tea|kaffee|coffee/],
+  ['vorrat', 'Vorratsschrank', '🥫', /nudel|pasta|spaghetti|noodle|reis|rice|quinoa|couscous|cous cous|bulgur|hafer|müsli|muesli|granola|grieß|griess|polenta|zucker|sugar|öl|oel|\boil\b|olive|senf|mustard|dijon|dose|can|konserve|linse|lentil|kichererbse|chickpea|honig|honey|marmelade|jam|konfit|salz|salt|gewürz|spice|essig|vinegar|sauce|soße/],
   ['suess', 'Süßes & Snacks', '🍫', /schoko|chocolate|snack|chips|riegel|bonbon|candy|gummi|pralin/],
 ];
 function categoryFor(name){
@@ -833,6 +836,20 @@ function categoryFor(name){
   for (const [key, label, icon, re] of CATEGORY_RULES){ if (re.test(n)) return { key, label, icon }; }
   return { key: 'sonstiges', label: 'Sonstiges', icon: '🍽️' };
 }
+
+/* ---- per-category tile colours (tuned for the cream palette) ---- */
+const CAT_STYLE = {
+  obst:      { c:'#c4503e', cbg:'rgba(196, 80, 62, .12)'  },
+  gemuese:   { c:'#4f8a4a', cbg:'rgba(79, 138, 74, .13)'  },
+  milch:     { c:'#5a86b0', cbg:'rgba(90, 134, 176, .13)' },
+  fleisch:   { c:'#b05f47', cbg:'rgba(176, 95, 71, .13)'  },
+  brot:      { c:'#c2904f', cbg:'rgba(194, 144, 79, .15)' },
+  vorrat:    { c:'#8f7b46', cbg:'rgba(143, 123, 70, .15)' },
+  getraenk:  { c:'#3f9b94', cbg:'rgba(63, 155, 148, .14)' },
+  suess:     { c:'#9a5a8c', cbg:'rgba(154, 90, 140, .14)' },
+  sonstiges: { c:'#8a9486', cbg:'rgba(138, 148, 134, .14)'},
+};
+function tileStyleFor(name){ return CAT_STYLE[categoryFor(name).key] || CAT_STYLE.sonstiges; }
 
 function dueLabel(d){
   if (d === null || d === undefined) return '—';
@@ -930,6 +947,9 @@ function renderByCategory(){
     shelf.className = 'shelf';
     const head = document.createElement('div');
     head.className = 'shelf-head';
+    const hs = CAT_STYLE[cat.key] || CAT_STYLE.sonstiges;
+    head.style.setProperty('--c', hs.c);
+    head.style.setProperty('--cbg', hs.cbg);
     head.innerHTML = `
       <span class="sicon">${cat.icon}</span>
       <h2>${esc(cat.label)}</h2>
@@ -949,6 +969,9 @@ function itemEl(it, meta, delay){
   el.className = 'item' + (selected.has(it.id)?' selected':'');
   el.style.setProperty('--c', meta.c);
   el.style.setProperty('--cbg', meta.cbg);
+  const ts = tileStyleFor(it.name);
+  el.style.setProperty('--tc', ts.c);
+  el.style.setProperty('--tcbg', ts.cbg);
   el.style.animationDelay = delay.toFixed(2)+'s';
   el.dataset.id = it.id;
 
