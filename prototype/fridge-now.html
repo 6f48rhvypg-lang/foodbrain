@@ -452,18 +452,21 @@
     width: 100%; min-height: 110px; resize: vertical;
     background: var(--surface-2); color: var(--ink);
     border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px 48px 14px 14px; font-family: "IBM Plex Mono", monospace;
+    padding: 14px 66px 14px 14px; font-family: "IBM Plex Mono", monospace;
     font-size: 14px; line-height: 1.6; outline: none; transition: border-color .2s;
   }
   textarea#intakeText:focus { border-color: var(--accent); }
   .micwrap { position: relative; }
   .micbtn {
-    position: absolute; top: 10px; right: 10px; width: 34px; height: 34px;
+    position: absolute; top: 8px; right: 8px; width: 50px; height: 50px;
     border-radius: 50%; border: 1px solid var(--line); cursor: pointer;
-    background: var(--surface); color: var(--ink); font-size: 16px; line-height: 1;
-    display: grid; place-items: center; transition: all .2s;
+    background: var(--surface); color: var(--ink); font-size: 22px; line-height: 1;
+    display: grid; place-items: center;
+    transition: transform .12s, background .2s, border-color .2s;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none;
   }
   .micbtn:hover { border-color: var(--accent); }
+  .micbtn:active { transform: scale(.9); }
   .micbtn.rec { background: var(--hot); color: #fff; border-color: var(--hot); animation: recpulse 1.1s ease-in-out infinite; }
   @keyframes recpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(210,79,55,.5); } 50% { box-shadow: 0 0 0 7px rgba(210,79,55,0); } }
   .micnote { font-size: 11px; color: var(--ink-faint); margin: 8px 2px 0; }
@@ -515,6 +518,13 @@
     padding: 2px 7px; border-radius: 6px; margin-left: 4px;
   }
   .pair .score { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint); }
+  .pmorebtn {
+    width: 100%; padding: 9px 12px; margin-bottom: 7px; cursor: pointer;
+    background: transparent; color: var(--ink-dim);
+    border: 1px dashed var(--line-soft); border-radius: 12px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+  }
+  .pmorebtn:hover { color: var(--ink); border-color: var(--accent); }
   .recipe { padding: 13px 14px; border: 1px solid var(--line-soft); border-radius: 13px; margin-bottom: 8px; background: var(--surface-2); }
   .recipe .rn { font-family: "Fraunces", serif; font-size: 18px; font-weight: 600; }
   .recipe .rm { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-dim); margin-top: 5px; }
@@ -631,7 +641,7 @@
 
     <main id="shelves"><!-- rendered --></main>
 
-    <div class="hint" id="hint">tipp einen Artikel an für Aktionen · „Kombinieren“ zum Verbinden</div>
+    <div class="hint" id="hint">tipp einen Artikel an für Aktionen · „Kombinieren“ für passende Zutaten</div>
   </div>
 
   <!-- combine action bar -->
@@ -639,7 +649,7 @@
     <div class="panel">
       <span class="selcount"><b id="selN">0</b> ausgewählt</span>
       <button class="btn ghost" id="clearSel">Fertig</button>
-      <button class="btn ghost" id="connectBtn">Verbinden</button>
+      <button class="btn ghost" id="connectBtn">Passt dazu</button>
       <button class="btn solid" id="askBtn">KI&nbsp;fragen</button>
     </div>
   </div>
@@ -973,7 +983,7 @@ function enterCombine(){
   appEl.classList.add('combining');
   shelvesEl.querySelectorAll('.item.expanded').forEach(e=>e.classList.remove('expanded'));
   document.getElementById('combineLabel').textContent = 'Fertig';
-  document.getElementById('hint').textContent = 'tippe Zutaten an · dann Verbinden oder KI fragen';
+  document.getElementById('hint').textContent = 'tippe Zutaten an · dann „Passt dazu“ oder KI fragen';
   syncBar();
 }
 function exitCombine(){
@@ -982,7 +992,7 @@ function exitCombine(){
   selected.clear();
   shelvesEl.querySelectorAll('.item.selected').forEach(e=>e.classList.remove('selected'));
   document.getElementById('combineLabel').textContent = 'Kombinieren';
-  document.getElementById('hint').textContent = 'tipp einen Artikel an für Aktionen · „Kombinieren“ zum Verbinden';
+  document.getElementById('hint').textContent = 'tipp einen Artikel an für Aktionen · „Kombinieren“ für passende Zutaten';
   syncBar();
 }
 document.getElementById('combineBtn').addEventListener('click', ()=>{
@@ -1232,13 +1242,13 @@ document.getElementById('connectBtn').addEventListener('click', async ()=>{
   const sel = [...selected];
   const names = selectedNames();
   openSheet(`
-    <h3>Verbinden</h3>
+    <h3>Passt dazu</h3>
     <div class="h3sub">FoodBrain · ${esc(names.join(' + '))}</div>
-    <div class="loading">verbinde…</div>`);
+    <div class="loading">suche passende Zutaten…</div>`);
   let data;
   try { data = await apiPost('/api/connect', { selection: sel }); }
-  catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>Verbinden</h3>
-    <div class="sheet-error"><b>Konnte nicht verbinden.</b><br>${esc(err.message)}</div>
+  catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>Passt dazu</h3>
+    <div class="sheet-error"><b>Konnte keine passenden Zutaten finden.</b><br>${esc(err.message)}</div>
     <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`; wireClose(); return; }
   renderConnect(data);
 });
@@ -1246,49 +1256,55 @@ document.getElementById('connectBtn').addEventListener('click', async ()=>{
 function renderConnect(data){
   const names = data.selection || [];
   const pairings = data.pairings || [];
-  const recipes = data.recipes || [];
+
+  const PAIR_PEEK = 4; // partners shown before "mehr anzeigen"
+
+  const pairRow = pt => `<div class="pair">
+    <span class="pn">${esc(pt.name)}</span>${pt.in_stock?'<span class="instock">auf Lager</span>':''}
+    <span class="score">${Number(pt.score).toFixed(2)}</span></div>`;
 
   const pairingHtml = pairings.length
-    ? pairings.map(p=>`
-        <div class="pgroup">
+    ? pairings.map((p,gi)=>{
+        const partners = p.partners || [];
+        const head = partners.slice(0, PAIR_PEEK).map(pairRow).join('');
+        const rest = partners.slice(PAIR_PEEK);
+        const more = rest.length
+          ? `<div class="pmore" id="pmore${gi}" hidden>${rest.map(pairRow).join('')}</div>
+             <button class="pmorebtn" type="button" data-more="${gi}">+ ${rest.length} weitere anzeigen</button>`
+          : '';
+        return `<div class="pgroup">
           <div class="pgi">${esc(p.ingredient)}</div>
-          ${(p.partners||[]).map(pt=>`<div class="pair">
-            <span class="pn">${esc(pt.name)}</span>${pt.in_stock?'<span class="instock">auf Lager</span>':''}
-            <span class="score">${Number(pt.score).toFixed(2)}</span></div>`).join('')}
-        </div>`).join('')
+          ${head}${more}
+        </div>`;
+      }).join('')
     : `<div class="empty">${data.pairings_loaded === false
         ? 'Kein Geschmacks-Bundle geladen — der Server läuft ohne Pairing-Daten.'
         : 'Keine Geschmacks-Kombinationen für diese Auswahl gefunden.'}</div>`;
 
-  const recipeHtml = recipes.length
-    ? recipes.map(r=>{
-        const matched = (r.matched||[]).join(', ');
-        const missing = (r.missing||[]).length ? ` · <span class="miss">es fehlt ${esc(r.missing.join(', '))}</span>` : '';
-        return `<div class="recipe">
-          <div class="rn">${esc(r.name)}</div>
-          <div class="rm">nutzt ${esc(matched)}${missing}</div>
-          <div class="bar"><i style="width:${Math.round((r.coverage||0)*100)}%"></i></div></div>`;
-      }).join('')
-    : `<div class="empty">Noch keine Rezepte freigeschaltet — füge Rezepte in Grocy hinzu, um Treffer zu sehen.</div>`;
-
   openSheet(`
-    <h3>Verbinden</h3>
+    <h3>Passt dazu</h3>
     <div class="h3sub">FoodBrain · ${esc(names.join(' + '))}</div>
     <div class="cgroup">
       <div class="k">◈ Geschmacks-Kombinationen</div>
       ${pairingHtml}
     </div>
-    <div class="cgroup">
-      <div class="k">◈ Rezepte, die du machen kannst</div>
-      ${recipeHtml}
-    </div>
     <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
+  sheet.querySelectorAll('.pmorebtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const block = document.getElementById('pmore'+btn.dataset.more);
+      if (!block) return;
+      block.hidden = false;
+      btn.remove();
+    });
+  });
   wireClose();
 }
 
 /* ---- Add by voice: talk at the fridge -> understand -> review -> store ---- */
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null, recording = false;
+let committedText = '';   // finalized speech, kept across auto-restart cycles
+let restartTimer = null;
 
 let intakeMode = 'add'; // 'add' (after shopping) or 'edit' (used / fix)
 
@@ -1346,29 +1362,53 @@ function openIntake(transcript, mode){
 function toggleRecording(){
   if (recording){ stopRecording(); return; }
   if (!SpeechRec) return;
+  const ta = document.getElementById('intakeText');
+  committedText = ta && ta.value ? ta.value.trim() : '';
+  recording = true;
+  document.getElementById('micBtn')?.classList.add('rec');
+  startRecognition();
+}
+
+// One recognition session. iOS/Safari ends a session on every pause and caps
+// length, so onend transparently restarts it while the user still wants to
+// record — that turns the flaky single-shot API into an unlimited, sturdy one.
+function startRecognition(){
+  if (!recording || !SpeechRec) return;
   recognition = new SpeechRec();
   recognition.lang = navigator.language || 'de-DE';
   recognition.continuous = true;
   recognition.interimResults = true;
-  const ta = document.getElementById('intakeText');
-  const base = ta.value ? ta.value.trim() + ' ' : '';
   recognition.onresult = (e)=>{
-    let finalText = '';
+    const ta = document.getElementById('intakeText');
+    if (!ta) return;
+    let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++){
-      finalText += e.results[i][0].transcript;
+      const seg = e.results[i][0].transcript;
+      if (e.results[i].isFinal) committedText = (committedText + ' ' + seg).trim();
+      else interim += seg;
     }
-    ta.value = base + finalText;
+    ta.value = (committedText + ' ' + interim).trim();
+    ta.scrollTop = ta.scrollHeight;
   };
-  recognition.onerror = ()=> stopRecording();
-  recognition.onend = ()=> stopRecording();
-  recognition.start();
-  recording = true;
-  document.getElementById('micBtn')?.classList.add('rec');
+  recognition.onerror = (e)=>{
+    // Permission denial is fatal; no-speech / network / aborted are recoverable
+    // and get picked up by the auto-restart in onend.
+    if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) stopRecording();
+  };
+  recognition.onend = ()=>{
+    if (!recording){ document.getElementById('micBtn')?.classList.remove('rec'); return; }
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(startRecognition, 200);
+  };
+  try { recognition.start(); } catch(_){}
 }
+
 function stopRecording(){
   recording = false;
-  try { recognition && recognition.stop(); } catch(_){}
+  clearTimeout(restartTimer);
+  const r = recognition;
   recognition = null;
+  if (r){ r.onend = r.onerror = r.onresult = null; try { r.stop(); } catch(_){} try { r.abort(); } catch(_){} }
   document.getElementById('micBtn')?.classList.remove('rec');
 }
 
