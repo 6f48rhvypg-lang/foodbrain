@@ -336,6 +336,12 @@
   .dbtn.use:hover  { color: var(--cool); border-color: var(--cool); background: var(--cool-bg); }
   .dbtn.date:hover { color: var(--ink);  border-color: var(--line); }
   .dbtn.toss:hover { color: var(--hot);  border-color: var(--hot);  background: var(--hot-bg); }
+  /* expired items: pre-highlight Wegwerfen — likely consumed fully or tossed */
+  .dbtn.toss.urge {
+    color: var(--hot); border-color: var(--hot); background: var(--hot-bg);
+    animation: glow-toss 1.8s var(--ease) infinite;
+  }
+  @keyframes glow-toss { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--hot) 18%, transparent); } }
 
   /* empty-fridge nudge */
   .nudge {
@@ -628,11 +634,11 @@
       <div class="intakebar">
         <button id="addBtn" class="ibtn add" type="button" title="Sprich, um nach dem Einkauf hinzuzufügen">
           <span class="iemoji">🛒</span>
-          <span>Hinzufügen<span class="isub"> · nach dem Einkauf</span></span>
+          <span>Einräumen<span class="isub"> · nach dem Einkauf</span></span>
         </button>
         <button id="editBtn" class="ibtn edit" type="button" title="Sprich, um zu korrigieren oder als benutzt zu markieren">
           <span class="iemoji">✏️</span>
-          <span>Bearbeiten<span class="isub"> · benutzt / korrigieren</span></span>
+          <span>Verbrauchen / Ändern<span class="isub"> · benutzt oder korrigiert</span></span>
         </button>
       </div>
     </header>
@@ -987,7 +993,7 @@ function itemEl(it, meta, delay){
     <div class="drawer">
       <button class="dbtn use"  title="als benutzt markieren" data-act="use">✓ Verbraucht</button>
       <button class="dbtn date" title="Datum ändern"          data-act="date">✎ Datum</button>
-      <button class="dbtn toss" title="wegwerfen / entfernen"  data-act="toss">🗑 Wegwerfen</button>
+      <button class="dbtn toss ${overdue?'urge':''}" title="wegwerfen / entfernen"  data-act="toss">🗑 Wegwerfen</button>
     </div>`;
 
   // tap behaviour: combine-mode selects; normal mode expands the tools drawer
@@ -1358,7 +1364,7 @@ const INTAKE_COPY = {
       : `Sprache ist in diesem Browser nicht verfügbar — tippe einfach, was du gekauft hast, und tippe auf Verstehen.`,
   },
   edit: {
-    title: 'Kühlschrank bearbeiten',
+    title: 'Verbrauchen / Ändern',
     sub: 'etwas benutzt oder Fehler korrigieren · sprich oder tippe',
     placeholder: "Was hast du benutzt, oder was stimmt nicht?",
     hint: SpeechRec
