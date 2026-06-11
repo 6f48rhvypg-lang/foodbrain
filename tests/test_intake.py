@@ -201,11 +201,14 @@ class _FakeWriteClient:
         return [{"transaction_id": f"cx-{product_id}"}]
 
     def get_product_entries(self, product_id):
+        # Plenty in stock so consume/toss clamping (min(requested, live)) leaves
+        # explicit voice quantities untouched; clamping itself is covered in
+        # test_grocy_writeback / test_api.
         return [
             StockEntry(
                 stock_entry_id=f"entry-{product_id}",
                 product_id=product_id,
-                amount=1.0,
+                amount=10.0,
                 best_before_date=None,
                 opened=False,
             )

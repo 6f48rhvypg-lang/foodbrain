@@ -37,15 +37,40 @@ class WriteOutcome:
         return self.undo_transaction_id is not None
 
 
-def consume(client: GrocyClient, product_id: str, amount: float = 1.0) -> WriteOutcome:
-    """Mark stock as used. Undoable via :func:`undo`."""
-    response = client.consume_product(product_id, amount, spoiled=False)
+def _live_stock_amount(client: GrocyClient, product_id: str) -> float:
+    """Current consumable stock for a product, summed across its entries.
+
+    The UI books an item's *cached* amount, which Grocy rejects (HTTP 400) once
+    it exceeds the real stock. Reading live stock lets callers clamp to it.
+    """
+    return sum(entry.amount for entry in client.get_product_entries(product_id))
+
+
+def _remove(
+    client: GrocyClient, product_id: str, amount: float, *, spoiled: bool, action: str
+) -> WriteOutcome:
+    """Shared consume/toss body: clamp to live stock, then book the removal.
+
+    Clamping to ``min(amount, live)`` means "remove the whole item" always
+    succeeds regardless of a stale cached amount. If nothing is in stock the
+    item is already gone, so we skip the Grocy call (nothing to undo).
+    """
+    live = _live_stock_amount(client, product_id)
+    booked = min(amount, live)
+    if booked <= 0:
+        return WriteOutcome(action=action, product_id=product_id, amount=0.0)
+    response = client.consume_product(product_id, booked, spoiled=spoiled)
     return WriteOutcome(
-        action="consume",
+        action=action,
         product_id=product_id,
-        amount=amount,
+        amount=booked,
         undo_transaction_id=extract_transaction_id(response),
     )
+
+
+def consume(client: GrocyClient, product_id: str, amount: float = 1.0) -> WriteOutcome:
+    """Mark stock as used. Undoable via :func:`undo`."""
+    return _remove(client, product_id, amount, spoiled=False, action="consume")
 
 
 def toss(
@@ -63,13 +88,7 @@ def toss(
         raise ConfirmationRequired(
             f"tossing product {product_id} is destructive; pass confirm=True"
         )
-    response = client.consume_product(product_id, amount, spoiled=True)
-    return WriteOutcome(
-        action="toss",
-        product_id=product_id,
-        amount=amount,
-        undo_transaction_id=extract_transaction_id(response),
-    )
+    return _remove(client, product_id, amount, spoiled=True, action="toss")
 
 
 def set_due_date(

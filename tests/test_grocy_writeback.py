@@ -143,7 +143,9 @@ class WritebackTest(unittest.TestCase):
             writeback.toss(self.client, "12")
 
     def test_consume_returns_undoable_outcome(self) -> None:
-        patcher, _ = _capture(b'[{"transaction_id": "tx-9"}]')
+        # consume now reads stock entries first (to clamp), then consumes; the
+        # mock body doubles as both responses (carries id+amount+transaction_id).
+        patcher, _ = _capture(b'[{"id": 7, "amount": "5", "transaction_id": "tx-9"}]')
         with patcher:
             outcome = writeback.consume(self.client, "12", 1.0)
         self.assertEqual(outcome.action, "consume")
@@ -151,13 +153,33 @@ class WritebackTest(unittest.TestCase):
         self.assertEqual(outcome.undo_transaction_id, "tx-9")
 
     def test_toss_with_confirm_marks_spoiled(self) -> None:
-        patcher, requests = _capture(b'[{"transaction_id": "tx-3"}]')
+        patcher, requests = _capture(b'[{"id": 8, "amount": "5", "transaction_id": "tx-3"}]')
         with patcher:
             outcome = writeback.toss(self.client, "12", confirm=True)
-        body = json.loads(requests[0].data.decode("utf-8"))
+        # requests[0] is the entries GET; requests[1] is the consume POST.
+        body = json.loads(requests[1].data.decode("utf-8"))
         self.assertTrue(body["spoiled"])
         self.assertEqual(outcome.action, "toss")
         self.assertTrue(outcome.undoable)
+
+    def test_consume_clamps_amount_to_live_stock(self) -> None:
+        # Live stock is 0.5; a stale cached amount of 1.0 must be booked as 0.5,
+        # never sent as-is (Grocy would reject 1.0 > 0.5 with HTTP 400).
+        patcher, requests = _capture(b'[{"id": 9, "amount": "0.5", "transaction_id": "tx-5"}]')
+        with patcher:
+            outcome = writeback.consume(self.client, "12", 1.0)
+        self.assertEqual(outcome.amount, 0.5)
+        body = json.loads(requests[1].data.decode("utf-8"))
+        self.assertEqual(body["amount"], 0.5)
+
+    def test_consume_empty_stock_skips_grocy(self) -> None:
+        # Nothing in stock: don't call consume at all (the item is already gone).
+        patcher, requests = _capture(b"[]")
+        with patcher:
+            outcome = writeback.consume(self.client, "12", 1.0)
+        self.assertEqual(outcome.amount, 0.0)
+        self.assertFalse(outcome.undoable)
+        self.assertEqual(len(requests), 1)  # only the entries GET, no consume POST
 
     def test_undo_uses_outcome_transaction(self) -> None:
         patcher, requests = _capture(b"")

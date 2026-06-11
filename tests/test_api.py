@@ -8,6 +8,8 @@ from urllib.request import Request, urlopen
 
 from foodbrain_assistant.api import ApiError, FoodBrainAPI, band_for
 from foodbrain_assistant.config import Settings
+from foodbrain_assistant.grocy_client import GrocyClientError
+from foodbrain_assistant.intake import IntakeResult
 from foodbrain_assistant.models import Recipe, RecipeIngredient, StockEntry, StockItem
 from foodbrain_assistant.pairing import load_pairings
 from foodbrain_assistant.server import make_handler
@@ -165,12 +167,30 @@ class BuildPromptTest(unittest.TestCase):
 
 
 class _FakeClient:
-    """Records writeback calls so the API write proxies can be tested in isolation."""
+    """Records writeback calls so the API write proxies can be tested in isolation.
 
-    def __init__(self) -> None:
+    Models live stock per product so the consume/toss clamp is exercised: like
+    real Grocy, ``consume_product`` rejects an amount greater than what's in
+    stock. ``stock`` seeds product_id -> current amount (default 5 if unseeded).
+    """
+
+    def __init__(self, stock=None) -> None:
         self.calls = []
+        self.stock = dict(stock or {})
+
+    def _amount_for(self, product_id):
+        return self.stock.get(str(product_id), 5.0)
+
+    def get_product_entries(self, product_id):
+        amount = self._amount_for(product_id)
+        if amount <= 0:
+            return []
+        return [StockEntry("e-" + str(product_id), str(product_id), amount, None)]
 
     def consume_product(self, product_id, amount=1.0, *, spoiled=False):
+        if amount > self._amount_for(product_id):
+            # Mirror Grocy: consuming more than current stock is an HTTP 400.
+            raise GrocyClientError("Grocy request failed with HTTP 400")
         self.calls.append(("consume", product_id, amount, spoiled))
         return [{"transaction_id": "tx-1"}]
 
@@ -226,6 +246,34 @@ class WriteProxyTest(unittest.TestCase):
             _api().consume("2")
         self.assertEqual(ctx.exception.status, 403)
 
+    # --- regression: stale cached amount must not break delete -----------
+    # The UI books an item's amount cached at page load. When that exceeds the
+    # real stock (stale page / fractional drift) Grocy rejects it with HTTP 400.
+    # The server clamps to live stock so removing the whole item always works.
+
+    def test_consume_clamps_to_live_stock(self) -> None:
+        client = _FakeClient(stock={"9": 0.5})
+        api = _api(write_client_factory=lambda: client)
+        out = api.consume("9", 1.0)  # stale cached amount, higher than stock
+        self.assertEqual(out["action"], "consume")
+        self.assertEqual(out["amount"], 0.5)  # booked live stock, not 1.0
+        self.assertEqual(client.calls[0], ("consume", "9", 0.5, False))
+
+    def test_toss_clamps_to_live_stock(self) -> None:
+        client = _FakeClient(stock={"9": 0.5})
+        api = _api(write_client_factory=lambda: client)
+        out = api.toss("9", 1.0, confirm=True)
+        self.assertEqual(out["amount"], 0.5)
+        self.assertEqual(client.calls[0], ("consume", "9", 0.5, True))
+
+    def test_consume_already_empty_is_noop(self) -> None:
+        client = _FakeClient(stock={"9": 0})
+        api = _api(write_client_factory=lambda: client)
+        out = api.consume("9", 1.0)
+        self.assertEqual(out["amount"], 0.0)
+        self.assertFalse(out["undoable"])  # nothing booked, nothing to undo
+        self.assertEqual(client.calls, [])  # Grocy not called
+
 
 class ProductEntriesTest(unittest.TestCase):
     def test_entries_from_reader(self) -> None:
@@ -244,7 +292,18 @@ class HttpSmokeTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.client = _FakeClient()
-        api = _api(write_client_factory=lambda: self.client)
+        # A stub understander so the voice-intake endpoint can be smoke-tested
+        # without a live LLM. It echoes a summary and produces no items.
+        self.understood = []
+
+        def understander(*, transcript, catalog, answers, mode):
+            self.understood.append((transcript, answers, mode))
+            return IntakeResult(items=[], questions=[], summary=f"verstanden: {transcript}")
+
+        api = _api(
+            write_client_factory=lambda: self.client,
+            intake_understander=understander,
+        )
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(api))
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -293,9 +352,73 @@ class HttpSmokeTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 409)
 
     def test_consume_endpoint(self) -> None:
+        # ✓ Verbraucht button.
         status, body = self._post("/api/consume", {"product_id": "2", "amount": 1})
         self.assertEqual(status, 200)
         self.assertEqual(body["action"], "consume")
+
+    def test_consume_stale_amount_still_succeeds(self) -> None:
+        # ✓ Verbraucht with a cached amount higher than live stock (the bug):
+        # the server clamps to stock (5.0 here) instead of returning HTTP 400.
+        status, body = self._post("/api/consume", {"product_id": "2", "amount": 999})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["amount"], 5.0)
+
+    def test_toss_with_confirm_endpoint(self) -> None:
+        # 🗑 Wegwerfen button (confirmed).
+        status, body = self._post(
+            "/api/toss", {"product_id": "2", "amount": 1, "confirm": True}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["action"], "toss")
+        self.assertTrue(body["undoable"])
+
+    def test_undo_endpoint(self) -> None:
+        # Snackbar "Rückgängig" button.
+        status, body = self._post("/api/undo", {"transaction_id": "tx-1"})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(self.client.calls[-1], ("undo", "tx-1"))
+
+    def test_product_entries_endpoint(self) -> None:
+        # Edit-date popover first reads the product's stock entries.
+        status, body = self._get("/api/product-entries?product_id=2")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["entries"])  # _FakeClient returns one entry
+
+    def test_set_due_date_endpoint(self) -> None:
+        # Edit-date chips / date picker.
+        status, body = self._post(
+            "/api/set-due-date",
+            {"stock_entry_id": "e-2", "best_before_date": "2026-07-01", "product_id": "2"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["action"], "set_due_date")
+
+    def test_build_prompt_endpoint(self) -> None:
+        # Ask-AI prompt builder.
+        status, body = self._post("/api/build-prompt", {"selection": ["2", "3"]})
+        self.assertEqual(status, 200)
+        self.assertIn("Zucchini", body["prompt"])
+
+    def test_intake_understand_endpoint(self) -> None:
+        # Voice intake — "verstehen" (speech -> reviewable items).
+        status, body = self._post(
+            "/api/intake/understand", {"transcript": "zwei Zucchini", "mode": "add"}
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("verstanden", body["summary"])
+        self.assertEqual(self.understood[-1], ("zwei Zucchini", "", "add"))
+
+    def test_intake_commit_consume_endpoint(self) -> None:
+        # Voice intake — commit an edit (consume) back to Grocy.
+        status, body = self._post(
+            "/api/intake/commit",
+            {"items": [{"name": "Zucchini", "product_id": "2", "action": "consume", "amount": 1}]},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["changed"], 1)
+        self.assertEqual(body["results"][0]["action"], "consume")
 
     def test_unknown_route_404(self) -> None:
         with self.assertRaises(HTTPError) as ctx:
