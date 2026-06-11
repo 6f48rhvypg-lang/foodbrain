@@ -425,7 +425,7 @@ class FoodBrainAPI:
             selected_urgencies,
             stock,
             ingredient_limit=len(selected_urgencies),
-            partner_limit=self.settings.pairing_partner_limit,
+            partner_limit=self.settings.pairing_browse_limit,
             aliases=self.aliases,
         )
         return [

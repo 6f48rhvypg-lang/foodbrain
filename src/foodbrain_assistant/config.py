@@ -16,6 +16,9 @@ class Settings:
     top_recipe_limit: int = 5
     top_pairing_limit: int = 5
     pairing_partner_limit: int = 4
+    # How many partners the "Passt dazu" view fetches per ingredient so the SPA
+    # can reveal more beyond the first ``pairing_partner_limit`` shown.
+    pairing_browse_limit: int = 20
     # Voice/photo intake via an OpenRouter (OpenAI-compatible) model.
     openrouter_api_key: Optional[str] = None
     openrouter_model: str = "anthropic/claude-3.5-sonnet"
@@ -48,6 +51,9 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
         top_pairing_limit=_int_setting("FOODBRAIN_TOP_PAIRING_LIMIT", 5, file_values),
         pairing_partner_limit=_int_setting(
             "FOODBRAIN_PAIRING_PARTNER_LIMIT", 4, file_values
+        ),
+        pairing_browse_limit=_int_setting(
+            "FOODBRAIN_PAIRING_BROWSE_LIMIT", 20, file_values
         ),
         openrouter_api_key=_blank_to_none(
             _setting("FOODBRAIN_OPENROUTER_API_KEY", file_values)
