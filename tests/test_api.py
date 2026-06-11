@@ -472,6 +472,12 @@ class UiServingTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(body.decode("utf-8"))["ok"])
 
+    def test_ui_is_no_cache(self) -> None:
+        # The SPA must not be cached, so a deploy shows up on the next load
+        # without a ?v=N bust or clearing Website Data on the phone.
+        with urlopen(f"http://127.0.0.1:{self.port}/ui") as response:
+            self.assertIn("no-cache", response.headers.get("Cache-Control", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

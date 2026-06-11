@@ -163,6 +163,11 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "*")
+            # No-cache so a deploy is picked up on the next load — otherwise
+            # Safari/PWA serve a stale /ui and need a ?v=N bust each time.
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")  # HTTP/1.0 / old iOS Safari
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(body)
 
