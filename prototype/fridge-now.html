@@ -44,6 +44,14 @@
     --staple: #94a08f;--staple-bg: rgba(148, 160, 143, 0.16);
 
     --amber: #ef8e4e;  /* reference orange accent */
+    --amber-ink: #3a2410;        /* text on amber buttons */
+    --panel-accent: var(--amber);/* highlight colour on the green panel */
+    --head-title: #fbf6ec;       /* h1 on the panel */
+    --panel-soft: rgba(255,255,255,.10); /* soft overlays on the panel */
+    --panel-line: rgba(255,255,255,.2);  /* borders on the panel */
+    --error-bg: #7a2a1d;
+    --bg-2: #fbf4e9;             /* top radial of the page background */
+    --glow: rgba(239, 142, 78, .10);
 
     --radius: 18px;
     --radius-sm: 12px;
@@ -53,6 +61,93 @@
     --shadow-lg: 0 20px 50px -22px rgba(30, 50, 35, .45);
   }
 
+  /* ============================================================
+     Pastell themes — picked via the 🎨 button, stored in
+     localStorage('fb-theme'), applied as html[data-theme=…].
+     Each theme keeps the layout and only re-tunes the palette:
+     pastel panel + dark ink on it (the default is the inverse).
+     ============================================================ */
+
+  html[data-theme="rose"] {
+    --bg-0: #f9e8ec; --bg-1: #fdf1f4; --bg-2: #fef7f9;
+    --glow: rgba(201, 120, 143, .12);
+    --surface: #ffffff; --surface-2: #fdf4f6;
+    --ink: #46303a; --ink-dim: #7d6470; --ink-faint: #ab95a0;
+    --line: rgba(120, 60, 85, .14); --line-soft: rgba(120, 60, 85, .08);
+    --green: #f2c4d0; --green-deep: #e7afbf;
+    --accent: #c9788f; --accent-ink: #fff6f8; --on-green: #5b2e3d;
+    --head-title: #4a2231; --panel-accent: #a44e68;
+    --amber: #e8a06b; --amber-ink: #46210b;
+    --panel-soft: rgba(255,255,255,.42); --panel-line: rgba(255,255,255,.65);
+    --staple: #a99aa1; --staple-bg: rgba(169, 154, 161, .16);
+    --shadow: 0 1px 2px rgba(90, 45, 60, .05), 0 12px 26px -18px rgba(90, 45, 60, .3);
+    --shadow-lg: 0 20px 50px -22px rgba(90, 45, 60, .4);
+  }
+
+  html[data-theme="lavendel"] {
+    --bg-0: #ece8f7; --bg-1: #f3f0fa; --bg-2: #f8f6fc;
+    --glow: rgba(134, 120, 196, .12);
+    --surface: #ffffff; --surface-2: #f6f3fb;
+    --ink: #363050; --ink-dim: #6c6585; --ink-faint: #9d97b4;
+    --line: rgba(80, 65, 140, .14); --line-soft: rgba(80, 65, 140, .08);
+    --green: #d4cbef; --green-deep: #c2b6e6;
+    --accent: #8678c4; --accent-ink: #f8f6ff; --on-green: #352a58;
+    --head-title: #2c2150; --panel-accent: #5c4a9e;
+    --amber: #f0b27a; --amber-ink: #4a2c10;
+    --panel-soft: rgba(255,255,255,.42); --panel-line: rgba(255,255,255,.65);
+    --staple: #9b95ad; --staple-bg: rgba(155, 149, 173, .16);
+    --shadow: 0 1px 2px rgba(60, 50, 110, .05), 0 12px 26px -18px rgba(60, 50, 110, .3);
+    --shadow-lg: 0 20px 50px -22px rgba(60, 50, 110, .4);
+  }
+
+  html[data-theme="minze"] {
+    --bg-0: #e6f3ea; --bg-1: #eff8f2; --bg-2: #f6fbf8;
+    --glow: rgba(95, 169, 128, .12);
+    --surface: #ffffff; --surface-2: #f2f9f4;
+    --ink: #254238; --ink-dim: #5f7a6e; --ink-faint: #92a89c;
+    --line: rgba(40, 100, 70, .13); --line-soft: rgba(40, 100, 70, .07);
+    --green: #bfe5cd; --green-deep: #a9d9bc;
+    --accent: #5fa980; --accent-ink: #f3fbf5; --on-green: #1f4a34;
+    --head-title: #173d29; --panel-accent: #2e7d54;
+    --amber: #f0c070; --amber-ink: #4a350e;
+    --panel-soft: rgba(255,255,255,.42); --panel-line: rgba(255,255,255,.65);
+    --staple: #93a59a; --staple-bg: rgba(147, 165, 154, .16);
+    --shadow: 0 1px 2px rgba(35, 80, 55, .05), 0 12px 26px -18px rgba(35, 80, 55, .3);
+    --shadow-lg: 0 20px 50px -22px rgba(35, 80, 55, .4);
+  }
+
+  html[data-theme="himmel"] {
+    --bg-0: #e7f0f8; --bg-1: #f0f6fb; --bg-2: #f7fafd;
+    --glow: rgba(102, 153, 196, .12);
+    --surface: #ffffff; --surface-2: #f2f7fb;
+    --ink: #2b3d4f; --ink-dim: #63788a; --ink-faint: #95a7b6;
+    --line: rgba(50, 90, 130, .14); --line-soft: rgba(50, 90, 130, .08);
+    --green: #c4ddf0; --green-deep: #aecde6;
+    --accent: #6699c4; --accent-ink: #f4f9fe; --on-green: #1f3f59;
+    --head-title: #16334b; --panel-accent: #2f6395;
+    --amber: #f2b277; --amber-ink: #4a2c10;
+    --panel-soft: rgba(255,255,255,.42); --panel-line: rgba(255,255,255,.65);
+    --staple: #94a3b0; --staple-bg: rgba(148, 163, 176, .16);
+    --shadow: 0 1px 2px rgba(40, 70, 100, .05), 0 12px 26px -18px rgba(40, 70, 100, .3);
+    --shadow-lg: 0 20px 50px -22px rgba(40, 70, 100, .4);
+  }
+
+  html[data-theme="pfirsich"] {
+    --bg-0: #fcefe4; --bg-1: #fdf5ed; --bg-2: #fefaf5;
+    --glow: rgba(217, 142, 87, .14);
+    --surface: #ffffff; --surface-2: #fdf6ef;
+    --ink: #4d3526; --ink-dim: #83685a; --ink-faint: #b29a8a;
+    --line: rgba(140, 80, 40, .14); --line-soft: rgba(140, 80, 40, .08);
+    --green: #f8d8b9; --green-deep: #f0c79f;
+    --accent: #d98e57; --accent-ink: #fff8f1; --on-green: #5c3a1e;
+    --head-title: #4a2c12; --panel-accent: #b05f2e;
+    --amber: #e8975d; --amber-ink: #42250c;
+    --panel-soft: rgba(255,255,255,.42); --panel-line: rgba(255,255,255,.65);
+    --staple: #ab9c8d; --staple-bg: rgba(171, 156, 141, .16);
+    --shadow: 0 1px 2px rgba(110, 65, 30, .05), 0 12px 26px -18px rgba(110, 65, 30, .3);
+    --shadow-lg: 0 20px 50px -22px rgba(110, 65, 30, .4);
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
 
@@ -60,8 +155,8 @@
     font-family: "Hanken Grotesk", system-ui, sans-serif;
     color: var(--ink);
     background:
-      radial-gradient(120% 80% at 50% -10%, #fbf4e9 0%, transparent 55%),
-      radial-gradient(90% 60% at 110% 5%, rgba(239, 142, 78, .10) 0%, transparent 50%),
+      radial-gradient(120% 80% at 50% -10%, var(--bg-2) 0%, transparent 55%),
+      radial-gradient(90% 60% at 110% 5%, var(--glow) 0%, transparent 50%),
       linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
     background-attachment: fixed;
     min-height: 100vh;
@@ -96,7 +191,7 @@
   header::after {
     content: ""; position: absolute; right: -40px; top: -40px;
     width: 180px; height: 180px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(239,142,78,.22), transparent 70%);
+    background: radial-gradient(circle, color-mix(in srgb, var(--amber) 22%, transparent), transparent 70%);
     pointer-events: none;
   }
 
@@ -104,11 +199,11 @@
     display: flex; align-items: center; gap: 9px;
     font-family: "IBM Plex Mono", monospace;
     font-size: 11px; letter-spacing: .24em; text-transform: uppercase;
-    color: rgba(233, 241, 230, .65);
+    color: color-mix(in srgb, var(--on-green) 65%, transparent);
   }
   .brand .dot {
     width: 7px; height: 7px; border-radius: 50%;
-    background: var(--amber); box-shadow: 0 0 10px var(--amber);
+    background: var(--panel-accent); box-shadow: 0 0 10px var(--panel-accent);
     animation: pulse 2.6s var(--ease) infinite;
   }
   @keyframes pulse { 50% { opacity: .4; } }
@@ -121,30 +216,30 @@
     line-height: 1.0;
     letter-spacing: -.02em;
     margin: 12px 0 8px;
-    color: #fbf6ec;
+    color: var(--head-title);
   }
-  h1 em { font-style: italic; color: var(--amber); font-weight: 500; }
+  h1 em { font-style: italic; color: var(--panel-accent); font-weight: 500; }
 
   .subline {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 12px; color: rgba(233, 241, 230, .8);
+    font-size: 12px; color: color-mix(in srgb, var(--on-green) 80%, transparent);
     display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
   }
-  .subline .sep { color: rgba(233, 241, 230, .35); }
-  .subline b { color: var(--amber); font-weight: 600; }
+  .subline .sep { color: color-mix(in srgb, var(--on-green) 35%, transparent); }
+  .subline b { color: var(--panel-accent); font-weight: 600; }
 
   .syncbtn {
     font-family: "IBM Plex Mono", monospace;
     font-size: 11px; letter-spacing: .04em;
-    color: rgba(233, 241, 230, .85); background: rgba(255,255,255,.10);
-    border: 1px solid rgba(255,255,255,.16); border-radius: 999px;
+    color: color-mix(in srgb, var(--on-green) 85%, transparent); background: var(--panel-soft);
+    border: 1px solid var(--panel-line); border-radius: 999px;
     padding: 3px 11px 3px 9px; margin-left: auto;
     display: inline-flex; align-items: center; gap: 6px;
     cursor: pointer; transition: background .2s, color .2s;
   }
-  .syncbtn:hover { color: #fff; background: rgba(255,255,255,.18); }
+  .syncbtn:hover { color: var(--head-title); background: var(--panel-soft); filter: brightness(1.06); }
   .syncbtn .syncico { display: inline-block; line-height: 1; }
-  .syncbtn.syncing { color: var(--amber); cursor: default; }
+  .syncbtn.syncing { color: var(--panel-accent); cursor: default; }
   .syncbtn.syncing .syncico { animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -159,12 +254,12 @@
   .ibtn .iemoji { font-size: 19px; line-height: 1; }
   .ibtn .isub { font-weight: 500; font-size: 11px; opacity: .8; }
   .ibtn:active { transform: scale(.97); }
-  .ibtn.add { background: var(--amber); color: #3a2410; border: 1px solid var(--amber); }
+  .ibtn.add { background: var(--amber); color: var(--amber-ink); border: 1px solid var(--amber); }
   .ibtn.add:hover { filter: brightness(1.05); }
   .ibtn.edit {
-    background: rgba(255,255,255,.10); color: #f4fbf2; border: 1px solid rgba(255,255,255,.22);
+    background: var(--panel-soft); color: var(--on-green); border: 1px solid var(--panel-line);
   }
-  .ibtn.edit:hover { background: rgba(255,255,255,.18); }
+  .ibtn.edit:hover { filter: brightness(1.06); }
   .ibtn[disabled] { opacity: .4; cursor: default; pointer-events: none; }
 
   /* ---------- toolbar: sort + combine ---------- */
@@ -347,11 +442,11 @@
   .nudge {
     margin-top: 14px; padding: 16px 16px 16px 18px;
     border: 1px dashed var(--line); border-radius: var(--radius);
-    background: linear-gradient(120deg, rgba(239,142,78,.08), var(--surface-2));
+    background: linear-gradient(120deg, color-mix(in srgb, var(--amber) 8%, transparent), var(--surface-2));
   }
   .nudge .k {
     font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
-    letter-spacing: .18em; text-transform: uppercase; color: var(--amber);
+    letter-spacing: .18em; text-transform: uppercase; color: var(--panel-accent);
   }
   .nudge p { margin-top: 7px; color: var(--ink-dim); font-size: 14px; line-height: 1.45; }
   .nudge p b { color: var(--ink); font-weight: 600; }
@@ -374,18 +469,18 @@
   }
   .selcount {
     font-family: "IBM Plex Mono", monospace; font-size: 12px;
-    color: rgba(233,241,230,.8); margin-right: auto;
+    color: color-mix(in srgb, var(--on-green) 80%, transparent); margin-right: auto;
   }
-  .selcount b { color: var(--amber); font-weight: 600; }
+  .selcount b { color: var(--panel-accent); font-weight: 600; }
   .btn {
     cursor: pointer; border: none; border-radius: 12px; padding: 11px 16px;
     font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 14px;
     transition: transform .15s var(--ease), filter .2s;
   }
   .btn:active { transform: scale(.95); }
-  .btn.ghost { background: rgba(255,255,255,.12); color: #f4fbf2; border: 1px solid rgba(255,255,255,.2); }
-  .btn.ghost:hover { background: rgba(255,255,255,.2); }
-  .btn.solid { background: var(--amber); color: #3a2410; }
+  .btn.ghost { background: var(--panel-soft); color: var(--on-green); border: 1px solid var(--panel-line); }
+  .btn.ghost:hover { filter: brightness(1.06); }
+  .btn.solid { background: var(--amber); color: var(--amber-ink); }
   .btn.solid:hover { filter: brightness(1.06); }
   .btn[disabled] { opacity: .45; cursor: default; }
 
@@ -568,6 +663,25 @@
     font-family: "IBM Plex Mono", monospace; font-size: 12px; color-scheme: light;
   }
 
+  /* theme picker popover */
+  .themepop { width: 252px; }
+  .topt {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 10px; border-radius: 10px; cursor: pointer;
+    border: 1px solid transparent; background: transparent;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 13.5px;
+    color: var(--ink); text-align: left; transition: background .15s, border-color .15s;
+  }
+  .topt:hover { background: var(--surface-2); }
+  .topt.active { border-color: var(--accent); background: var(--surface-2); }
+  .topt .sw { display: flex; gap: 4px; flex: 0 0 auto; }
+  .topt .sw i {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1px solid rgba(0,0,0,.12);
+  }
+  .topt .check { margin-left: auto; color: var(--accent); opacity: 0; }
+  .topt.active .check { opacity: 1; }
+
   /* snackbar (undo) */
   .snack {
     position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom));
@@ -579,15 +693,16 @@
     max-width: calc(100% - 32px);
   }
   .snack.show { transform: translate(-50%, 0); }
-  .snack .st { font-size: 13.5px; color: #f4fbf2; }
-  .snack .st b { font-weight: 600; color: #fff; }
+  .snack .st { font-size: 13.5px; color: var(--on-green); }
+  .snack .st b { font-weight: 600; color: var(--head-title); }
   .snack .undo {
     font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--amber);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--panel-accent);
     cursor: pointer; padding: 4px 8px; border-radius: 8px; border: 1px solid transparent;
   }
-  .snack .undo:hover { border-color: var(--amber); }
-  .snack.error { border-color: var(--hot); background: #7a2a1d; }
+  .snack .undo:hover { border-color: var(--panel-accent); }
+  .snack.error { border-color: var(--hot); background: var(--error-bg); }
+  .snack.error .st, .snack.error .st b { color: #fff; }
 
   .removing { animation: collapseOut .32s var(--ease) forwards; }
   @keyframes collapseOut {
@@ -630,6 +745,7 @@
         <button id="syncBtn" class="syncbtn" type="button" title="Jetzt synchronisieren" aria-label="Jetzt synchronisieren">
           <span class="syncico">↻</span><span id="syncLabel">sync</span>
         </button>
+        <button id="themeBtn" class="syncbtn" type="button" style="margin-left:0" title="Farbthema wählen" aria-label="Farbthema wählen">🎨</button>
       </div>
       <div class="intakebar">
         <button id="addBtn" class="ibtn add" type="button" title="Sprich, um nach dem Einkauf hinzuzufügen">
@@ -688,6 +804,12 @@
     <input type="date" id="dateInput" />
   </div>
 
+  <!-- theme picker popover -->
+  <div class="pop themepop" id="themePop">
+    <div class="pk">Farbthema</div>
+    <div id="themeList"></div>
+  </div>
+
   <!-- snackbar -->
   <div class="snack" id="snack">
     <span class="st" id="snackText"></span>
@@ -710,6 +832,26 @@
    Item shape (mapped from /api/stock rows):
      { id, name, qty, loc, due, band, urgency, reason, bestBefore }
    ============================================================ */
+
+/* ---- pastel colour themes (applied before first render) ---- */
+const THEMES = [
+  { id: '',         name: 'Original',  sw: ['#f1e7d8', '#36513c', '#ef8e4e'] },
+  { id: 'rose',     name: 'Rosé',      sw: ['#fdf1f4', '#f2c4d0', '#c9788f'] },
+  { id: 'lavendel', name: 'Lavendel',  sw: ['#f3f0fa', '#d4cbef', '#8678c4'] },
+  { id: 'minze',    name: 'Minze',     sw: ['#eff8f2', '#bfe5cd', '#5fa980'] },
+  { id: 'himmel',   name: 'Himmel',    sw: ['#f0f6fb', '#c4ddf0', '#6699c4'] },
+  { id: 'pfirsich', name: 'Pfirsich',  sw: ['#fdf5ed', '#f8d8b9', '#d98e57'] },
+];
+function applyTheme(id){
+  if (id && THEMES.some(t => t.id === id)) document.documentElement.dataset.theme = id;
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('fb-theme', id || ''); } catch(_){}
+  document.querySelectorAll('#themeList .topt').forEach(b =>
+    b.classList.toggle('active', (b.dataset.theme || '') === (id || '')));
+}
+let themeChoice = '';
+try { themeChoice = localStorage.getItem('fb-theme') || ''; } catch(_){}
+applyTheme(themeChoice);
 
 /* ---- API base: same-origin when served; dev server over file:// ---- */
 const API_BASE = (() => {
@@ -1167,6 +1309,29 @@ document.getElementById('dateInput').addEventListener('change', e=>{
 document.addEventListener('click', e=>{
   const pop = document.getElementById('pop');
   if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('[data-act=date]')) closePop();
+});
+
+/* ---- theme picker ---- */
+const themePop = document.getElementById('themePop');
+document.getElementById('themeList').innerHTML = THEMES.map(t => `
+  <button class="topt" type="button" data-theme="${t.id}">
+    <span class="sw">${t.sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>
+    <span>${t.name}</span>
+    <span class="check">✓</span>
+  </button>`).join('');
+document.querySelectorAll('#themeList .topt').forEach(b =>
+  b.addEventListener('click', () => { applyTheme(b.dataset.theme); }));
+applyTheme(themeChoice); // re-run now that the buttons exist, to mark the active one
+document.getElementById('themeBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (themePop.classList.contains('show')){ themePop.classList.remove('show'); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  themePop.style.top = (r.bottom + 8) + 'px';
+  themePop.style.left = Math.max(12, Math.min(r.right, window.innerWidth - 12) - 252) + 'px';
+  themePop.classList.add('show');
+});
+document.addEventListener('click', e => {
+  if (themePop.classList.contains('show') && !themePop.contains(e.target)) themePop.classList.remove('show');
 });
 
 /* ---- sort chips ---- */
