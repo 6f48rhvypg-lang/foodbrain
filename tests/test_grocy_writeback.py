@@ -72,17 +72,31 @@ class WriteRequestTest(unittest.TestCase):
         self.assertEqual(extract_transaction_id(response), "tx-1")
 
     def test_set_due_date_builds_put(self) -> None:
-        patcher, requests = _capture(b"{}")
+        # Grocy's PUT /stock/entry/{id} requires "amount" and replaces the
+        # whole row, so the client must read the entry and echo its fields.
+        entry = (
+            b'{"id": "5", "amount": "2", "best_before_date": "2026-06-20",'
+            b' "open": 0, "location_id": 4, "price": null,'
+            b' "purchased_date": "2026-06-01"}'
+        )
+        patcher, requests = _capture(entry)
         with patcher:
             self.client.set_entry_due_date("5", date(2026, 7, 1))
 
-        request = requests[0]
-        self.assertEqual(request.method, "PUT")
-        self.assertEqual(request.full_url, "http://grocy/api/stock/entry/5")
-        self.assertEqual(
-            json.loads(request.data.decode("utf-8")),
-            {"best_before_date": "2026-07-01"},
-        )
+        self.assertEqual(len(requests), 2)
+        get_request, put_request = requests
+        self.assertEqual(get_request.get_method(), "GET")
+        self.assertEqual(get_request.full_url, "http://grocy/api/stock/entry/5")
+
+        self.assertEqual(put_request.method, "PUT")
+        self.assertEqual(put_request.full_url, "http://grocy/api/stock/entry/5")
+        body = json.loads(put_request.data.decode("utf-8"))
+        self.assertEqual(body["amount"], "2")  # regression: old code omitted it
+        self.assertEqual(body["best_before_date"], "2026-07-01")
+        self.assertIs(body["open"], False)
+        self.assertEqual(body["location_id"], 4)
+        self.assertEqual(body["purchased_date"], "2026-06-01")
+        self.assertNotIn("price", body)
 
     def test_undo_posts_to_transaction_endpoint_with_empty_body(self) -> None:
         patcher, requests = _capture(b"")

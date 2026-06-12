@@ -147,11 +147,29 @@ class GrocyClient:
         )
 
     def set_entry_due_date(self, stock_entry_id: str, best_before_date: date) -> Any:
-        return self._write_json(
-            f"api/stock/entry/{stock_entry_id}",
-            "PUT",
-            {"best_before_date": best_before_date.isoformat()},
-        )
+        path = f"api/stock/entry/{stock_entry_id}"
+        if not self.allow_writes:
+            raise GrocyWriteDisabledError(
+                f"refusing to PUT {path}: client is read-only "
+                "(construct GrocyClient with allow_writes=True to enable writes)"
+            )
+        # Grocy's PUT replaces the whole entry and requires "amount", so a
+        # date-only body 400s and a partial body would null the other fields.
+        # Read the entry first and echo everything back with the new date.
+        entry = self._get_json(path)
+        if not isinstance(entry, dict):
+            raise GrocyClientError(
+                f"unexpected response for GET {path}: expected a stock entry object"
+            )
+        body: dict[str, Any] = {
+            "amount": entry.get("amount"),
+            "best_before_date": best_before_date.isoformat(),
+            "open": _parse_amount(entry.get("open")) > 0,
+        }
+        for key in ("price", "location_id", "shopping_location_id", "purchased_date"):
+            if entry.get(key) is not None:
+                body[key] = entry[key]
+        return self._write_json(path, "PUT", body)
 
     def undo_transaction(self, transaction_id: str) -> Any:
         return self._write_json(
