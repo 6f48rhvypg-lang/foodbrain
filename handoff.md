@@ -1,6 +1,34 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-06
+Current date: 2026-06-12
+
+## ✅ FIXED & DEPLOYED (2026-06-12): date-edit HTTP 400
+
+**Was:** editing an item's due date in the SPA always failed with
+"Grocy request failed with HTTP 400". Root cause: `GrocyClient.set_entry_due_date`
+PUT a date-only body, but Grocy 4.6 requires `amount` in
+`PUT /stock/entry/{id}` and replaces the whole row with what's sent.
+
+**Fix (commit `046cbb9`):** read–merge–write in `set_entry_due_date`
+(`src/foodbrain_assistant/grocy_client.py`) — write-guard first (read-only
+client refuses before any request), then `GET /stock/entry/{id}`, then PUT the
+full body: `amount` echoed, new `best_before_date`, `open` via
+`_parse_amount(...) > 0` (handles Grocy's "0"/"1" strings), and
+`price`/`location_id`/`shopping_location_id`/`purchased_date` echoed only when
+not None. No changes were needed in writeback.py / api.py / server.py /
+frontend; the voice-intake re-date path shares `writeback.set_due_date` and is
+fixed for free.
+
+**Tests:** `test_set_due_date_builds_put` rewritten to assert the GET+PUT pair
+and that the PUT body carries `amount` (the regression), the new date,
+`open: false`, preserved `location_id`/`purchased_date`, and no `price` key.
+Suite **143 (1 skipped)**, all green.
+
+**VERIFIED live, net-zero** (Gouda, product 80, stock entry 101): POST
+`/api/set-due-date` 2026-06-26 → 2026-07-03 returned 200 where it used to 400;
+raw Grocy row confirmed the date moved and amount/price/open/location_id/
+purchased_date/stock_id all unchanged; then restored to 2026-06-26 and
+re-confirmed. CT 105 deployed (`git pull` + restart, health ok).
 
 ## ✅ Voice EDIT mode + UX polish (2026-06-06, latest)
 

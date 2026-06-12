@@ -73,3 +73,9 @@ Current handoff: see [handoff.md](handoff.md) for restart commands, verification
 - Generate cooking instructions from selected ingredients
 - Keep inventory scoring deterministic
 - Use AI only for wording, recipe adaptation, and explanation
+
+## Backlog / UI ideas
+
+- [ ] Rework the "Verbrauchen" (consume) button: today it consumes 100%
+  automatically. Add a quick way to consume a partial amount (e.g. 50% / 20% /
+  10% presets, or a quick fraction picker) instead of always emptying the item.
