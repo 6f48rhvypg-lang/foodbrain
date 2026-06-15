@@ -1150,7 +1150,7 @@ function itemEl(it, meta, delay){
 
   const overdue = !isStaple && it.due <= 0;
   el.innerHTML = `
-    <div class="thumb">${emojiFor(it.name)}</div>
+    <div class="thumb" data-fb="${emojiFor(it.name)}"><img src="/api/icon/${it.id}?name=${encodeURIComponent(it.name)}" alt="" loading="lazy" onerror="const t=this.closest('.thumb');t.textContent=t.dataset.fb"></div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
       <div class="meta"><span>${esc(it.qty)}</span><span class="loc">· ${esc(it.loc)}</span></div>
