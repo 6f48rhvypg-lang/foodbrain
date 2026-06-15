@@ -1149,8 +1149,12 @@ function itemEl(it, meta, delay){
   el.dataset.id = it.id;
 
   const overdue = !isStaple && it.due <= 0;
+  const cachedIcon = localStorage.getItem('icon:' + it.id);
+  const thumbImg = cachedIcon
+    ? `<img src="${cachedIcon}" alt="">`
+    : `<img src="/api/icon/${it.id}?name=${encodeURIComponent(it.name)}" alt="" loading="lazy" onerror="const t=this.closest('.thumb');t.textContent=t.dataset.fb">`;
   el.innerHTML = `
-    <div class="thumb" data-fb="${emojiFor(it.name)}"><img src="/api/icon/${it.id}?name=${encodeURIComponent(it.name)}" alt="" loading="lazy" onerror="const t=this.closest('.thumb');t.textContent=t.dataset.fb"></div>
+    <div class="thumb" data-fb="${emojiFor(it.name)}">${thumbImg}</div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
       <div class="meta"><span>${esc(it.qty)}</span><span class="loc">· ${esc(it.loc)}</span></div>
@@ -1162,6 +1166,19 @@ function itemEl(it, meta, delay){
       <button class="dbtn date" title="Datum ändern"          data-act="date">✎ Datum</button>
       <button class="dbtn toss ${overdue?'urge':''}" title="wegwerfen / entfernen"  data-act="toss">🗑 Wegwerfen</button>
     </div>`;
+
+  // cache icon to localStorage on first successful load so reloads are instant
+  if (!cachedIcon) {
+    const img = el.querySelector('.thumb img');
+    if (img) img.addEventListener('load', () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        localStorage.setItem('icon:' + it.id, c.toDataURL());
+      } catch(_) {}
+    });
+  }
 
   // tap behaviour: combine-mode selects; normal mode expands the tools drawer
   el.addEventListener('click', (e)=>{
