@@ -986,6 +986,39 @@ const EMOJI_RULES = [
   [/pilz|mushroom|champignon/, '🍄'],
   [/mais|corn/, '🌽'],
 ];
+/* ---- icon localStorage cache (keyed by product_id) ----
+   Stores data-URLs for real icons (permanent) or 'emoji' for known-404s
+   (10-min TTL so the GPU service is retried once it comes online). */
+function _iconCacheGet(id) {
+  try {
+    const raw = localStorage.getItem('icon:' + id);
+    if (!raw) return null;
+    const e = JSON.parse(raw);
+    if (e.exp && Date.now() > e.exp) { localStorage.removeItem('icon:' + id); return null; }
+    return e.v;
+  } catch { return null; }
+}
+function _iconLoaded(img) {
+  const id = img.closest('.item')?.dataset.id;
+  if (!id) return;
+  try {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    localStorage.setItem('icon:' + id, JSON.stringify({ v: c.toDataURL() }));
+  } catch {}
+}
+function _iconFailed(img) {
+  const t = img.closest('.thumb');
+  if (t) t.textContent = t.dataset.fb;
+  const id = img.closest('.item')?.dataset.id;
+  if (!id) return;
+  // cache the miss for 10 min so we don't hammer a 404 on every reload
+  try {
+    localStorage.setItem('icon:' + id, JSON.stringify({ v: 'emoji', exp: Date.now() + 10*60*1000 }));
+  } catch {}
+}
+
 function emojiFor(name){
   const n = String(name || '').toLowerCase();
   for (const [re, emo] of EMOJI_RULES){ if (re.test(n)) return emo; }
@@ -1150,12 +1183,17 @@ function itemEl(it, meta, delay){
   el.dataset.id = it.id;
 
   const overdue = !isStaple && it.due <= 0;
-  const cachedIcon = localStorage.getItem('icon:' + it.id);
-  const thumbImg = cachedIcon
-    ? `<img src="${cachedIcon}" alt="">`
-    : `<img src="/api/icon/${it.id}?name=${encodeURIComponent(it.name)}" alt="" loading="lazy" onerror="const t=this.closest('.thumb');t.textContent=t.dataset.fb">`;
+  const _iconEntry = _iconCacheGet(it.id);
+  let thumbInner;
+  if (_iconEntry === 'emoji') {
+    thumbInner = emojiFor(it.name);
+  } else if (_iconEntry) {
+    thumbInner = `<img src="${_iconEntry}" alt="">`;
+  } else {
+    thumbInner = `<img src="/api/icon/${it.id}?name=${encodeURIComponent(it.name)}" alt="" loading="lazy" onload="_iconLoaded(this)" onerror="_iconFailed(this)">`;
+  }
   el.innerHTML = `
-    <div class="thumb" data-fb="${emojiFor(it.name)}">${thumbImg}</div>
+    <div class="thumb" data-fb="${emojiFor(it.name)}">${thumbInner}</div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
       <div class="meta"><span>${esc(it.qty)}</span><span class="loc">· ${esc(it.loc)}</span></div>
@@ -1167,19 +1205,6 @@ function itemEl(it, meta, delay){
       <button class="dbtn date" title="Datum ändern"          data-act="date">✎ Datum</button>
       <button class="dbtn toss ${overdue?'urge':''}" title="wegwerfen / entfernen"  data-act="toss">🗑 Wegwerfen</button>
     </div>`;
-
-  // cache icon to localStorage on first successful load so reloads are instant
-  if (!cachedIcon) {
-    const img = el.querySelector('.thumb img');
-    if (img) img.addEventListener('load', () => {
-      try {
-        const c = document.createElement('canvas');
-        c.width = img.naturalWidth; c.height = img.naturalHeight;
-        c.getContext('2d').drawImage(img, 0, 0);
-        localStorage.setItem('icon:' + it.id, c.toDataURL());
-      } catch(_) {}
-    });
-  }
 
   // tap behaviour: combine-mode selects; normal mode expands the tools drawer
   el.addEventListener('click', (e)=>{
