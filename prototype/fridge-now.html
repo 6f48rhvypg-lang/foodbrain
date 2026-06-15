@@ -347,8 +347,10 @@
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     cursor: pointer; overflow: hidden;
-    transition: transform .18s var(--ease), box-shadow .2s, border-color .2s;
+    transition: box-shadow .2s, border-color .2s;
     animation: rise .5s var(--ease) backwards;
+    will-change: transform;
+    touch-action: pan-y;
   }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
   .item:active { transform: scale(.99); }
@@ -437,6 +439,28 @@
     animation: glow-toss 1.8s var(--ease) infinite;
   }
   @keyframes glow-toss { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--hot) 18%, transparent); } }
+
+  /* swipe-to-delete row wrapper */
+  .swipe-row {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius);
+  }
+  .swipe-del {
+    position: absolute;
+    right: 0; top: 0; bottom: 0; width: 88px;
+    background: #e03232;
+    color: #fff;
+    font-family: "Hanken Grotesk", sans-serif;
+    font-size: 13px; font-weight: 600;
+    border: none; cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+  }
+  .swipe-del:active { background: #bf1f1f; }
+  .item.swipe-snapping {
+    transition: transform .22s cubic-bezier(.25, 1, .5, 1), box-shadow .2s, border-color .2s;
+  }
 
   /* empty-fridge nudge */
   .nudge {
@@ -893,6 +917,7 @@ let currentSort = 'urgency';
 let staplesCollapsed = true;
 let combineMode = false;
 let pendingUndo = null; // { transaction_id } for the snackbar Undo
+let openSwipeEl = null; // currently swiped-open .item element
 
 const BANDS = {
   hot:   { label:'Heute essen · überfällig', icon:'🔥', c:'var(--hot)',    cbg:'var(--hot-bg)'    },
@@ -1141,6 +1166,7 @@ function itemEl(it, meta, delay){
   // tap behaviour: combine-mode selects; normal mode expands the tools drawer
   el.addEventListener('click', (e)=>{
     if (e.target.closest('.dbtn')) return;
+    if (swipeIsOpen(el)) { swipeClose(el); return; }
     if (combineMode){ toggleSelect(it.id, el); }
     else { toggleExpand(el); }
   });
@@ -1148,8 +1174,80 @@ function itemEl(it, meta, delay){
   el.querySelector('[data-act=use]').addEventListener('click', e=>{ e.stopPropagation(); consume(it, el); });
   el.querySelector('[data-act=toss]').addEventListener('click', e=>{ e.stopPropagation(); toss(it, el); });
   el.querySelector('[data-act=date]').addEventListener('click', e=>{ e.stopPropagation(); openPop(it, e.currentTarget); });
-  return el;
+
+  // swipe-to-delete wrapper
+  const row = document.createElement('div');
+  row.className = 'swipe-row';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'swipe-del';
+  delBtn.innerHTML = '🗑<span>Wegwerfen</span>';
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const amount = Number(it.amount) || 1;
+    writeRemove(it, el, '/api/toss', { product_id: it.id, amount, confirm: true }, `<b>${esc(it.name)}</b> weggeworfen`);
+  });
+  row.appendChild(delBtn);
+  row.appendChild(el);
+
+  // touch swipe logic
+  const SWIPE_OPEN = 88;
+  const SWIPE_THRESH = 50;
+  let startX, startY, curX = 0, dragging = false, isOpen = false;
+
+  el.addEventListener('touchstart', e => {
+    // close any other open swipe row
+    if (openSwipeEl && openSwipeEl !== el) swipeClose(openSwipeEl);
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    curX = isOpen ? -SWIPE_OPEN : 0;
+    dragging = false;
+    el.classList.remove('swipe-snapping');
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dy) > Math.abs(dx) + 2) return; // vertical scroll wins
+      if (Math.abs(dx) < 6) return;                 // dead zone
+      dragging = true;
+    }
+    e.preventDefault();
+    const base = isOpen ? -SWIPE_OPEN : 0;
+    curX = Math.min(0, Math.max(-SWIPE_OPEN, base + dx));
+    el.style.transform = `translateX(${curX}px)`;
+  }, { passive: false });
+
+  el.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    el.classList.add('swipe-snapping');
+    const shouldOpen = isOpen
+      ? curX < -(SWIPE_OPEN - 20)
+      : curX < -SWIPE_THRESH;
+    isOpen = shouldOpen;
+    if (isOpen) {
+      el.style.transform = `translateX(-${SWIPE_OPEN}px)`;
+      openSwipeEl = el;
+    } else {
+      el.style.transform = '';
+      if (openSwipeEl === el) openSwipeEl = null;
+    }
+  });
+
+  el._swipeClose = () => {
+    el.classList.add('swipe-snapping');
+    el.style.transform = '';
+    isOpen = false;
+    if (openSwipeEl === el) openSwipeEl = null;
+  };
+  el._swipeIsOpen = () => isOpen;
+
+  return row;
 }
+
+function swipeClose(el){ if (el && el._swipeClose) el._swipeClose(); }
+function swipeIsOpen(el){ return el && el._swipeIsOpen && el._swipeIsOpen(); }
 
 /* ---- expand tools drawer (one at a time) ---- */
 function toggleExpand(el){
@@ -1157,6 +1255,11 @@ function toggleExpand(el){
   shelvesEl.querySelectorAll('.item.expanded').forEach(e=>{ if (e!==el) e.classList.remove('expanded'); });
   el.classList.toggle('expanded', !open);
 }
+
+/* close open swipe row when tapping outside any item */
+document.addEventListener('touchstart', e => {
+  if (openSwipeEl && !e.target.closest('.swipe-row')) swipeClose(openSwipeEl);
+}, { passive: true });
 
 /* ---- combine mode ---- */
 const appEl = document.getElementById('app');
@@ -1210,14 +1313,15 @@ function toss(it, el){
   writeRemove(it, el, '/api/toss', { product_id: it.id, amount, confirm: true }, `<b>${esc(it.name)}</b> weggeworfen`);
 }
 async function writeRemove(it, el, path, body, msg){
-  el.classList.add('removing');               // optimistic
+  const rowEl = el.closest('.swipe-row') || el;
+  rowEl.classList.add('removing');               // optimistic
   selected.delete(it.id);
   try {
     const res = await apiPost(path, body);
     setTimeout(()=>{ items = items.filter(x=>x.id!==it.id); render(); }, 300);
     showSnack(msg, res.undoable ? res.transaction_id : null);
   } catch (err){
-    el.classList.remove('removing');           // revert
+    rowEl.classList.remove('removing');           // revert
     showError(err);
   }
 }
