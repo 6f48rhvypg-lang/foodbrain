@@ -23,12 +23,10 @@ log = logging.getLogger(__name__)
 
 app = FastAPI()
 
-log.info("Loading HiDream-I1-Full (BF16, no LLaMA) — first run downloads ~8 GB …")
+log.info("Loading HiDream-I1-Full (BF16) — first run downloads ~40 GB total …")
 pipe = HiDreamImagePipeline.from_pretrained(
     "HiDream-AI/HiDream-I1-Full",
     torch_dtype=torch.bfloat16,
-    text_encoder_4=None,
-    tokenizer_4=None,
 ).to("cuda")
 log.info("Model ready.")
 
