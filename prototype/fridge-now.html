@@ -413,14 +413,25 @@
     transform: scale(1.06);
   }
 
+  /* location icon tag in item meta */
+  .loc-tag { font-size: 15px; line-height: 1; }
+
+  /* quantity line shown inside the open drawer */
+  .qty-chip {
+    flex: 0 0 100%;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink-dim); letter-spacing: .04em;
+    padding-bottom: 2px;
+  }
+
   /* expandable tools drawer */
   .drawer {
     grid-column: 1 / -1; grid-row: 2;
-    display: flex; gap: 8px;
+    display: flex; flex-wrap: wrap; gap: 8px;
     max-height: 0; overflow: hidden; opacity: 0; padding-top: 0;
-    transition: max-height .26s var(--ease), opacity .2s, padding-top .26s var(--ease);
+    transition: max-height .30s var(--ease), opacity .2s, padding-top .30s var(--ease);
   }
-  .item.expanded .drawer { max-height: 64px; opacity: 1; padding-top: 12px; }
+  .item.expanded .drawer { max-height: 104px; opacity: 1; padding-top: 10px; }
   .app.combining .drawer { max-height: 0 !important; opacity: 0 !important; padding-top: 0 !important; }
   .dbtn {
     flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
@@ -1251,11 +1262,12 @@ function itemEl(it, meta, delay){
     <div class="thumb" data-fb="${emojiFor(it.name)}">${thumbInner}</div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
-      <div class="meta"><span>${esc(it.qty)}</span>${currentSort !== 'location' ? `<span class="loc">· ${esc(it.loc)}</span>` : ''}</div>
+      <div class="meta"><span class="loc-tag">${locationMeta(it.loc).icon}</span></div>
     </div>
     ${ isStaple ? '' : `<div class="due ${overdue?'overdue':''}">${dueLabel(it.due)}</div>`}
     <div class="pick">✓</div>
     <div class="drawer">
+      <span class="qty-chip">${esc(it.qty)}</span>
       <button class="dbtn use"  title="als benutzt markieren" data-act="use">✓ Verbraucht</button>
       <button class="dbtn date" title="Datum ändern"          data-act="date">✎ Datum</button>
       <button class="dbtn toss ${overdue?'urge':''}" title="wegwerfen / entfernen"  data-act="toss">🗑 Wegwerfen</button>
