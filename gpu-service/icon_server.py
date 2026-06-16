@@ -3,8 +3,9 @@
 Accepts POST /generate {"prompt": str, "size": int} → PNG bytes.
 FoodBrain's /api/icon/ endpoint calls this when an icon isn't cached.
 
-Uses HiDream-I1-Full (BF16, ~24 GB VRAM). Requires 32 GB VRAM (RTX 5090).
-First run downloads weights from HuggingFace automatically (~24 GB total).
+Uses HiDream-I1-Full (BF16). LLaMA-3.1-8B-Instruct is loaded separately
+and passed as text_encoder_4 (required by diffusers HiDream pipeline).
+Requires 32 GB VRAM (RTX 5090). First run downloads weights automatically.
 """
 
 import io
@@ -17,15 +18,31 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel
+from transformers import AutoTokenizer, LlamaForCausalLM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 app = FastAPI()
 
-log.info("Loading HiDream-I1-Full (BF16) — first run downloads ~40 GB total …")
+LLAMA_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
+log.info("Loading LLaMA tokenizer …")
+tokenizer_4 = AutoTokenizer.from_pretrained(LLAMA_MODEL)
+
+log.info("Loading LLaMA-3.1-8B-Instruct (BF16) …")
+text_encoder_4 = LlamaForCausalLM.from_pretrained(
+    LLAMA_MODEL,
+    output_hidden_states=True,
+    output_attentions=True,
+    torch_dtype=torch.bfloat16,
+)
+
+log.info("Loading HiDream-I1-Full (BF16) …")
 pipe = HiDreamImagePipeline.from_pretrained(
     "HiDream-AI/HiDream-I1-Full",
+    tokenizer_4=tokenizer_4,
+    text_encoder_4=text_encoder_4,
     torch_dtype=torch.bfloat16,
 ).to("cuda")
 log.info("Model ready.")
