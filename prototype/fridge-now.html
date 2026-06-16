@@ -1090,18 +1090,48 @@ const shelvesEl = document.getElementById('shelves');
 
 /* ---- location grouping ---- */
 const LOCATION_META = {
-  'kühlschrank':     { icon: '❄️',  c: 'var(--cool)',   cbg: 'var(--cool-bg)'              },
-  'tiefkühler':      { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
-  'tiefkühlschrank': { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
-  'tiefkühltruhe':   { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
-  'gefrierfach':     { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  // fridge (German + English variants)
+  'fridge':          { icon: '🧊',  c: 'var(--cool)',   cbg: 'var(--cool-bg)'              },
+  'kühlschrank':     { icon: '🧊',  c: 'var(--cool)',   cbg: 'var(--cool-bg)'              },
+  'kühlschrank oben':{ icon: '🧊',  c: 'var(--cool)',   cbg: 'var(--cool-bg)'              },
+  'kühlschrank unten':{ icon: '🧊', c: 'var(--cool)',   cbg: 'var(--cool-bg)'              },
+  // freezer
+  'tiefkühler':      { icon: '❄️',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'tiefkühlschrank': { icon: '❄️',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'tiefkühltruhe':   { icon: '❄️',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'gefrierfach':     { icon: '❄️',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'freezer':         { icon: '❄️',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  // pantry / dry storage
   'vorrat':          { icon: '🥫',  c: 'var(--staple)', cbg: 'var(--staple-bg)'            },
   'vorratsschrank':  { icon: '🥫',  c: 'var(--staple)', cbg: 'var(--staple-bg)'            },
+  'pantry':          { icon: '🥫',  c: 'var(--staple)', cbg: 'var(--staple-bg)'            },
+  // spice rack
+  'gewürzregal':     { icon: '🧂',  c: '#a08060',       cbg: 'rgba(160,128,96,.15)'        },
+  'gewürzschrank':   { icon: '🧂',  c: '#a08060',       cbg: 'rgba(160,128,96,.15)'        },
+  // fruit & veg basket
+  'obst- & gemüsekorb': { icon: '🧺', c: '#6a9c4e',    cbg: 'rgba(106,156,78,.14)'        },
+  'gemüsekorb':      { icon: '🧺',  c: '#6a9c4e',       cbg: 'rgba(106,156,78,.14)'        },
+  'obstkorb':        { icon: '🧺',  c: '#6a9c4e',       cbg: 'rgba(106,156,78,.14)'        },
+  // cellar / basement
   'keller':          { icon: '📦',  c: '#8a8060',       cbg: 'rgba(138,128,96,.15)'        },
+  'cellar':          { icon: '📦',  c: '#8a8060',       cbg: 'rgba(138,128,96,.15)'        },
 };
-const LOCATION_ORDER = ['kühlschrank','tiefkühler','tiefkühlschrank','tiefkühltruhe','gefrierfach','vorrat','vorratsschrank','keller'];
+const LOCATION_ORDER = [
+  'fridge','kühlschrank',
+  'tiefkühler','tiefkühlschrank','tiefkühltruhe','gefrierfach','freezer',
+  'vorratsschrank','vorrat','pantry',
+  'gewürzregal','gewürzschrank',
+  'obst- & gemüsekorb','gemüsekorb','obstkorb',
+  'keller','cellar',
+];
 function locationMeta(name){
-  return LOCATION_META[String(name||'').toLowerCase().trim()] || { icon: '📍', c: 'var(--staple)', cbg: 'var(--staple-bg)' };
+  const key = String(name||'').toLowerCase().trim();
+  // exact match first, then substring scan for partial names like "Kühlschrank (oben)"
+  if (LOCATION_META[key]) return LOCATION_META[key];
+  for (const [k, meta] of Object.entries(LOCATION_META)){
+    if (key.includes(k) || k.includes(key)) return meta;
+  }
+  return { icon: '🗄️', c: 'var(--staple)', cbg: 'var(--staple-bg)' };
 }
 
 function renderByLocation(){
