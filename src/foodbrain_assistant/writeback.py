@@ -104,6 +104,31 @@ def set_due_date(
     )
 
 
+def set_location(
+    client: GrocyClient, stock_entry_id: str, location_id: str, *, product_id: str = ""
+) -> WriteOutcome:
+    """Move a stock entry to a different storage location."""
+    client.set_entry_location(stock_entry_id, location_id)
+    return WriteOutcome(
+        action="set_location",
+        product_id=product_id,
+        amount=0.0,
+        detail=location_id,
+    )
+
+
+def rename_product(client: GrocyClient, product_id: str, name: str) -> WriteOutcome:
+    """Rename a product in the Grocy master catalogue."""
+    client.rename_product(product_id, name)
+    return WriteOutcome(action="rename_product", product_id=product_id, amount=0.0, detail=name)
+
+
+def set_amount(client: GrocyClient, product_id: str, new_amount: float) -> WriteOutcome:
+    """Correct the stock amount for a product via Grocy's inventory endpoint."""
+    client.set_product_inventory(product_id, new_amount)
+    return WriteOutcome(action="set_amount", product_id=product_id, amount=new_amount)
+
+
 def undo(client: GrocyClient, outcome_or_transaction_id) -> None:
     """Reverse a previous consume/toss given its outcome or transaction id."""
     if isinstance(outcome_or_transaction_id, WriteOutcome):

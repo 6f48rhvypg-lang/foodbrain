@@ -49,7 +49,10 @@ from .writeback import (
     ConfirmationRequired,
     WriteOutcome,
     consume,
+    rename_product,
+    set_amount,
     set_due_date,
+    set_location,
     toss,
     undo,
 )
@@ -221,6 +224,37 @@ class FoodBrainAPI:
                 client, stock_entry_id, parsed, product_id=product_id
             )
         )
+
+    def get_locations(self) -> dict:
+        """List all Grocy storage locations for the location-picker UI."""
+        client = self._reader()
+        try:
+            locs = client.get_locations()
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+        return {"locations": locs}
+
+    def set_location(
+        self, stock_entry_id: str, location_id: str, *, product_id: str = ""
+    ) -> dict:
+        """Move a stock entry to a different location."""
+        return self._write(
+            lambda client: set_location(
+                client, stock_entry_id, location_id, product_id=product_id
+            )
+        )
+
+    def set_name(self, product_id: str, name: str) -> dict:
+        """Rename a product in the Grocy master catalogue."""
+        if not name.strip():
+            raise ApiError(400, "name must not be empty")
+        return self._write(lambda client: rename_product(client, product_id, name.strip()))
+
+    def set_amount(self, product_id: str, new_amount: float) -> dict:
+        """Correct the stock amount for a product via inventory."""
+        if new_amount < 0:
+            raise ApiError(400, "new_amount must be >= 0")
+        return self._write(lambda client: set_amount(client, product_id, new_amount))
 
     def undo(self, transaction_id: str) -> dict:
         if not transaction_id:

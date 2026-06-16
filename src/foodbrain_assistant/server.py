@@ -88,6 +88,8 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     if not product_id:
                         raise ApiError(400, "product_id query parameter is required")
                     self._send(200, api.product_entries(product_id))
+                elif route == "/api/locations":
+                    self._send(200, api.get_locations())
                 elif route.startswith("/api/icon/"):
                     product_id = route[len("/api/icon/"):]
                     if not product_id:
@@ -140,6 +142,32 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             _require(body, "best_before_date"),
                             product_id=str(body.get("product_id", "")),
                         ),
+                    )
+                elif route == "/api/set-location":
+                    self._send(
+                        200,
+                        api.set_location(
+                            _require(body, "stock_entry_id"),
+                            _require(body, "location_id"),
+                            product_id=str(body.get("product_id", "")),
+                        ),
+                    )
+                elif route == "/api/set-name":
+                    self._send(
+                        200,
+                        api.set_name(
+                            _require(body, "product_id"),
+                            _require(body, "name"),
+                        ),
+                    )
+                elif route == "/api/set-amount":
+                    try:
+                        new_amount = float(_require(body, "new_amount"))
+                    except (TypeError, ValueError) as exc:
+                        raise ApiError(400, "'new_amount' must be a number") from exc
+                    self._send(
+                        200,
+                        api.set_amount(_require(body, "product_id"), new_amount),
                     )
                 elif route == "/api/undo":
                     self._send(200, api.undo(_require(body, "transaction_id")))

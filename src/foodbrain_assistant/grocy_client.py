@@ -171,6 +171,48 @@ class GrocyClient:
                 body[key] = entry[key]
         return self._write_json(path, "PUT", body)
 
+    def set_entry_location(self, stock_entry_id: str, location_id: str) -> Any:
+        """Move a stock entry to a different location. GET-then-PUT like set_entry_due_date."""
+        path = f"api/stock/entry/{stock_entry_id}"
+        if not self.allow_writes:
+            raise GrocyWriteDisabledError(
+                f"refusing to PUT {path}: client is read-only "
+                "(construct GrocyClient with allow_writes=True to enable writes)"
+            )
+        entry = self._get_json(path)
+        if not isinstance(entry, dict):
+            raise GrocyClientError(
+                f"unexpected response for GET {path}: expected a stock entry object"
+            )
+        body: dict[str, Any] = {
+            "amount": entry.get("amount"),
+            "best_before_date": entry.get("best_before_date"),
+            "open": _parse_amount(entry.get("open")) > 0,
+            "location_id": location_id,
+        }
+        for key in ("price", "shopping_location_id", "purchased_date"):
+            if entry.get(key) is not None:
+                body[key] = entry[key]
+        return self._write_json(path, "PUT", body)
+
+    def rename_product(self, product_id: str, name: str) -> Any:
+        """Patch the product master name. Grocy objects support PATCH for partial updates."""
+        path = f"api/objects/products/{product_id}"
+        if not self.allow_writes:
+            raise GrocyWriteDisabledError(
+                f"refusing to PATCH {path}: client is read-only "
+                "(construct GrocyClient with allow_writes=True to enable writes)"
+            )
+        return self._write_json(path, "PATCH", {"name": name})
+
+    def set_product_inventory(self, product_id: str, new_amount: float) -> Any:
+        """Set stock to an exact amount via Grocy's inventory endpoint."""
+        return self._write_json(
+            f"api/stock/products/{product_id}/inventory",
+            "POST",
+            {"new_amount": new_amount, "best_before_date": "2999-12-31"},
+        )
+
     def undo_transaction(self, transaction_id: str) -> Any:
         return self._write_json(
             f"api/stock/transactions/{transaction_id}/undo",

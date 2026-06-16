@@ -434,22 +434,18 @@
   .item.expanded .drawer { max-height: 104px; opacity: 1; padding-top: 10px; }
   .app.combining .drawer { max-height: 0 !important; opacity: 0 !important; padding-top: 0 !important; }
   .dbtn {
-    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-dim);
-    border-radius: 11px; padding: 9px; cursor: pointer;
-    font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 13px;
-    transition: all .15s var(--ease);
+    border-radius: 11px; padding: 8px 6px; cursor: pointer;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 12.5px;
+    transition: all .15s var(--ease); white-space: nowrap;
   }
   .dbtn:active { transform: scale(.96); }
-  .dbtn.use:hover  { color: var(--cool); border-color: var(--cool); background: var(--cool-bg); }
-  .dbtn.date:hover { color: var(--ink);  border-color: var(--line); }
-  .dbtn.toss:hover { color: var(--hot);  border-color: var(--hot);  background: var(--hot-bg); }
-  /* expired items: pre-highlight Wegwerfen — likely consumed fully or tossed */
-  .dbtn.toss.urge {
-    color: var(--hot); border-color: var(--hot); background: var(--hot-bg);
-    animation: glow-toss 1.8s var(--ease) infinite;
-  }
-  @keyframes glow-toss { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--hot) 18%, transparent); } }
+  .dbtn.use:hover { color: var(--cool); border-color: var(--cool); background: var(--cool-bg); }
+  .dbtn.mhd:hover { color: var(--ink);  border-color: var(--line); }
+  .dbtn.ort:hover { color: var(--accent); border-color: var(--accent); }
+  .dbtn.more { flex: 0 0 40px; font-size: 17px; letter-spacing: .08em; }
+  .dbtn.more:hover { color: var(--ink); border-color: var(--line); }
 
   /* swipe-to-delete row wrapper */
   .swipe-row {
@@ -1268,9 +1264,10 @@ function itemEl(it, meta, delay){
     <div class="pick">✓</div>
     <div class="drawer">
       <span class="qty-chip">${esc(it.qty)}</span>
-      <button class="dbtn use"  title="als benutzt markieren" data-act="use">✓ Verbraucht</button>
-      <button class="dbtn date" title="Datum ändern"          data-act="date">✎ Datum</button>
-      <button class="dbtn toss ${overdue?'urge':''}" title="wegwerfen / entfernen"  data-act="toss">🗑 Wegwerfen</button>
+      <button class="dbtn mhd"  title="Haltbarkeitsdatum ändern" data-act="mhd">📅 MHD</button>
+      <button class="dbtn ort"  title="Lagerort ändern"          data-act="loc">📍 Ort</button>
+      <button class="dbtn use"  title="als benutzt markieren"    data-act="use">✓ Verbraucht</button>
+      <button class="dbtn more" title="Mehr Optionen"            data-act="more">⋯</button>
     </div>`;
 
   // tap behaviour: combine-mode selects; normal mode expands the tools drawer
@@ -1281,9 +1278,10 @@ function itemEl(it, meta, delay){
     else { toggleExpand(el); }
   });
   // tools
-  el.querySelector('[data-act=use]').addEventListener('click', e=>{ e.stopPropagation(); consume(it, el); });
-  el.querySelector('[data-act=toss]').addEventListener('click', e=>{ e.stopPropagation(); toss(it, el); });
-  el.querySelector('[data-act=date]').addEventListener('click', e=>{ e.stopPropagation(); openPop(it, e.currentTarget); });
+  el.querySelector('[data-act=use]').addEventListener('click',  e=>{ e.stopPropagation(); consume(it, el); });
+  el.querySelector('[data-act=mhd]').addEventListener('click',  e=>{ e.stopPropagation(); openPop(it, e.currentTarget); });
+  el.querySelector('[data-act=loc]').addEventListener('click',  e=>{ e.stopPropagation(); openLocSheet(it); });
+  el.querySelector('[data-act=more]').addEventListener('click', e=>{ e.stopPropagation(); openMoreSheet(it, el); });
 
   // swipe-to-delete wrapper
   const row = document.createElement('div');
@@ -1564,6 +1562,127 @@ function closeSheet(){ scrim.classList.remove('show'); sheet.classList.remove('s
 scrim.addEventListener('click', closeSheet);
 function wireClose(){ const b = document.getElementById('closeSheet'); if (b) b.addEventListener('click', closeSheet); }
 function selectedNames(){ return [...selected].map(id=>items.find(i=>i.id===id)?.name).filter(Boolean); }
+
+/* ---- location picker sheet ---- */
+let _cachedLocations = null;
+async function _fetchLocations(){
+  if (_cachedLocations) return _cachedLocations;
+  const data = await apiGet('/api/locations');
+  _cachedLocations = data.locations || [];
+  return _cachedLocations;
+}
+
+async function openLocSheet(it){
+  // first we need the stock_entry_id for this product
+  let entryId = null;
+  try {
+    const entries = await apiGet(`/api/product-entries?product_id=${it.id}`);
+    entryId = entries.entries?.[0]?.stock_entry_id || null;
+  } catch(err){ showError(err); return; }
+  if (!entryId){ showError(new Error('Kein Lagereintrag gefunden')); return; }
+
+  let locs;
+  try { locs = await _fetchLocations(); } catch(err){ showError(err); return; }
+
+  openSheet(`
+    <h3>Lagerort</h3>
+    <div class="h3sub">Wo liegt <b>${esc(it.name)}</b>?</div>
+    <div class="moodopts" style="margin-top:14px" id="locChips">
+      ${locs.map(l=>`
+        <div class="chip${l.name===it.loc?' active':''}" data-loc-id="${esc(l.id)}" data-loc-name="${esc(l.name)}"
+             style="padding:10px 16px;font-size:13px">
+          ${locationMeta(l.name).icon} ${esc(l.name)}
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:18px;display:flex;gap:10px">
+      <button class="btn ghost" style="flex:1" id="closeSheet">Abbrechen</button>
+    </div>`);
+  wireClose();
+
+  document.querySelectorAll('#locChips .chip').forEach(chip=>{
+    chip.addEventListener('click', async ()=>{
+      const locId   = chip.dataset.locId;
+      const locName = chip.dataset.locName;
+      document.querySelectorAll('#locChips .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      try {
+        await apiPost('/api/set-location', { stock_entry_id: entryId, location_id: locId, product_id: it.id });
+        // update local cache so the card re-renders with the new icon
+        const idx = items.findIndex(x=>x.id===it.id);
+        if (idx>=0) items[idx] = {...items[idx], loc: locName};
+        closeSheet();
+        render();
+        showSnack(`<b>${esc(it.name)}</b> verschoben nach ${esc(locName)}`);
+      } catch(err){ showError(err); }
+    });
+  });
+}
+
+/* ---- more / details sheet (name, amount, toss) ---- */
+async function openMoreSheet(it, el){
+  const overdue = it.due !== null && it.due !== undefined && it.due <= 0;
+  openSheet(`
+    <h3>${esc(it.name)}</h3>
+    <div class="h3sub">Artikel bearbeiten</div>
+    <div class="moodq" style="margin-top:16px">
+      <div class="moodlabel">Name</div>
+      <input type="text" id="detailName" value="${esc(it.name)}"
+        style="width:100%;margin-top:6px;padding:10px 12px;font:inherit;font-size:15px;
+               background:var(--surface-2);color:var(--ink);border:1px solid var(--line);
+               border-radius:11px;outline:none">
+    </div>
+    <div class="moodq" style="margin-top:14px">
+      <div class="moodlabel">Menge</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+        <input type="number" id="detailAmount" value="${it.amount}" min="0" step="0.1"
+          style="width:90px;padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:14px;
+                 background:var(--surface-2);color:var(--ink);border:1px solid var(--line);
+                 border-radius:11px;outline:none">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-dim)">${esc(it.unit||'')}</span>
+      </div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:8px">
+      <button class="btn ghost" style="flex:1" id="closeSheet">Abbrechen</button>
+      <button class="btn ghost" id="detailToss"
+        style="flex:0 0 auto;color:var(--hot);border-color:var(--hot)">🗑 Wegwerfen</button>
+      <button class="btn solid" style="flex:1;background:var(--accent);color:var(--accent-ink)" id="detailSave">Speichern</button>
+    </div>`);
+  wireClose();
+
+  document.getElementById('detailName').addEventListener('focus', e=>{ e.target.style.borderColor='var(--accent)'; });
+  document.getElementById('detailName').addEventListener('blur',  e=>{ e.target.style.borderColor='var(--line)'; });
+  document.getElementById('detailAmount').addEventListener('focus', e=>{ e.target.style.borderColor='var(--accent)'; });
+  document.getElementById('detailAmount').addEventListener('blur',  e=>{ e.target.style.borderColor='var(--line)'; });
+
+  document.getElementById('detailToss').addEventListener('click', async ()=>{
+    if (!confirm(`${it.name} wegwerfen?`)) return;
+    closeSheet();
+    const amount = Number(it.amount) || 1;
+    writeRemove(it, el, '/api/toss', { product_id: it.id, amount, confirm: true }, `<b>${esc(it.name)}</b> weggeworfen`);
+  });
+
+  document.getElementById('detailSave').addEventListener('click', async ()=>{
+    const newName   = document.getElementById('detailName').value.trim();
+    const newAmount = parseFloat(document.getElementById('detailAmount').value);
+    const tasks = [];
+    if (newName && newName !== it.name)       tasks.push(apiPost('/api/set-name',   { product_id: it.id, name: newName }));
+    if (!isNaN(newAmount) && newAmount !== it.amount) tasks.push(apiPost('/api/set-amount', { product_id: it.id, new_amount: newAmount }));
+    if (!tasks.length){ closeSheet(); return; }
+    try {
+      await Promise.all(tasks);
+      // update local state
+      const idx = items.findIndex(x=>x.id===it.id);
+      if (idx>=0){
+        const updated = {...items[idx]};
+        if (newName && newName!==it.name){ updated.name = newName; }
+        if (!isNaN(newAmount) && newAmount!==it.amount){ updated.amount = newAmount; updated.qty = formatQty(newAmount, it.unit); }
+        items[idx] = updated;
+      }
+      closeSheet(); render();
+      showSnack(`<b>${esc(newName||it.name)}</b> aktualisiert`);
+    } catch(err){ showError(err); }
+  });
+}
 
 /* Ask AI — collect a "food mood", then build & copy a German prompt. */
 const MOOD_GROUPS = [
