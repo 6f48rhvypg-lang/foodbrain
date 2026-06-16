@@ -1,0 +1,26 @@
+{
+  "_comment": "Each case feeds the REAL understand_transcript() path. 'expect.items' is sparse: only the fields you list are scored. 'catalog' is a list of existing product NAMES (optional; falls back to default_catalog). freshness_days is scored with +/-2 day tolerance.",
+  "default_catalog": ["Sauerteig Brot"],
+  "cases": [
+    {
+      "id": "pantry-spreads-big",
+      "mode": "add",
+      "transcript": "Ich hab ein halbes angeschnittenes Sauerteig Brot zwei Pita Brötchen die ich spätestens übermorgen gegessen haben sollte ein halbes Glas Nutella Ein ganzes 200 325 g Glas mit Erdnussbutter 325 g Apfelmus noch ungeöffnet dann geöffnet 400 g Oo Haselnuss Creme Da noch eine ungeöffnete Marmelade Himbeeren 400 g dann Mock Duck 280 g eine Dose ungeöffnet eine Coro Schokoladencreme 200 g schon geöffnet",
+      "catalog": ["Sauerteig Brot"],
+      "expect": {
+        "items": [
+          {"name": "Sauerteig Brot", "quantity": 0.5, "opened": true},
+          {"name": "Pita Brötchen", "quantity": 2, "opened": false, "freshness_days": 2},
+          {"name": "Nutella", "quantity": 0.5, "opened": true},
+          {"name": "Erdnussbutter", "quantity": 325, "unit": "g", "opened": false},
+          {"name": "Apfelmus", "quantity": 325, "unit": "g", "opened": false},
+          {"name": "Haselnuss Creme", "quantity": 400, "unit": "g", "opened": true},
+          {"name": "Himbeermarmelade", "quantity": 400, "unit": "g", "opened": false},
+          {"name": "Mock Duck", "quantity": 280, "unit": "g", "opened": false},
+          {"name": "Coro Schokoladencreme", "quantity": 200, "unit": "g", "opened": true}
+        ],
+        "max_questions": 2
+      }
+    }
+  ]
+}

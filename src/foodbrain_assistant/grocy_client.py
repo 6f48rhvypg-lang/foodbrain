@@ -34,7 +34,15 @@ class GrocyClient:
 
     def get_stock_items(self) -> list[StockItem]:
         payload = self._get_json("api/stock")
-        return parse_stock_response(payload)
+        # Grocy's /api/stock carries only product.location_id (a number), so
+        # resolve names from the locations table for the location-grouping UI.
+        try:
+            location_names = {
+                loc["id"]: loc["name"] for loc in self.get_locations()
+            }
+        except GrocyClientError:
+            location_names = {}
+        return parse_stock_response(payload, location_names=location_names)
 
     def get_recipes(self) -> list[Recipe]:
         return parse_grocy_recipes_response(
@@ -196,14 +204,14 @@ class GrocyClient:
         return self._write_json(path, "PUT", body)
 
     def rename_product(self, product_id: str, name: str) -> Any:
-        """Patch the product master name. Grocy objects support PATCH for partial updates."""
+        """Edit the product master name. Grocy's PUT on an object does a partial update."""
         path = f"api/objects/products/{product_id}"
         if not self.allow_writes:
             raise GrocyWriteDisabledError(
-                f"refusing to PATCH {path}: client is read-only "
+                f"refusing to PUT {path}: client is read-only "
                 "(construct GrocyClient with allow_writes=True to enable writes)"
             )
-        return self._write_json(path, "PATCH", {"name": name})
+        return self._write_json(path, "PUT", {"name": name})
 
     def set_product_inventory(self, product_id: str, new_amount: float) -> Any:
         """Set stock to an exact amount via Grocy's inventory endpoint."""
@@ -315,9 +323,11 @@ def extract_transaction_id(response: Any) -> Optional[str]:
     return None
 
 
-def parse_stock_response(payload: Any) -> list[StockItem]:
+def parse_stock_response(
+    payload: Any, location_names: Optional[dict[Any, str]] = None
+) -> list[StockItem]:
     rows = _require_stock_rows(payload)
-    return list(_parse_stock_items(rows))
+    return list(_parse_stock_items(rows, location_names or {}))
 
 
 def diagnose_stock_response(payload: Any) -> dict[str, object]:
@@ -346,7 +356,7 @@ def diagnose_stock_response(payload: Any) -> dict[str, object]:
         rows.append(row)
         _diagnose_stock_row(row, index=index, warnings=warnings, errors=errors)
 
-    parsed_items = list(_parse_stock_items(rows))
+    parsed_items = list(_parse_stock_items(rows, {}))
     diagnostics["parsed_item_count"] = len(parsed_items)
     diagnostics["skipped_empty_stock_count"] = sum(
         1 for row in rows if _parse_row_amount(row) <= 0
@@ -369,7 +379,9 @@ def _require_stock_rows(payload: Any) -> list[dict[str, Any]]:
     return rows
 
 
-def _parse_stock_items(rows: list[dict[str, Any]]) -> Iterable[StockItem]:
+def _parse_stock_items(
+    rows: list[dict[str, Any]], location_names: dict[Any, str]
+) -> Iterable[StockItem]:
     for row in rows:
         product = _read_product(row)
         amount = _parse_row_amount(row)
@@ -385,7 +397,7 @@ def _parse_stock_items(rows: list[dict[str, Any]]) -> Iterable[StockItem]:
             unit=_read_unit_name(row),
             best_before_date=_parse_date(row.get("best_before_date")),
             opened_date=_parse_date(row.get("open")),
-            location=_read_location_name(row),
+            location=_read_location_name(row, location_names),
         )
 
 
@@ -425,10 +437,20 @@ def _read_unit_name(row: dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _read_location_name(row: dict[str, Any]) -> Optional[str]:
+def _read_location_name(
+    row: dict[str, Any], location_names: Optional[dict[Any, str]] = None
+) -> Optional[str]:
+    # Prefer a nested location object if present (some exports include it)...
     location = row.get("location") or {}
     if isinstance(location, dict) and location.get("name"):
         return str(location["name"])
+    # ...otherwise resolve product.location_id against the locations table.
+    product = _read_product(row)
+    location_id = product.get("location_id") or row.get("location_id")
+    if location_id is not None and location_names:
+        name = location_names.get(location_id) or location_names.get(str(location_id))
+        if name:
+            return str(name)
     return None
 
 
