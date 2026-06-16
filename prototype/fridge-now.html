@@ -1081,9 +1081,64 @@ function sortItems(arr){
 /* ---- render ---- */
 const shelvesEl = document.getElementById('shelves');
 
+/* ---- location grouping ---- */
+const LOCATION_META = {
+  'kühlschrank':     { icon: '❄️',  c: 'var(--cool)',   cbg: 'var(--cool-bg)'              },
+  'tiefkühler':      { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'tiefkühlschrank': { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'tiefkühltruhe':   { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'gefrierfach':     { icon: '🧊',  c: '#5b9fd4',       cbg: 'rgba(91,159,212,.14)'        },
+  'vorrat':          { icon: '🥫',  c: 'var(--staple)', cbg: 'var(--staple-bg)'            },
+  'vorratsschrank':  { icon: '🥫',  c: 'var(--staple)', cbg: 'var(--staple-bg)'            },
+  'keller':          { icon: '📦',  c: '#8a8060',       cbg: 'rgba(138,128,96,.15)'        },
+};
+const LOCATION_ORDER = ['kühlschrank','tiefkühler','tiefkühlschrank','tiefkühltruhe','gefrierfach','vorrat','vorratsschrank','keller'];
+function locationMeta(name){
+  return LOCATION_META[String(name||'').toLowerCase().trim()] || { icon: '📍', c: 'var(--staple)', cbg: 'var(--staple-bg)' };
+}
+
+function renderByLocation(){
+  const groups = new Map();
+  items.forEach(it=>{
+    const loc = (it.loc === '—' || !it.loc) ? 'Unbekannt' : it.loc;
+    if (!groups.has(loc)) groups.set(loc, []);
+    groups.get(loc).push(it);
+  });
+  const ordered = [...groups.entries()].sort(([a],[b])=>{
+    const ai = LOCATION_ORDER.indexOf(a.toLowerCase());
+    const bi = LOCATION_ORDER.indexOf(b.toLowerCase());
+    if (ai===-1 && bi===-1) return a.localeCompare(b,'de');
+    if (ai===-1) return 1;
+    if (bi===-1) return -1;
+    return ai-bi;
+  });
+  let delay = 0;
+  ordered.forEach(([locName, list])=>{
+    const sorted = list.slice().sort((x,y)=>dueRank(x)-dueRank(y) || x.name.localeCompare(y.name,'de'));
+    const meta = locationMeta(locName);
+    const shelf = document.createElement('section');
+    shelf.className = 'shelf';
+    const head = document.createElement('div');
+    head.className = 'shelf-head';
+    head.style.setProperty('--c', meta.c);
+    head.style.setProperty('--cbg', meta.cbg);
+    head.innerHTML = `
+      <span class="sicon">${meta.icon}</span>
+      <h2>${esc(locName)}</h2>
+      <span class="count">${sorted.length}</span>`;
+    shelf.appendChild(head);
+    const ul = document.createElement('div');
+    ul.className = 'items';
+    sorted.forEach(it=>{ ul.appendChild(itemEl(it, BANDS[it.band] || BANDS.staple, delay)); delay += 0.04; });
+    shelf.appendChild(ul);
+    shelvesEl.appendChild(shelf);
+  });
+}
+
 function render(){
   shelvesEl.innerHTML = '';
   if (currentSort === 'category') { renderByCategory(); }
+  else if (currentSort === 'location') { renderByLocation(); }
   else { renderByBand(); }
 
   // header stats
@@ -1196,7 +1251,7 @@ function itemEl(it, meta, delay){
     <div class="thumb" data-fb="${emojiFor(it.name)}">${thumbInner}</div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
-      <div class="meta"><span>${esc(it.qty)}</span><span class="loc">· ${esc(it.loc)}</span></div>
+      <div class="meta"><span>${esc(it.qty)}</span>${currentSort !== 'location' ? `<span class="loc">· ${esc(it.loc)}</span>` : ''}</div>
     </div>
     ${ isStaple ? '' : `<div class="due ${overdue?'overdue':''}">${dueLabel(it.due)}</div>`}
     <div class="pick">✓</div>
