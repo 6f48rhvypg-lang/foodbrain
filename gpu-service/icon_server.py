@@ -3,16 +3,18 @@
 Accepts POST /generate {"prompt": str, "size": int} → PNG bytes.
 FoodBrain's /api/icon/ endpoint calls this when an icon isn't cached.
 
-First run downloads ~34 GB of HiDream-I1-Full weights from HuggingFace.
+Uses FLUX.1-schnell (Apache 2.0, ~24 GB, no gated access required).
+First run downloads weights from HuggingFace automatically.
 """
 
 import io
 import logging
 
 import torch
-from diffusers import HiDreamImagePipeline
+from diffusers import FluxPipeline
 from fastapi import FastAPI
 from fastapi.responses import Response
+from PIL import Image
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -20,9 +22,9 @@ log = logging.getLogger(__name__)
 
 app = FastAPI()
 
-log.info("Loading HiDream-I1-Full (BF16) — this takes ~1 min on first run …")
-pipe = HiDreamImagePipeline.from_pretrained(
-    "HiDream-ai/HiDream-I1-Full",
+log.info("Loading FLUX.1-schnell (BF16) — first run downloads ~24 GB …")
+pipe = FluxPipeline.from_pretrained(
+    "black-forest-labs/FLUX.1-schnell",
     torch_dtype=torch.bfloat16,
 ).to("cuda")
 log.info("Model ready.")
@@ -36,13 +38,18 @@ class GenerateRequest(BaseModel):
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Response:
     log.info("Generating icon: %r at %dpx", req.prompt[:60], req.size)
+    # FLUX minimum useful resolution is 256; generate at 512 and resize down.
+    gen_size = max(req.size, 512)
     result = pipe(
         req.prompt,
-        height=req.size,
-        width=req.size,
-        num_inference_steps=28,
+        height=gen_size,
+        width=gen_size,
+        num_inference_steps=4,
+        guidance_scale=0.0,  # schnell is a distilled model, no CFG needed
     )
-    image = result.images[0]
+    image: Image.Image = result.images[0]
+    if req.size < gen_size:
+        image = image.resize((req.size, req.size), Image.LANCZOS)
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     log.info("Done.")
@@ -51,4 +58,5 @@ def generate(req: GenerateRequest) -> Response:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "device": str(next(pipe.unet.parameters()).device)}
+    device = str(next(pipe.transformer.parameters()).device)
+    return {"ok": True, "device": device}
