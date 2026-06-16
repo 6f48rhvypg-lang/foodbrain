@@ -21,8 +21,9 @@ from urllib.error import URLError
 log = logging.getLogger(__name__)
 
 _PROMPT_TEMPLATE = (
-    "flat icon, white background, simple illustration of {name}, "
-    "food product, minimal style, no text, clean edges"
+    "A single {name} centered on a pure white background. "
+    "Minimalist flat food illustration, one item only, clean and isolated. "
+    "No text, no patterns, no multiple items, no decorative borders, no grid."
 )
 
 
@@ -74,7 +75,7 @@ def _generate(name: str, local_url: str) -> Optional[bytes]:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib_request.urlopen(req, timeout=15) as resp:
+        with urllib_request.urlopen(req, timeout=120) as resp:
             if resp.status == 200:
                 return resp.read()
             log.warning("icon server returned HTTP %d for %r", resp.status, name)

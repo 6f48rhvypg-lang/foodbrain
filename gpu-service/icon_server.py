@@ -3,8 +3,8 @@
 Accepts POST /generate {"prompt": str, "size": int} → PNG bytes.
 FoodBrain's /api/icon/ endpoint calls this when an icon isn't cached.
 
-Uses SDXL-Turbo (Apache 2.0, ~6.5 GB, 4-step generation, no CFG).
-First run downloads weights from HuggingFace automatically.
+Uses HiDream-I1-Full (BF16, ~24 GB VRAM). Requires 32 GB VRAM (RTX 5090).
+First run downloads weights from HuggingFace automatically (~24 GB total).
 """
 
 import io
@@ -12,7 +12,7 @@ import logging
 import threading
 
 import torch
-from diffusers import AutoPipelineForText2Image
+from diffusers import HiDreamImagePipeline
 from fastapi import FastAPI
 from fastapi.responses import Response
 from PIL import Image
@@ -23,11 +23,10 @@ log = logging.getLogger(__name__)
 
 app = FastAPI()
 
-log.info("Loading SDXL-Turbo (FP16) — first run downloads ~6.5 GB …")
-pipe = AutoPipelineForText2Image.from_pretrained(
-    "stabilityai/sdxl-turbo",
-    torch_dtype=torch.float16,
-    variant="fp16",
+log.info("Loading HiDream-I1-Full (BF16) — first run downloads ~24 GB …")
+pipe = HiDreamImagePipeline.from_pretrained(
+    "HiDream-AI/HiDream-I1-Full",
+    torch_dtype=torch.bfloat16,
 ).to("cuda")
 log.info("Model ready.")
 
@@ -41,17 +40,17 @@ class GenerateRequest(BaseModel):
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Response:
-    log.info("Generating icon: %r at %dpx", req.prompt[:60], req.size)
+    log.info("Generating icon: %r at %dpx", req.prompt[:80], req.size)
     with _lock:
         result = pipe(
             prompt=req.prompt,
-            num_inference_steps=4,
-            guidance_scale=0.0,  # turbo is distilled — no CFG needed
-            height=512,
-            width=512,
+            num_inference_steps=50,
+            guidance_scale=5.0,
+            height=1024,
+            width=1024,
         )
     image: Image.Image = result.images[0]
-    if req.size < 512:
+    if req.size < 1024:
         image = image.resize((req.size, req.size), Image.LANCZOS)
     buf = io.BytesIO()
     image.save(buf, format="PNG")
@@ -61,5 +60,5 @@ def generate(req: GenerateRequest) -> Response:
 
 @app.get("/health")
 def health() -> dict:
-    device = str(next(pipe.unet.parameters()).device)
-    return {"ok": True, "device": device, "model": "sdxl-turbo"}
+    device = str(next(pipe.transformer.parameters()).device)
+    return {"ok": True, "device": device, "model": "hidream-i1-full"}
