@@ -674,8 +674,18 @@
   .ifields input { background: var(--surface); color: var(--ink); border: 1px solid var(--line);
     border-radius: 8px; padding: 5px 7px; font-size: 13px; font-family: "IBM Plex Mono", monospace; }
   .ifields input.iqty { width: 52px; } .ifields input.iunit { width: 78px; } .ifields input.idate { width: 152px; color-scheme: light; }
+  .ifields select.iloc { background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 7px; font-size: 13px; font-family: "IBM Plex Mono", monospace; max-width: 150px; }
   .irow .idrop { background: transparent; border: none; color: var(--ink-faint); cursor: pointer; font-size: 15px; }
   .irow .idrop:hover { color: var(--hot); }
+  /* matched/fuzzy badges are detachable: tap to force a brand-new product */
+  .ibadge.matched, .ibadge.fuzzy { cursor: pointer; }
+  .ibadge.matched:hover, .ibadge.fuzzy:hover { filter: brightness(.95); text-decoration: line-through; }
+  .micnote.heard { font-style: italic; color: var(--ink-dim); }
+  .iadd { width: 100%; padding: 10px 12px; margin: 2px 0 8px; cursor: pointer;
+    background: transparent; color: var(--accent); border: 1px dashed var(--line);
+    border-radius: 12px; font: inherit; font-size: 14px; font-weight: 600; }
+  .iadd:hover { background: var(--surface-2); }
 
   /* connect results */
   .cgroup { margin-top: 4px; }
@@ -2169,13 +2179,36 @@ async function runUnderstand(answers, transcriptArg){
     document.getElementById('backBtn').addEventListener('click', ()=> openIntake(transcript));
     return;
   }
+  // Per-row location dropdowns need the real Grocy locations; best-effort so a
+  // failed fetch (offline) just hides the picker instead of breaking intake.
+  if (intakeMode !== 'edit'){ try { await _fetchLocations(); } catch(_){} }
   renderReview(transcript, data);
 }
 
 function badgeFor(it){
-  if (it.match === 'exact') return `<span class="ibadge matched" title="passt zu ${esc(it.matched_product_name||'')}">✓ in&nbsp;Grocy</span>`;
-  if (it.match === 'fuzzy') return `<span class="ibadge fuzzy" title="ähnelt ${esc(it.matched_product_name||'')}">≈ ${esc(it.matched_product_name||'Treffer')}</span>`;
+  if (it.match === 'exact') return `<span class="ibadge matched" title="passt zu ${esc(it.matched_product_name||'')} — tippen für neues Produkt">✓ in&nbsp;Grocy</span>`;
+  if (it.match === 'fuzzy') return `<span class="ibadge fuzzy" title="ähnelt ${esc(it.matched_product_name||'')} — tippen für neues Produkt">≈ ${esc(it.matched_product_name||'Treffer')}</span>`;
   return `<span class="ibadge new">neu</span>`;
+}
+
+/* Map the model's English location guess ('freezer'/'fridge'/'pantry') to one of
+   the household's real Grocy locations, reusing the card view's word patterns. */
+function matchGrocyLocation(modelLoc, locs){
+  const n = String(modelLoc||'').toLowerCase().trim();
+  if (!n || !locs.length) return '';
+  for (const l of locs){ const ln = l.name.toLowerCase(); if (ln===n || ln.includes(n) || n.includes(ln)) return l.name; }
+  for (const [re] of LOC_SHORT){ if (re.test(n)){ const hit = locs.find(l=>re.test(l.name.toLowerCase())); if (hit) return hit.name; } }
+  return '';
+}
+
+/* Per-row location dropdown built from the real Grocy locations. Empty when the
+   list couldn't be fetched, so intake still works offline (lands in default). */
+function locSelectHtml(selectedName){
+  const locs = _cachedLocations || [];
+  if (!locs.length) return '';
+  const opts = ['<option value="">Ort —</option>'].concat(locs.map(l=>
+    `<option value="${esc(l.name)}"${l.name===selectedName?' selected':''}>${locationMeta(l.name).icon} ${esc(l.name)}</option>`));
+  return `<label>Ort <select class="iloc">${opts.join('')}</select></label>`;
 }
 
 function nameField(it){
@@ -2186,6 +2219,7 @@ function nameField(it){
 function reviewRow(it, i){
   const date = it.freshness_days != null ? isoFromOffset(it.freshness_days) : '';
   const qty = Number(it.quantity ?? 1);
+  const selLoc = matchGrocyLocation(it.location, _cachedLocations || []);
   return `<div class="irow" data-i="${i}" data-pid="${esc(it.matched_product_id||'')}" data-mode="add">
     <input type="checkbox" class="ipick" checked />
     ${nameField(it)}
@@ -2194,10 +2228,29 @@ function reviewRow(it, i){
       <label>Menge <input class="iqty" type="number" min="0" step="0.1" value="${qty}" /></label>
       <label>Einheit <input class="iunit" value="${esc(it.unit||'')}" placeholder="—" /></label>
       <label>haltbar bis <input class="idate" type="date" value="${date}" /></label>
+      ${locSelectHtml(selLoc)}
       <label>geöffnet <input class="iopen" type="checkbox" ${it.opened?'checked':''} /></label>
       <button class="idrop" type="button" title="entfernen">✕</button>
     </div>
   </div>`;
+}
+
+/* Wire a single review row's controls. ``isEdit`` rows skip the detach-match
+   handler (you can't act on stock you don't have). */
+function wireReviewRow(row, isEdit){
+  const drop = row.querySelector('.idrop');
+  if (drop) drop.addEventListener('click', ()=>{
+    row.classList.toggle('drop');
+    const pick = row.querySelector('.ipick');
+    if (pick && !pick.disabled) pick.checked = !row.classList.contains('drop');
+  });
+  if (!isEdit){
+    const badge = row.querySelector('.ibadge.matched, .ibadge.fuzzy');
+    if (badge) badge.addEventListener('click', ()=>{
+      row.dataset.pid = '';                 // detach: commit as a brand-new product
+      badge.outerHTML = '<span class="ibadge new">neu</span>';
+    });
+  }
 }
 
 const EDIT_ACTIONS = ['consume', 'toss', 'set_date'];
@@ -2269,20 +2322,29 @@ function renderReview(transcript, data){
   openSheet(`
     <h3>${esc(title)}</h3>
     <div class="h3sub">${subText}</div>
+    <div class="micnote heard" style="margin-bottom:8px">🎤 Gehört: „${esc(transcript)}"</div>
     ${data.summary ? `<div class="micnote" style="margin-bottom:10px">${esc(data.summary)}</div>` : ''}
-    ${list.map(rowFn).join('')}
+    <div id="ireviewList">${list.map(rowFn).join('')}</div>
+    ${isEdit ? '' : '<button class="iadd" id="addRowBtn" type="button">+ Artikel hinzufügen</button>'}
     ${qHtml}
     <div class="row">
       <button class="btn ghost" id="closeSheet">Schließen</button>
       <button class="btn solid" id="commitBtn">${commitLabel}</button>
     </div>`);
   wireClose();
-  sheet.querySelectorAll('.idrop').forEach(b=> b.addEventListener('click', e=>{
-    const row = e.target.closest('.irow');
-    row.classList.toggle('drop');
-    const pick = row.querySelector('.ipick');
-    if (!pick.disabled) pick.checked = !row.classList.contains('drop');
-  }));
+  sheet.querySelectorAll('.irow').forEach(row=> wireReviewRow(row, isEdit));
+  const addBtn = document.getElementById('addRowBtn');
+  if (addBtn) addBtn.addEventListener('click', ()=>{
+    const listEl = document.getElementById('ireviewList');
+    const blank = { name:'', quantity:1, unit:'', freshness_days:null,
+                    opened:false, location:'', matched_product_id:'', match:'new' };
+    const tmp = document.createElement('div');
+    tmp.innerHTML = reviewRow(blank, listEl.children.length);
+    const row = tmp.firstElementChild;
+    listEl.appendChild(row);
+    wireReviewRow(row, false);
+    row.querySelector('.iname').focus();
+  });
   // Edit-mode: action chips (benutzt / wegwerfen / Datum) switch the row's action.
   sheet.querySelectorAll('.iactions').forEach(group=>{
     group.querySelectorAll('.iact').forEach(chip=>{
@@ -2324,6 +2386,7 @@ function collectItems(){
         unit: row.querySelector('.iunit').value.trim() || null,
         best_before_date: row.querySelector('.idate').value || null,
         opened: row.querySelector('.iopen').checked,
+        location: row.querySelector('.iloc')?.value || null,
       };
     })
     .filter(it => it.name);
