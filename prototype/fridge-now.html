@@ -178,103 +178,94 @@
     padding: 26px 16px calc(150px + env(safe-area-inset-bottom));
   }
 
-  /* ---------- header ---------- */
-  header {
-    background: var(--green);
-    color: var(--on-green);
-    border-radius: 24px;
-    padding: 20px 20px 22px;
-    margin-bottom: 18px;
-    box-shadow: var(--shadow);
-    position: relative; overflow: hidden;
-  }
-  header::after {
-    content: ""; position: absolute; right: -40px; top: -40px;
-    width: 180px; height: 180px; border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in srgb, var(--amber) 22%, transparent), transparent 70%);
-    pointer-events: none;
-  }
+  /* ---------- header (V4 · search-first) ---------- */
+  header { margin-bottom: 4px; }
 
-  .brand {
-    display: flex; align-items: center; gap: 9px;
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11px; letter-spacing: .24em; text-transform: uppercase;
-    color: color-mix(in srgb, var(--on-green) 65%, transparent);
-  }
-  .brand .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--panel-accent); box-shadow: 0 0 10px var(--panel-accent);
-    animation: pulse 2.6s var(--ease) infinite;
-  }
-  @keyframes pulse { 50% { opacity: .4; } }
-
+  .eyebrow { display: flex; align-items: center; gap: 8px; padding: 2px 4px 0; margin-bottom: 14px; }
+  /* V4 keeps the title as a quiet uppercase eyebrow; bumped +2pt (11 → 13) */
   h1 {
-    font-family: "Fraunces", serif;
-    font-optical-sizing: auto;
-    font-weight: 600;
-    font-size: clamp(32px, 8.5vw, 42px);
-    line-height: 1.0;
-    letter-spacing: -.02em;
-    margin: 12px 0 8px;
-    color: var(--head-title);
+    flex: 1; min-width: 0;
+    font-family: "IBM Plex Mono", monospace; font-weight: 600;
+    font-size: 13px; line-height: 1.2; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--ink-dim);
   }
-  h1 em { font-style: italic; color: var(--panel-accent); font-weight: 500; }
 
-  .subline {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 12px; color: color-mix(in srgb, var(--on-green) 80%, transparent);
-    display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+  /* one subtle round icon button — sync ↻ and the ⋯ menu both use this */
+  .iconbtn {
+    width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%;
+    display: grid; place-items: center; font-size: 15px; line-height: 1; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink-dim);
+    transition: color .2s, border-color .2s;
   }
-  .subline .sep { color: color-mix(in srgb, var(--on-green) 35%, transparent); }
-  .subline b { color: var(--panel-accent); font-weight: 600; }
-
-  .syncbtn {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11px; letter-spacing: .04em;
-    color: color-mix(in srgb, var(--on-green) 85%, transparent); background: var(--panel-soft);
-    border: 1px solid var(--panel-line); border-radius: 999px;
-    padding: 3px 11px 3px 9px; margin-left: auto;
-    display: inline-flex; align-items: center; gap: 6px;
-    cursor: pointer; transition: background .2s, color .2s;
-  }
-  .syncbtn:hover { color: var(--head-title); background: var(--panel-soft); filter: brightness(1.06); }
-  .syncbtn .syncico { display: inline-block; line-height: 1; }
-  .syncbtn.syncing { color: var(--panel-accent); cursor: default; }
-  .syncbtn.syncing .syncico { animation: spin .8s linear infinite; }
+  .iconbtn:hover { color: var(--ink); border-color: var(--ink-faint); }
+  .iconbtn .syncico { display: inline-block; line-height: 1; }
+  .iconbtn.syncing { color: var(--accent); cursor: default; }
+  .iconbtn.syncing .syncico { animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ---------- intake: fast add / edit ---------- */
-  .intakebar { display: flex; gap: 10px; margin-top: 18px; }
-  .ibtn {
-    flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center;
-    gap: 9px; cursor: pointer; border-radius: 14px; padding: 13px 12px;
-    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 15px;
-    letter-spacing: .01em; transition: filter .2s, transform .15s var(--ease), border-color .2s;
+  /* ---------- search row: live search + round add/use ---------- */
+  .searchrow { display: flex; align-items: center; gap: 10px; }
+  .searchwrap { position: relative; flex: 1 1 auto; min-width: 0; }
+  .searchwrap .si {
+    position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+    font-size: 18px; color: var(--ink-faint); pointer-events: none;
   }
-  .ibtn .iemoji { font-size: 19px; line-height: 1; }
-  .ibtn .isub { font-weight: 500; font-size: 11px; opacity: .8; }
-  .ibtn:active { transform: scale(.97); }
-  .ibtn.add { background: var(--amber); color: var(--amber-ink); border: 1px solid var(--amber); }
-  .ibtn.add:hover { filter: brightness(1.05); }
-  .ibtn.edit {
-    background: var(--panel-soft); color: var(--on-green); border: 1px solid var(--panel-line);
+  .search {
+    width: 100%; font-family: "Hanken Grotesk", sans-serif; font-size: 16px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: 16px;
+    padding: 15px 38px 15px 44px; box-shadow: var(--shadow); outline: none;
+    transition: border-color .2s; -webkit-appearance: none; appearance: none;
   }
-  .ibtn.edit:hover { filter: brightness(1.06); }
-  .ibtn[disabled] { opacity: .4; cursor: default; pointer-events: none; }
+  .search::placeholder { color: var(--ink-faint); }
+  .search::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  .search:focus { border-color: var(--accent); }
+  .searchclear {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer;
+    display: none; place-items: center; font-size: 12px;
+    background: var(--surface-2); color: var(--ink-dim);
+  }
+  .searchwrap.has-q .searchclear { display: grid; }
+
+  .rbtn {
+    width: 50px; height: 50px; flex: 0 0 auto; border-radius: 15px; cursor: pointer; border: none;
+    font-size: 28px; font-weight: 300; line-height: 1; display: grid; place-items: center;
+    box-shadow: var(--shadow); transition: filter .2s, transform .15s var(--ease);
+  }
+  .rbtn:active { transform: scale(.95); }
+  .rbtn:hover { filter: brightness(1.05); }
+  .rbtn.add  { background: var(--amber); color: var(--amber-ink); }
+  .rbtn.edit { background: var(--green);  color: var(--on-green); }
+  .rbtn[disabled] { opacity: .4; cursor: default; pointer-events: none; }
 
   /* ---------- toolbar: sort + combine ---------- */
   .toolbar { display: flex; align-items: center; gap: 10px; margin: 18px 0 4px; }
-  .sortbar {
-    display: flex; gap: 8px; flex: 1 1 auto; min-width: 0;
-    overflow-x: auto; scrollbar-width: none; padding: 2px 2px 4px;
-    -webkit-overflow-scrolling: touch;
+  /* the single "Sortieren" pill that expands into #sortPop */
+  .sortpill {
+    margin-right: auto; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 13px;
+    color: var(--ink-dim); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 9px 14px; box-shadow: var(--shadow); transition: border-color .18s, color .18s;
   }
-  .sortbar::-webkit-scrollbar { display: none; }
-  .sortbar .lbl {
-    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
-    letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint);
-    align-self: center; flex: 0 0 auto; padding-right: 2px;
+  .sortpill:hover { border-color: var(--ink-faint); color: var(--ink); }
+  .sortpill .cur { color: var(--accent); }
+  .sortpill .chev { font-size: 10px; color: var(--ink-faint); transition: transform .2s var(--ease); }
+  .sortpill[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .sortpop { width: 220px; }
+  .sopt {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 10px; border-radius: 10px; cursor: pointer;
+    border: 1px solid transparent; background: transparent;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 600; font-size: 13.5px;
+    color: var(--ink); text-align: left; transition: background .15s, border-color .15s;
   }
+  .sopt:hover { background: var(--surface-2); }
+  .sopt.active { border-color: var(--accent); background: var(--surface-2); color: var(--accent); }
+  /* divider + reload row appended to the theme popover */
+  .popdiv { height: 1px; background: var(--line-soft); margin: 8px 2px; }
+  .topt .ti { width: 14px; flex: 0 0 auto; text-align: center; font-size: 14px; }
   .chip {
     flex: 0 0 auto; cursor: pointer; user-select: none;
     font-family: "IBM Plex Mono", monospace; font-size: 12px;
@@ -804,46 +795,42 @@
     font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
     color: var(--ink-faint); letter-spacing: .1em;
   }
+
+  /* ---------- V4 · slightly tighter rows so more fits above the fold ---------- */
+  .items { gap: 8px; }
+  .item { padding: 10px 13px; column-gap: 12px; }
+  .item.tabpad { padding-top: 18px; }
+  .thumb { width: 42px; height: 42px; border-radius: 13px; font-size: 22px; }
+  .item .name { font-size: 15.5px; }
 </style>
 </head>
 <body>
   <div class="app" id="app">
     <header>
-      <div class="brand"><span class="dot"></span> FoodBrain · Kühlschrank</div>
-      <h1>Im <em>Kühlschrank</em></h1>
-      <div class="subline">
-        <span id="dateStr"></span>
-        <span class="sep">/</span>
-        <span><b id="urgentN">0</b> bald essen</span>
-        <span class="sep">/</span>
-        <span id="totalN">0 Artikel</span>
-        <button id="syncBtn" class="syncbtn" type="button" title="Jetzt synchronisieren" aria-label="Jetzt synchronisieren">
-          <span class="syncico">↻</span><span id="syncLabel">sync</span>
+      <div class="eyebrow">
+        <h1>Was haben wir?</h1>
+        <button id="syncBtn" class="iconbtn" type="button" title="Jetzt synchronisieren" aria-label="Jetzt synchronisieren">
+          <span class="syncico">↻</span>
         </button>
-        <button id="themeBtn" class="syncbtn" type="button" style="margin-left:0" title="Farbthema wählen" aria-label="Farbthema wählen">🎨</button>
-        <button class="syncbtn" type="button" style="margin-left:0" title="App neu laden" aria-label="App neu laden" onclick="location.href='/ui?v='+Date.now()">↺</button>
+        <button id="themeBtn" class="iconbtn" type="button" title="Mehr · Farbthema · neu laden" aria-label="Mehr">⋯</button>
       </div>
-      <div class="intakebar">
-        <button id="addBtn" class="ibtn add" type="button" title="Sprich, um nach dem Einkauf hinzuzufügen">
-          <span class="iemoji">🛒</span>
-          <span>Einräumen<span class="isub"> · nach dem Einkauf</span></span>
-        </button>
-        <button id="editBtn" class="ibtn edit" type="button" title="Sprich, um zu korrigieren oder als benutzt zu markieren">
-          <span class="iemoji">✏️</span>
-          <span>Verbrauchen / Ändern<span class="isub"> · benutzt oder korrigiert</span></span>
-        </button>
+
+      <div class="searchrow">
+        <div class="searchwrap">
+          <span class="si">⌕</span>
+          <input id="searchInput" class="search" type="search" inputmode="search" autocomplete="off"
+                 placeholder="Suchen … (z. B. Milch)" aria-label="Vorrat durchsuchen" />
+          <button id="searchClear" class="searchclear" type="button" title="Suche löschen" aria-label="Suche löschen">✕</button>
+        </div>
+        <button id="addBtn" class="rbtn add" type="button" title="Sprich, um nach dem Einkauf hinzuzufügen" aria-label="Einräumen">+</button>
+        <button id="editBtn" class="rbtn edit" type="button" title="Sprich, um zu korrigieren oder als benutzt zu markieren" aria-label="Verbrauchen / Ändern">−</button>
       </div>
     </header>
 
     <div class="toolbar">
-      <div class="sortbar">
-        <span class="lbl">sortieren</span>
-        <div class="chip active" data-sort="urgency">Fällig zuerst</div>
-        <div class="chip" data-sort="category">Kategorie</div>
-        <div class="chip" data-sort="name">Name</div>
-        <div class="chip" data-sort="qty">Menge</div>
-        <div class="chip" data-sort="location">Ort</div>
-      </div>
+      <button id="sortPill" class="sortpill" type="button" aria-haspopup="true" aria-expanded="false">
+        Sortieren: <span class="cur" id="sortCur">Fällig zuerst</span> <span class="chev">▾</span>
+      </button>
       <button id="combineBtn" class="combinebtn" type="button" title="Zutaten zum Kombinieren auswählen">
         <span class="ci">✦</span><span id="combineLabel">Kombinieren</span>
       </button>
@@ -880,10 +867,22 @@
     <input type="date" id="dateInput" />
   </div>
 
+  <!-- sort popover (the "Sortieren" pill expands into this) -->
+  <div class="pop sortpop" id="sortPop">
+    <div class="pk">Sortieren nach</div>
+    <button class="sopt active" type="button" data-sort="urgency"  data-label="Fällig zuerst">⏳ Fällig zuerst</button>
+    <button class="sopt"        type="button" data-sort="category" data-label="Kategorie">🍎 Kategorie</button>
+    <button class="sopt"        type="button" data-sort="name"     data-label="Name">🔤 Name</button>
+    <button class="sopt"        type="button" data-sort="qty"      data-label="Menge">⚖️ Menge</button>
+    <button class="sopt"        type="button" data-sort="location" data-label="Ort">📍 Ort</button>
+  </div>
+
   <!-- theme picker popover -->
   <div class="pop themepop" id="themePop">
     <div class="pk">Farbthema</div>
     <div id="themeList"></div>
+    <div class="popdiv"></div>
+    <button class="topt" type="button" id="reloadOpt"><span class="ti">↺</span><span>App neu laden</span></button>
   </div>
 
   <!-- snackbar -->
@@ -966,6 +965,7 @@ let TODAY = new Date();
 let items = [];
 const selected = new Set();
 let currentSort = 'urgency';
+let searchQuery = '';
 let staplesCollapsed = true;
 let spicesCollapsed = true;
 let combineMode = false;
@@ -1238,15 +1238,57 @@ function renderByLocation(){
 
 function render(){
   shelvesEl.innerHTML = '';
-  if (currentSort === 'category') { renderByCategory(); }
+  if (searchQuery.trim()) { renderSearch(); }
+  else if (currentSort === 'category') { renderByCategory(); }
   else if (currentSort === 'location') { renderByLocation(); }
   else { renderByBand(); }
-
-  // header stats
-  document.getElementById('totalN').textContent = items.length + ' Artikel';
-  document.getElementById('urgentN').textContent =
-    items.filter(i=>i.band==='hot' || i.band==='warm').length;
   syncBar();
+}
+
+/* ---- live search: a flat, best-match-first list over item.name ----
+   ranks exact > prefix > word-boundary > substring > fuzzy subsequence;
+   non-matches are dropped, grouping is bypassed, and clearing the box
+   restores the normal sorted view. */
+function searchScore(name, q){
+  const n = (name || '').toLowerCase();
+  if (n === q) return 0;
+  if (n.startsWith(q)) return 1;
+  if (new RegExp('\\b' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n)) return 2;
+  if (n.includes(q)) return 3;
+  let i = 0;
+  for (let k = 0; k < n.length && i < q.length; k++) if (n[k] === q[i]) i++;
+  return i === q.length ? 4 : Infinity;
+}
+function renderSearch(){
+  const q = searchQuery.trim().toLowerCase();
+  const hits = items
+    .map(it => ({ it, s: searchScore(it.name, q) }))
+    .filter(o => o.s !== Infinity)
+    .sort((a, b) => a.s - b.s
+      || a.it.name.length - b.it.name.length
+      || a.it.name.localeCompare(b.it.name, 'de'));
+
+  const shelf = document.createElement('section');
+  shelf.className = 'shelf';
+  const head = document.createElement('div');
+  head.className = 'shelf-head';
+  head.innerHTML = `<span class="sicon">⌕</span><h2>Treffer</h2><span class="count">${hits.length}</span>`;
+  shelf.appendChild(head);
+
+  if (!hits.length){
+    const n = document.createElement('div');
+    n.className = 'nudge';
+    n.innerHTML = `<div class="k">◈ nichts gefunden</div>
+      <p>Kein Artikel passt zu <b>${esc(searchQuery.trim())}</b>. Tippe <b>+</b>, um etwas einzuräumen.</p>`;
+    shelf.appendChild(n);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'items';
+    let delay = 0;
+    hits.forEach(({ it }) => { list.appendChild(itemEl(it, BANDS[it.band] || BANDS.staple, delay)); delay += 0.04; });
+    shelf.appendChild(list);
+  }
+  shelvesEl.appendChild(shelf);
 }
 
 function renderByBand(){
@@ -1681,13 +1723,48 @@ document.addEventListener('click', e => {
   if (themePop.classList.contains('show') && !themePop.contains(e.target)) themePop.classList.remove('show');
 });
 
-/* ---- sort chips ---- */
-document.querySelectorAll('.sortbar .chip').forEach(c=>{
-  c.addEventListener('click', ()=>{
-    document.querySelectorAll('.sortbar .chip').forEach(x=>x.classList.remove('active'));
-    c.classList.add('active'); currentSort = c.dataset.sort; render();
+/* ---- sort: the "Sortieren" pill expands into #sortPop ---- */
+const sortPop = document.getElementById('sortPop');
+const sortPill = document.getElementById('sortPill');
+function closeSortPop(){ sortPop.classList.remove('show'); sortPill.setAttribute('aria-expanded','false'); }
+sortPill.addEventListener('click', e=>{
+  e.stopPropagation();
+  if (sortPop.classList.contains('show')){ closeSortPop(); return; }
+  const r = sortPill.getBoundingClientRect();
+  sortPop.style.top = (r.bottom + 8) + 'px';
+  sortPop.style.left = Math.max(12, Math.min(r.left, window.innerWidth - 232)) + 'px';
+  sortPop.classList.add('show');
+  sortPill.setAttribute('aria-expanded','true');
+});
+document.querySelectorAll('#sortPop .sopt').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('#sortPop .sopt').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    currentSort = b.dataset.sort;
+    document.getElementById('sortCur').textContent = b.dataset.label;
+    closeSortPop();
+    render();
   });
 });
+document.addEventListener('click', e=>{
+  if (sortPop.classList.contains('show') && !sortPop.contains(e.target) && e.target !== sortPill) closeSortPop();
+});
+
+/* ---- live search box ---- */
+const searchInput = document.getElementById('searchInput');
+const searchWrap = searchInput.closest('.searchwrap');
+function applySearch(){
+  searchQuery = searchInput.value;
+  searchWrap.classList.toggle('has-q', !!searchQuery.trim());
+  render();
+}
+searchInput.addEventListener('input', applySearch);
+document.getElementById('searchClear').addEventListener('click', ()=>{
+  searchInput.value = ''; searchInput.focus(); applySearch();
+});
+
+/* ---- "App neu laden" lives in the ⋯ menu now ---- */
+document.getElementById('reloadOpt').addEventListener('click', ()=>{ location.href = '/ui?v=' + Date.now(); });
 
 /* ---- sheet (Connect / Ask) ---- */
 const scrim = document.getElementById('scrim');
@@ -2431,8 +2508,6 @@ async function reload(){
   }
   TODAY = data.as_of ? new Date(data.as_of) : new Date();
   items = (data.items || []).map(mapItem);
-  document.getElementById('dateStr').textContent =
-    TODAY.toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
   lastSynced = Date.now();
   renderSyncLabel();
   render();

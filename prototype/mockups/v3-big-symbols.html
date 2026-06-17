@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>V3 · Big Symbols</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* VARIATION V3 — Big Symbols:
+     the + and − are the heroes — two large rounded tiles with oversized
+     glyphs. Title is a quiet line above; one icon floats top-right. */
+  .app { padding-top:22px; }
+  .head-line { display:flex; align-items:center; gap:10px; padding:0 4px; margin-bottom:16px; }
+  .head-line h1 {
+    font-family:"Fraunces",serif; font-weight:600; font-size:26px; letter-spacing:-.01em;
+    color:var(--ink); flex:1; line-height:1;
+  }
+  .head-line .iconbtn {
+    background:var(--surface); border:1px solid var(--line); color:var(--ink-dim);
+  }
+
+  .bigrow { display:flex; gap:14px; }
+  .big {
+    flex:1; aspect-ratio:1/.82; border-radius:24px; cursor:pointer; position:relative; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    box-shadow:var(--shadow);
+  }
+  .big .sym { font-size:64px; font-weight:300; line-height:.8; }
+  .big .lbl { font-family:"Hanken Grotesk",sans-serif; font-weight:700; font-size:15px; }
+  .big.add  { background:var(--amber); color:var(--amber-ink); }
+  .big.edit { background:var(--green); color:var(--on-green); }
+  .big::after {
+    content:""; position:absolute; right:-30px; bottom:-30px; width:120px; height:120px; border-radius:50%;
+    background:rgba(255,255,255,.12);
+  }
+
+  .searchwrap { margin-top:18px; }
+  .toolbar { margin-top:16px; }
+</style>
+</head><body>
+  <div class="app">
+    <div class="head-line">
+      <h1>Was haben wir?</h1>
+      <button class="iconbtn" title="Mehr">⋯</button>
+    </div>
+
+    <div class="bigrow">
+      <button class="big add"><span class="sym">+</span><span class="lbl">Einräumen</span></button>
+      <button class="big edit"><span class="sym">−</span><span class="lbl">Verbrauchen</span></button>
+    </div>
+
+    <div class="searchwrap">
+      <span class="si">⌕</span>
+      <input class="search" placeholder="Suchen …" />
+    </div>
+
+    <div class="toolbar">
+      <button class="sortpill">Sortieren: <span class="cur">Fällig zuerst</span> <span class="chev">▾</span></button>
+      <button class="combinebtn">✦ Kombinieren</button>
+    </div>
+
+    <main id="shelves"></main>
+  </div>
+  <script src="_items.js"></script>
+</body></html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>V5 · Editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* VARIATION V5 — Editorial:
+     a magazine masthead. Oversized italic Fraunces title, a hairline rule,
+     and the two actions rendered as refined outline buttons with a serif
+     glyph. No green slab — the paper itself carries the page. */
+  .app { padding-top:30px; }
+  .masthead { padding:0 2px; }
+  .masthead .kicker {
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.26em; text-transform:uppercase;
+    color:var(--ink-faint); display:flex; align-items:center; justify-content:space-between;
+  }
+  .masthead .kicker .iconbtn {
+    width:30px; height:30px; font-size:14px; background:transparent; border:1px solid var(--line); color:var(--ink-dim);
+  }
+  .masthead h1 {
+    font-family:"Fraunces",serif; font-optical-sizing:auto; font-weight:500; font-style:italic;
+    font-size:clamp(40px,12vw,56px); line-height:.95; letter-spacing:-.02em; color:var(--ink);
+    margin:14px 0 16px;
+  }
+  .masthead h1 b { font-style:normal; font-weight:600; color:var(--green); }
+  .rule { height:1px; background:var(--ink); opacity:.85; }
+  .rule.thin { opacity:.18; margin-top:3px; }
+
+  .actionrow { display:flex; gap:12px; margin-top:18px; }
+  .ed {
+    flex:1; display:inline-flex; align-items:center; justify-content:center; gap:10px; cursor:pointer;
+    border-radius:13px; padding:14px 12px; background:var(--surface);
+    font-family:"Fraunces",serif; font-weight:600; font-size:16px;
+  }
+  .ed .sym { font-size:24px; font-weight:400; line-height:1; }
+  .ed.add  { border:1.5px solid var(--amber); color:var(--amber-ink); background:color-mix(in srgb,var(--amber) 16%,var(--surface)); }
+  .ed.edit { border:1.5px solid var(--green); color:var(--green); }
+
+  .searchwrap { margin-top:18px; }
+  .search { border-radius:12px; }
+  .toolbar { margin-top:14px; }
+</style>
+</head><body>
+  <div class="app">
+    <div class="masthead">
+      <div class="kicker">
+        <span>Die Speisekammer · Heute</span>
+        <button class="iconbtn" title="Mehr">⋯</button>
+      </div>
+      <h1>Was haben<br>wir <b>da?</b></h1>
+      <div class="rule"></div>
+      <div class="rule thin"></div>
+    </div>
+
+    <div class="actionrow">
+      <button class="ed add"><span class="sym">+</span>Einräumen</button>
+      <button class="ed edit"><span class="sym">−</span>Verbrauchen</button>
+    </div>
+
+    <div class="searchwrap">
+      <span class="si">⌕</span>
+      <input class="search" placeholder="Suchen …" />
+    </div>
+
+    <div class="toolbar">
+      <button class="sortpill">Sortieren: <span class="cur">Fällig zuerst</span> <span class="chev">▾</span></button>
+      <button class="combinebtn">✦ Kombinieren</button>
+    </div>
+
+    <main id="shelves"></main>
+  </div>
+  <script src="_items.js"></script>
+</body></html>

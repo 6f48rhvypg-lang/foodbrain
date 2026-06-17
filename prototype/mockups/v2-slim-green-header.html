@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>V2 · Slim Green Header</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* VARIATION V2 — Slim Green Header:
+     a thin forest bar (title + one icon) hugging the top, then a slim
+     segmented + / − control. Maximum room left for the list. */
+  .app { padding-top:16px; }
+  header {
+    background:var(--green); color:var(--on-green); border-radius:18px;
+    padding:13px 16px; box-shadow:var(--shadow);
+    display:flex; align-items:center; gap:10px;
+  }
+  header h1 {
+    font-family:"Fraunces",serif; font-weight:600; font-size:21px; letter-spacing:-.01em;
+    color:var(--head-title); flex:1; line-height:1;
+  }
+  .iconbtn { width:32px; height:32px; font-size:15px; }
+
+  .seg { display:flex; margin-top:12px; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); }
+  .seg button {
+    flex:1; display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
+    font-family:"Hanken Grotesk",sans-serif; font-weight:700; font-size:14px; padding:13px 10px; border:none;
+  }
+  .seg .sym { font-size:21px; font-weight:400; line-height:1; }
+  .seg .add  { background:var(--amber); color:var(--amber-ink); }
+  .seg .edit { background:var(--green); color:var(--on-green); }
+  .seg .div { width:1px; background:rgba(255,255,255,.25); }
+
+  .searchwrap { margin-top:12px; }
+  .toolbar { margin-top:14px; }
+</style>
+</head><body>
+  <div class="app">
+    <header>
+      <h1>Was haben wir?</h1>
+      <button class="iconbtn" title="Mehr">⋯</button>
+    </header>
+
+    <div class="seg">
+      <button class="add"><span class="sym">+</span>Einräumen</button>
+      <span class="div"></span>
+      <button class="edit"><span class="sym">−</span>Verbrauchen</button>
+    </div>
+
+    <div class="searchwrap">
+      <span class="si">⌕</span>
+      <input class="search" placeholder="Suchen …" />
+    </div>
+
+    <div class="toolbar">
+      <button class="sortpill">Sortieren: <span class="cur">Fällig zuerst</span> <span class="chev">▾</span></button>
+      <button class="combinebtn">✦ Kombinieren</button>
+    </div>
+
+    <main id="shelves"></main>
+  </div>
+  <script src="_items.js"></script>
+</body></html>

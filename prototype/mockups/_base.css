@@ -1,0 +1,118 @@
+/* Shared base for the 5 FoodBrain home-screen mockups.
+   Lifted from prototype/fridge-now.html so the mockups read true to the
+   real "warm pantry morning" aesthetic. Each mockup file adds a
+   VARIATION block that restyles only the top region. */
+
+:root {
+  --bg-0: #f1e7d8; --bg-1: #f6eee2; --bg-2: #fbf4e9;
+  --surface: #ffffff; --surface-2: #faf5ec;
+  --ink: #243528; --ink-dim: #647264; --ink-faint: #9aa494;
+  --line: rgba(40,70,50,.12); --line-soft: rgba(40,70,50,.07);
+  --green: #36513c; --green-deep: #2a4030;
+  --accent: #44694e; --accent-ink: #f4fbf2; --on-green: #e9f1e6;
+  --hot:#d24f37;  --hot-bg:rgba(210,79,55,.13);
+  --warm:#df8d2b; --warm-bg:rgba(223,141,43,.15);
+  --cool:#3c9966; --cool-bg:rgba(60,153,102,.13);
+  --staple:#94a08f; --staple-bg:rgba(148,160,143,.16);
+  --amber:#ef8e4e; --amber-ink:#3a2410;
+  --panel-accent:var(--amber); --head-title:#fbf6ec;
+  --panel-soft:rgba(255,255,255,.10); --panel-line:rgba(255,255,255,.2);
+  --glow:rgba(239,142,78,.10);
+  --radius:18px; --radius-sm:12px;
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --shadow:0 1px 2px rgba(35,55,40,.05),0 12px 26px -18px rgba(35,55,40,.35);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; }
+body {
+  font-family:"Hanken Grotesk",system-ui,sans-serif; color:var(--ink);
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--bg-2) 0%, transparent 55%),
+    radial-gradient(90% 60% at 110% 5%, var(--glow) 0%, transparent 50%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+  background-attachment:fixed; min-height:100vh;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+body::after {
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  opacity:.25; mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E");
+}
+.app { position:relative; z-index:1; max-width:560px; margin:0 auto; padding:20px 16px 40px; }
+
+/* ---- shared icon button (the single subtle header icon) ---- */
+.iconbtn {
+  width:36px; height:36px; flex:0 0 auto; border-radius:50%;
+  display:grid; place-items:center; font-size:16px; cursor:pointer;
+  background:var(--panel-soft); border:1px solid var(--panel-line);
+  color:color-mix(in srgb,var(--on-green) 85%,transparent);
+  transition:filter .2s;
+}
+.iconbtn:hover { filter:brightness(1.12); }
+
+/* ---- search ---- */
+.searchwrap { position:relative; }
+.searchwrap .si { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:15px; color:var(--ink-faint); }
+.search {
+  width:100%; font-family:"Hanken Grotesk",sans-serif; font-size:15px; color:var(--ink);
+  background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+  padding:13px 14px 13px 40px; box-shadow:var(--shadow); outline:none;
+}
+.search::placeholder { color:var(--ink-faint); }
+.search:focus { border-color:var(--accent); }
+
+/* ---- sort pill + combine ---- */
+.toolbar { display:flex; align-items:center; gap:10px; }
+.sortpill, .combinebtn {
+  cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:7px;
+  font-family:"Hanken Grotesk",sans-serif; font-weight:700; font-size:13px;
+  border-radius:999px; padding:9px 15px; box-shadow:var(--shadow);
+  transition:all .18s var(--ease); white-space:nowrap;
+}
+.sortpill { color:var(--ink-dim); background:var(--surface); border:1px solid var(--line); }
+.sortpill .cur { color:var(--accent); }
+.sortpill .chev { font-size:10px; color:var(--ink-faint); }
+.combinebtn { color:var(--accent); background:var(--surface); border:1.5px solid var(--accent); margin-left:auto; }
+
+/* ---- shelf head ---- */
+.shelf { margin-top:22px; }
+.shelf-head { display:flex; align-items:center; gap:10px; margin-bottom:11px; padding:0 2px; }
+.shelf-head .sicon {
+  width:26px; height:26px; border-radius:9px; display:grid; place-items:center; font-size:14px;
+  background:var(--cbg,var(--surface-2)); border:1px solid var(--line-soft);
+}
+.shelf-head h2 {
+  font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:12px;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ink);
+}
+.shelf-head .count { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); margin-left:auto; }
+
+/* ---- item card ---- */
+.items { display:flex; flex-direction:column; gap:9px; }
+.item {
+  position:relative; display:grid; grid-template-columns:auto 1fr auto;
+  align-items:center; column-gap:13px; padding:12px 14px;
+  background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.item::before { content:""; position:absolute; left:0; top:13px; bottom:13px; width:3px; border-radius:0 3px 3px 0; background:var(--c,transparent); }
+.thumb {
+  width:46px; height:46px; border-radius:14px; display:grid; place-items:center; font-size:24px; line-height:1;
+  background:var(--cbg); border:1px solid color-mix(in srgb,var(--c) 26%,transparent);
+}
+.item .body { min-width:0; }
+.item .name {
+  font-family:"Fraunces",serif; font-weight:600; font-size:16.5px; letter-spacing:-.005em;
+  line-height:1.18; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.item .meta { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); margin-top:4px; }
+.due {
+  font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:11px; padding:5px 9px; border-radius:9px;
+  color:var(--c); background:var(--cbg); border:1px solid color-mix(in srgb,var(--c) 28%,transparent); white-space:nowrap;
+}
+.loc-tab {
+  position:absolute; top:0; right:0; font-family:"IBM Plex Mono",monospace; font-size:9px; line-height:1;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--ink-dim); background:var(--surface-2);
+  padding:5px 12px 6px; border-radius:0 var(--radius) 0 12px; pointer-events:none;
+}
+.item.tabpad { padding-top:20px; }
