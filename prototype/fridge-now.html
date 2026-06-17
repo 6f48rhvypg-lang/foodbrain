@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<script>try{Object.keys(localStorage).filter(k=>k.startsWith('icon:')).forEach(k=>localStorage.removeItem(k))}catch(e){}</script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>FoodBrain — Kühlschrank</title>
@@ -350,10 +349,15 @@
     cursor: pointer; overflow: hidden;
     transition: box-shadow .2s, border-color .2s;
     animation: rise .5s var(--ease) backwards;
-    will-change: transform;
+    /* will-change is toggled on only during an active swipe (see JS) so we
+       don't permanently promote every row to a GPU layer — that caused the
+       red delete panel to flash through during fast momentum scrolling. */
     touch-action: pan-y;
   }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  /* no due badge → the name column reaches the right edge, so give the corner
+     tab its own strip of top room to keep it off the first line of the name */
+  .item.tabpad { padding-top: 19px; }
   .item:active { transform: scale(.99); }
   .item.selected {
     border-color: var(--accent);
@@ -414,8 +418,18 @@
     transform: scale(1.06);
   }
 
-  /* location icon tag in item meta */
-  .loc-tag { font-size: 15px; line-height: 1; }
+  /* location label — tinted tab flush into the card's top-right corner */
+  .item .loc-tab {
+    position: absolute; top: 0; right: 0; z-index: 1;
+    font-family: "IBM Plex Mono", monospace; font-size: 9px; line-height: 1;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--lc, var(--ink-dim)); background: var(--lcbg, var(--surface-2));
+    padding: 5px 12px 6px; border-radius: 0 var(--radius) 0 12px;
+    max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    pointer-events: none;
+  }
+  /* combine mode reuses the corner for nothing else, but the pick circle sits
+     mid-row, so the tab stays put */
 
   /* quantity line shown inside the open drawer */
   .qty-chip {
@@ -464,10 +478,29 @@
     border: none; cursor: pointer;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 2px;
+    /* Hidden (and unpainted) until a swipe is actually in progress. This
+       guarantees the red panel can never show through behind the row during
+       fast scrolling, regardless of how the browser composites layers. */
+    opacity: 0; visibility: hidden;
   }
+  .swipe-row.swiping .swipe-del { opacity: 1; visibility: visible; }
   .swipe-del:active { background: #bf1f1f; }
   .item.swipe-snapping {
     transition: transform .22s cubic-bezier(.25, 1, .5, 1), box-shadow .2s, border-color .2s;
+  }
+
+  /* emoji / symbol picker in the edit sheet */
+  .echip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; font-size: 20px; line-height: 1;
+    border-radius: 11px; cursor: pointer; user-select: none;
+    background: var(--surface-2); border: 1px solid var(--line);
+    transition: transform .1s, border-color .15s, background .15s, box-shadow .15s;
+  }
+  .echip:active { transform: scale(.92); }
+  .echip.active {
+    border-color: var(--accent); background: var(--cool-bg);
+    box-shadow: 0 0 0 1.5px var(--accent);
   }
 
   /* empty-fridge nudge */
@@ -778,7 +811,7 @@
           <span class="syncico">↻</span><span id="syncLabel">sync</span>
         </button>
         <button id="themeBtn" class="syncbtn" type="button" style="margin-left:0" title="Farbthema wählen" aria-label="Farbthema wählen">🎨</button>
-        <button class="syncbtn" type="button" style="margin-left:0" title="App neu laden (löscht Icon-Cache)" aria-label="App neu laden" onclick="Object.keys(localStorage).filter(k=>k.startsWith('icon:')).forEach(k=>localStorage.removeItem(k));location.href='/ui?v='+Date.now()">↺</button>
+        <button class="syncbtn" type="button" style="margin-left:0" title="App neu laden" aria-label="App neu laden" onclick="location.href='/ui?v='+Date.now()">↺</button>
       </div>
       <div class="intakebar">
         <button id="addBtn" class="ibtn add" type="button" title="Sprich, um nach dem Einkauf hinzuzufügen">
@@ -924,6 +957,7 @@ let items = [];
 const selected = new Set();
 let currentSort = 'urgency';
 let staplesCollapsed = true;
+let spicesCollapsed = true;
 let combineMode = false;
 let pendingUndo = null; // { transaction_id } for the snackbar Undo
 let openSwipeEl = null; // currently swiped-open .item element
@@ -1000,6 +1034,32 @@ function emojiFor(name){
   // no specific match → use the (near-100% coverage) category icon instead of a lonely plate
   return categoryFor(name).icon;
 }
+
+/* ---- per-item custom symbol override -------------------------------------
+   Keyed by the Grocy product_id (it.id), which is stable even when the stock
+   drops to 0 and the product later reappears — so a symbol chosen once stays
+   with that product forever, without re-picking it after every consume. */
+const EMOJI_OVERRIDE_KEY = id => 'fb-emoji:' + id;
+function getCustomEmoji(it){
+  try { return localStorage.getItem(EMOJI_OVERRIDE_KEY(it.id)) || null; } catch(_){ return null; }
+}
+function setCustomEmoji(it, emo){
+  try {
+    if (emo) localStorage.setItem(EMOJI_OVERRIDE_KEY(it.id), emo);
+    else     localStorage.removeItem(EMOJI_OVERRIDE_KEY(it.id));
+  } catch(_){}
+}
+/* the symbol shown on a stock card: user override first, else auto-derived */
+function thumbEmoji(it){ return getCustomEmoji(it) || emojiFor(it.name); }
+
+/* curated food-symbol palette for the picker (anything else via the text box) */
+const EMOJI_PALETTE = [
+  '🥛','🧀','🥚','🧈','🍶','🍅','🥒','🥕','🧅','🧄','🌶️','🫑','🥬','🥦','🥔','🍆',
+  '🌽','🍄','🍎','🍌','🍋','🍊','🍓','🍇','🍐','🍑','🍉','🥝','🥭','🍍','🥥','🍞',
+  '🥐','🥖','🥯','🧇','🍝','🍚','🍜','🥗','🍲','🍗','🥩','🍖','🐟','🦐','🥓','🥫',
+  '🫘','🫒','🧂','🍯','🥜','🍫','🍪','🍩','🧁','🍰','🍬','🍿','🍷','🍺','🥤','🧃',
+  '☕','🧊',
+];
 
 /* ---- classify a product into a food category (for the Kategorie grouping) ---- */
 const CATEGORY_RULES = [
@@ -1092,6 +1152,16 @@ const LOCATION_ORDER = [
   'obst- & gemüsekorb','gemüsekorb','obstkorb',
   'keller','cellar',
 ];
+/* ---- spices: identified by their Grocy storage location (Gewürzregal /
+   Gewürzschrank). They keep almost forever, so in the urgency view we hide
+   the non-urgent ones behind their own collapsed accordion. A spice that DOES
+   get a near best-before date is scored hot/warm by the backend and therefore
+   stays in the "bald essen" bands — the spoilage safety net is untouched. */
+function isSpice(it){
+  return /gew(ü|ue|u)rz|spice/i.test(String(it.loc || ''));
+}
+const SPICE_META = { label:'Gewürze', icon:'🧂', c:'#a08060', cbg:'rgba(160,128,96,.15)' };
+
 function locationMeta(name){
   const key = String(name||'').toLowerCase().trim();
   // exact match first, then substring scan for partial names like "Kühlschrank (oben)"
@@ -1100,6 +1170,22 @@ function locationMeta(name){
     if (key.includes(k) || k.includes(key)) return meta;
   }
   return { icon: '🗄️', c: 'var(--staple)', cbg: 'var(--staple-bg)' };
+}
+
+/* ---- short location word for the corner tab (TK · Kühlschrank · Vorrat · …) ---- */
+const LOC_SHORT = [
+  [/tiefk|gefrier|freezer/,   'TK'],
+  [/kühl|kuehl|fridge/,       'Kühlschrank'],
+  [/gew(ü|ue|u)rz|spice/,     'Gewürze'],
+  [/vorrat|pantry|vorrats/,   'Vorrat'],
+  [/korb|basket/,             'Korb'],
+  [/keller|cellar/,           'Keller'],
+];
+function locationLabel(name){
+  const n = String(name||'').toLowerCase().trim();
+  if (!n || n === '—') return '';
+  for (const [re, label] of LOC_SHORT){ if (re.test(n)) return label; }
+  return name; // unknown location → show it verbatim (CSS truncates if long)
 }
 
 function renderByLocation(){
@@ -1157,7 +1243,10 @@ function renderByBand(){
   const order = ['hot','warm','cool','staple'];
   let delay = 0;
   order.forEach(key=>{
-    const inBand = sortItems(items.filter(i=>i.band===key));
+    // Non-urgent spices (cool/staple) are split out into the Gewürze accordion
+    // below; spices that turned urgent stay in the hot/warm bands as usual.
+    const hideSpices = (key === 'cool' || key === 'staple');
+    const inBand = sortItems(items.filter(i=>i.band===key && !(hideSpices && isSpice(i))));
     if (!inBand.length && key!=='staple') return;
 
     const meta = BANDS[key];
@@ -1192,6 +1281,28 @@ function renderByBand(){
     }
     shelvesEl.appendChild(shelf);
   });
+
+  // ---- Gewürze: collapsed accordion of all non-urgent spices ----
+  const spices = sortItems(items.filter(i=>isSpice(i) && (i.band==='cool' || i.band==='staple')));
+  if (spices.length){
+    const shelf = document.createElement('section');
+    shelf.className = 'shelf' + (spicesCollapsed ? ' collapsed' : '');
+    const head = document.createElement('div');
+    head.className = 'shelf-head tappable';
+    head.style.setProperty('--c', SPICE_META.c);
+    head.style.setProperty('--cbg', SPICE_META.cbg);
+    head.innerHTML = `
+      <span class="sicon">${SPICE_META.icon}</span>
+      <h2>${SPICE_META.label}</h2>
+      <span class="count">${spices.length} <span class="caret">▾</span></span>`;
+    head.addEventListener('click', ()=>{ spicesCollapsed=!spicesCollapsed; render(); });
+    shelf.appendChild(head);
+    const list = document.createElement('div');
+    list.className = 'items';
+    spices.forEach(it=>{ list.appendChild(itemEl(it, BANDS[it.band] || SPICE_META, delay)); delay += 0.04; });
+    shelf.appendChild(list);
+    shelvesEl.appendChild(shelf);
+  }
 }
 
 function renderByCategory(){
@@ -1239,17 +1350,25 @@ function itemEl(it, meta, delay){
   const ts = tileStyleFor(it.name);
   el.style.setProperty('--tc', ts.c);
   el.style.setProperty('--tcbg', ts.cbg);
-  el.style.animationDelay = delay.toFixed(2)+'s';
+  const lm = locationMeta(it.loc);
+  el.style.setProperty('--lc', lm.c);
+  el.style.setProperty('--lcbg', lm.cbg);
+  const locWord = locationLabel(it.loc);
+  if (locWord && isStaple) el.classList.add('tabpad');
+  // Cap the cumulative stagger: rows in the first viewport fan in nicely, but
+  // everything past it shares the cap so a long list is fully shown within
+  // ~0.9s instead of trickling in over several seconds on every (re)render.
+  el.style.animationDelay = Math.min(delay, 0.4).toFixed(2)+'s';
   el.dataset.id = it.id;
 
   const overdue = !isStaple && it.due <= 0;
-  const thumbInner = emojiFor(it.name);
+  const thumbInner = thumbEmoji(it);
   el.innerHTML = `
-    <div class="thumb" data-fb="${emojiFor(it.name)}">${thumbInner}</div>
+    <div class="thumb" data-fb="${thumbInner}">${thumbInner}</div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
-      <div class="meta"><span class="loc-tag">${locationMeta(it.loc).icon}</span></div>
     </div>
+    ${ locWord ? `<span class="loc-tab">${esc(locWord)}</span>` : '' }
     ${ isStaple ? '' : `<div class="due ${overdue?'overdue':''}">${dueLabel(it.due)}</div>`}
     <div class="pick">✓</div>
     <div class="drawer">
@@ -1311,6 +1430,10 @@ function itemEl(it, meta, delay){
       dragging = true;
     }
     e.preventDefault();
+    // Reveal the delete panel and promote the row to a layer only now that a
+    // real horizontal drag is happening.
+    row.classList.add('swiping');
+    el.style.willChange = 'transform';
     const base = isOpen ? -SWIPE_OPEN : 0;
     curX = Math.min(0, Math.max(-SWIPE_OPEN, base + dx));
     el.style.transform = `translateX(${curX}px)`;
@@ -1330,14 +1453,26 @@ function itemEl(it, meta, delay){
     } else {
       el.style.transform = '';
       if (openSwipeEl === el) openSwipeEl = null;
+      settleClosed();
     }
   });
+
+  // After the row has slid fully back, hide the delete panel again and drop the
+  // layer promotion so scrolling stays cheap and nothing can show through.
+  let settleTimer = null;
+  function settleClosed(){
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      if (!isOpen) { row.classList.remove('swiping'); el.style.willChange = ''; }
+    }, 240);
+  }
 
   el._swipeClose = () => {
     el.classList.add('swipe-snapping');
     el.style.transform = '';
     isOpen = false;
     if (openSwipeEl === el) openSwipeEl = null;
+    settleClosed();
   };
   el._swipeIsOpen = () => isOpen;
 
@@ -1631,6 +1766,17 @@ async function openMoreSheet(it, el){
         <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-dim)">${esc(it.unit||'')}</span>
       </div>
     </div>
+    <div class="moodq" style="margin-top:14px">
+      <div class="moodlabel">Symbol <span class="opt">(bleibt bei diesem Artikel)</span></div>
+      <div id="emojiGrid" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:9px">
+        <input type="text" id="emojiCustom" placeholder="eigenes Symbol einfügen…"
+          style="flex:1;min-width:0;padding:9px 12px;font:inherit;font-size:18px;
+                 background:var(--surface-2);color:var(--ink);border:1px solid var(--line);
+                 border-radius:11px;outline:none">
+        <button class="btn ghost" id="emojiReset" style="flex:0 0 auto;font-size:12.5px">Auto</button>
+      </div>
+    </div>
     <div style="margin-top:20px;display:flex;gap:8px">
       <button class="btn ghost" style="flex:1" id="closeSheet">Abbrechen</button>
       <button class="btn ghost" id="detailToss"
@@ -1643,6 +1789,29 @@ async function openMoreSheet(it, el){
   document.getElementById('detailName').addEventListener('blur',  e=>{ e.target.style.borderColor='var(--line)'; });
   document.getElementById('detailAmount').addEventListener('focus', e=>{ e.target.style.borderColor='var(--accent)'; });
   document.getElementById('detailAmount').addEventListener('blur',  e=>{ e.target.style.borderColor='var(--line)'; });
+
+  // ---- symbol picker (chosenEmoji === null means "automatic") ----
+  let chosenEmoji = getCustomEmoji(it);
+  const emojiGrid = document.getElementById('emojiGrid');
+  const emojiCustom = document.getElementById('emojiCustom');
+  const paintEmoji = () => {
+    emojiGrid.querySelectorAll('.echip').forEach(c=>{
+      c.classList.toggle('active', !!chosenEmoji && c.dataset.emo === chosenEmoji);
+    });
+  };
+  EMOJI_PALETTE.forEach(emo=>{
+    const c = document.createElement('span');
+    c.className = 'echip'; c.dataset.emo = emo; c.textContent = emo;
+    c.addEventListener('click', ()=>{ chosenEmoji = emo; emojiCustom.value = ''; paintEmoji(); });
+    emojiGrid.appendChild(c);
+  });
+  // if the override isn't in the palette, show it in the text box
+  if (chosenEmoji && !EMOJI_PALETTE.includes(chosenEmoji)) emojiCustom.value = chosenEmoji;
+  paintEmoji();
+  emojiCustom.addEventListener('input', ()=>{ chosenEmoji = emojiCustom.value.trim() || null; paintEmoji(); });
+  document.getElementById('emojiReset').addEventListener('click', ()=>{
+    chosenEmoji = null; emojiCustom.value = ''; paintEmoji();
+  });
 
   document.getElementById('detailToss').addEventListener('click', async ()=>{
     if (!confirm(`${it.name} wegwerfen?`)) return;
@@ -1657,9 +1826,11 @@ async function openMoreSheet(it, el){
     const tasks = [];
     if (newName && newName !== it.name)       tasks.push(apiPost('/api/set-name',   { product_id: it.id, name: newName }));
     if (!isNaN(newAmount) && newAmount !== it.amount) tasks.push(apiPost('/api/set-amount', { product_id: it.id, new_amount: newAmount }));
-    if (!tasks.length){ closeSheet(); return; }
+    const emojiChanged = (chosenEmoji || null) !== (getCustomEmoji(it) || null);
+    if (!tasks.length && !emojiChanged){ closeSheet(); return; }
     try {
-      await Promise.all(tasks);
+      if (tasks.length) await Promise.all(tasks);
+      if (emojiChanged) setCustomEmoji(it, chosenEmoji); // null clears → back to automatic
       // update local state
       const idx = items.findIndex(x=>x.id===it.id);
       if (idx>=0){
