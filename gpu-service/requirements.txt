@@ -8,3 +8,4 @@ uvicorn[standard]>=0.29.0
 huggingface_hub>=0.23.0
 sentencepiece
 tiktoken
+bitsandbytes>=0.45.0
