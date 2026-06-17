@@ -26,12 +26,6 @@ class Settings:
     # Defaults used when intake has to create a brand-new Grocy product.
     intake_default_location: Optional[str] = None
     intake_default_unit: Optional[str] = None
-    # Item icon generation via local GPU service (HiDream-O1 or similar).
-    # Set FOODBRAIN_ICON_LOCAL_URL to the base URL of the local image server
-    # (e.g. http://homepc:8188). Leave unset → icon endpoint always returns 404
-    # and the UI falls back to emoji.
-    icon_local_url: Optional[str] = None
-    icon_cache_dir: str = "/var/cache/foodbrain/icons"
 
     @property
     def grocy_enabled(self) -> bool:
@@ -78,12 +72,6 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
         intake_default_unit=_blank_to_none(
             _setting("FOODBRAIN_INTAKE_DEFAULT_UNIT", file_values)
         ),
-        icon_local_url=_clean_url(
-            _setting("FOODBRAIN_ICON_LOCAL_URL", file_values)
-        ),
-        icon_cache_dir=_blank_to_none(
-            _setting("FOODBRAIN_ICON_CACHE_DIR", file_values)
-        ) or "/var/cache/foodbrain/icons",
     )
 
 

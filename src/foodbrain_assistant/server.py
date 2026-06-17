@@ -40,7 +40,6 @@ from .aliases import AliasError, load_aliases, merge_aliases
 from .api import ApiError, FoodBrainAPI
 from .config import Settings, load_settings
 from .grocy_client import GrocyClient, GrocyClientError, parse_stock_response
-from . import image_service
 from .models import StockItem
 from .pairing import PairingError, load_pairings
 from .recipes import RecipesError, parse_recipes_response
@@ -90,20 +89,6 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.product_entries(product_id))
                 elif route == "/api/locations":
                     self._send(200, api.get_locations())
-                elif route.startswith("/api/icon/"):
-                    product_id = route[len("/api/icon/"):]
-                    if not product_id:
-                        raise ApiError(400, "product_id is required in path")
-                    name = _single(parse_qs(parsed.query).get("name")) or product_id
-                    png = image_service.get_icon(
-                        product_id,
-                        name,
-                        local_url=api.settings.icon_local_url,
-                        cache_dir=Path(api.settings.icon_cache_dir),
-                    )
-                    if png is None:
-                        raise ApiError(404, "no icon available")
-                    self._send_image(png)
                 else:
                     raise ApiError(404, f"no route for GET {route}")
             except ApiError as exc:
@@ -201,15 +186,6 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
             if not isinstance(parsed, dict):
                 raise ApiError(400, "request body must be a JSON object")
             return parsed
-
-        def _send_image(self, body: bytes) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "image/png")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Cache-Control", "public, max-age=86400")
-            self.end_headers()
-            self.wfile.write(body)
 
         def _send_html(self, body: bytes) -> None:
             self.send_response(200)
