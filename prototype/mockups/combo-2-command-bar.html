@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Konzept B · Kommando-Leiste</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* KONZEPT B — KOMMANDO-LEISTE
+     Everything that touches the LIST collapses into one bar: sort (left icon),
+     search (middle), and the +/- stock actions (right). Below it, a single full-
+     width hero CTA replaces the three cook buttons — one obvious "what to cook?". */
+  .app { padding-top:16px; }
+  .concept-tag {
+    font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--ink-faint); margin:0 4px 12px; opacity:.8;
+  }
+  .eyebrow { display:flex; align-items:center; gap:8px; padding:0 4px; margin-bottom:12px; }
+  .eyebrow h1 { font-family:"Fraunces",serif; font-weight:600; font-size:22px; color:var(--ink); flex:1; letter-spacing:-.01em; }
+  .eyebrow .iconbtn { background:var(--surface); border:1px solid var(--line); color:var(--ink-dim); }
+
+  /* the one command bar */
+  .cmdbar { display:flex; align-items:center; gap:8px; background:var(--surface);
+    border:1px solid var(--line-soft); border-radius:16px; box-shadow:var(--shadow); padding:6px 8px; }
+  .cmdbar .sortbtn { flex:0 0 auto; width:38px; height:38px; border-radius:11px; border:none; cursor:pointer;
+    background:var(--surface-2); color:var(--ink-dim); font-size:16px; display:grid; place-items:center; }
+  .cmdbar .field { flex:1; position:relative; display:flex; align-items:center; }
+  .cmdbar .si { font-size:16px; color:var(--ink-faint); margin:0 6px 0 4px; }
+  .cmdbar input { flex:1; border:none; outline:none; background:none; font-family:"Hanken Grotesk",sans-serif;
+    font-size:16px; color:var(--ink); padding:9px 0; }
+  .cmdbar input::placeholder { color:var(--ink-faint); }
+  .cmdbar .mut { width:1px; align-self:stretch; margin:7px 2px; background:var(--line); }
+  .cmdbar .rbtn { flex:0 0 auto; width:40px; height:40px; border-radius:12px; border:none; cursor:pointer;
+    font-size:22px; font-weight:300; line-height:1; display:grid; place-items:center; }
+  .cmdbar .rbtn.add { background:var(--amber); color:var(--amber-ink); }
+  .cmdbar .rbtn.rem { background:var(--green); color:var(--on-green); }
+
+  /* hero cook CTA — merges Ideen + Kombinieren + Rezepte */
+  .hero { width:100%; margin-top:12px; border:none; cursor:pointer; border-radius:16px; box-shadow:var(--shadow);
+    background:linear-gradient(110deg, var(--accent), var(--green-deep)); color:var(--accent-ink);
+    font-family:"Hanken Grotesk",sans-serif; font-weight:700; font-size:15.5px;
+    display:flex; align-items:center; justify-content:center; gap:10px; padding:15px; }
+  .hero .ci { font-size:18px; }
+  .hero .sub { font-weight:500; font-size:12px; opacity:.7; }
+
+  .shelf:first-of-type { margin-top:16px; }
+</style>
+</head><body>
+  <div class="app">
+    <div class="concept-tag">Konzept B — Kommando-Leiste</div>
+    <header>
+      <div class="eyebrow">
+        <h1>Was haben wir?</h1>
+        <button class="iconbtn" title="Mehr · Sync · Thema">⋯</button>
+      </div>
+
+      <div class="cmdbar">
+        <button class="sortbtn" title="Sortieren / Filtern">⇅</button>
+        <div class="field"><span class="si">⌕</span>
+          <input placeholder="Suchen … (z. B. Milch)" />
+        </div>
+        <div class="mut"></div>
+        <button class="rbtn add" title="Einräumen">+</button>
+        <button class="rbtn rem" title="Verbrauchen">−</button>
+      </div>
+    </header>
+
+    <button class="hero"><span class="ci">🍳</span> Was sollen wir kochen? <span class="sub">Ideen · Rezepte</span></button>
+
+    <main id="shelves"></main>
+  </div>
+  <script src="_items.js"></script>
+</body></html>

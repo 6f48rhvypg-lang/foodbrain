@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Konzept A · Aktions-Trias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* KONZEPT A — AKTIONS-TRIAS
+     The 9 competing controls collapse to THREE intents with clear hierarchy:
+     FINDEN (search) · ÄNDERN (one +/- segment) · KOCHEN (one hub that merges
+     Ideen + Rezepte + Kombinieren). Sort is demoted to a quiet inline chip. */
+  .app { padding-top:16px; }
+  .concept-tag {
+    font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--ink-faint); margin:0 4px 12px; opacity:.8;
+  }
+  .eyebrow { display:flex; align-items:center; gap:8px; padding:0 4px; margin-bottom:12px; }
+  .eyebrow h1 { font-family:"Fraunces",serif; font-weight:600; font-size:22px; color:var(--ink); flex:1; letter-spacing:-.01em; }
+  .eyebrow .iconbtn { background:var(--surface); border:1px solid var(--line); color:var(--ink-dim); }
+
+  .searchrow .search { font-size:16px; padding:15px 14px 15px 42px; border-radius:15px; }
+  .searchrow .si { font-size:17px; left:15px; }
+
+  /* the triad: one ÄNDERN segment + one KOCHEN hub */
+  .triad { display:flex; gap:10px; margin-top:12px; }
+  .seg { display:flex; flex:1.05; border-radius:15px; overflow:hidden; box-shadow:var(--shadow); }
+  .seg button { flex:1; border:none; cursor:pointer; padding:13px 8px; font-family:"Hanken Grotesk",sans-serif;
+    font-weight:700; font-size:13.5px; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .seg .add { background:var(--amber); color:var(--amber-ink); }
+  .seg .rem { background:var(--green); color:var(--on-green); border-left:1px solid rgba(255,255,255,.18); }
+  .seg .gly { font-size:18px; font-weight:300; line-height:1; }
+  .cookbtn { flex:1; border:none; cursor:pointer; border-radius:15px; box-shadow:var(--shadow);
+    background:var(--accent); color:var(--accent-ink); font-family:"Hanken Grotesk",sans-serif;
+    font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .cookbtn .ci { font-size:17px; }
+
+  /* sort demoted to a faint right-aligned chip */
+  .subbar { display:flex; justify-content:flex-end; margin-top:13px; padding:0 2px; }
+  .sortmini { cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-family:"IBM Plex Mono",monospace;
+    font-size:11px; letter-spacing:.04em; color:var(--ink-faint); background:none; border:none; }
+  .sortmini .cur { color:var(--ink-dim); font-weight:600; }
+
+  .shelf:first-of-type { margin-top:14px; }
+</style>
+</head><body>
+  <div class="app">
+    <div class="concept-tag">Konzept A — Aktions-Trias</div>
+    <header>
+      <div class="eyebrow">
+        <h1>Was haben wir?</h1>
+        <button class="iconbtn" title="Mehr · Sync · Thema">⋯</button>
+      </div>
+      <div class="searchrow">
+        <div class="searchwrap">
+          <span class="si">⌕</span>
+          <input class="search" placeholder="Suchen … (z. B. Milch)" />
+        </div>
+      </div>
+    </header>
+
+    <div class="triad">
+      <div class="seg">
+        <button class="add"><span class="gly">+</span> Einräumen</button>
+        <button class="rem"><span class="gly">−</span> Verbrauchen</button>
+      </div>
+      <button class="cookbtn"><span class="ci">🍳</span> Kochen</button>
+    </div>
+
+    <div class="subbar">
+      <button class="sortmini">Sortieren: <span class="cur">Fällig zuerst</span> ▾</button>
+    </div>
+
+    <main id="shelves"></main>
+  </div>
+  <script src="_items.js"></script>
+</body></html>

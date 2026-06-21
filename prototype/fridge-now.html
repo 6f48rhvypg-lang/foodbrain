@@ -227,6 +227,62 @@
   }
   .searchwrap.has-q .searchclear { display: grid; }
 
+  /* ---------- Konzept B: one command bar (sort · search · +/−) ---------- */
+  .cmdbar {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: 16px; box-shadow: var(--shadow); padding: 6px 8px;
+  }
+  .cmdbar .cmdsort {
+    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--surface-2); color: var(--ink-dim); font-size: 17px;
+    display: grid; place-items: center; transition: background .15s, color .15s;
+  }
+  .cmdbar .cmdsort:hover { background: var(--line-soft); color: var(--ink); }
+  .cmdbar .cmdsort[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
+  .cmdbar .searchwrap { flex: 1 1 auto; min-width: 0; }
+  .cmdbar .search {
+    background: none; border: none; box-shadow: none; border-radius: 12px;
+    padding: 10px 34px 10px 38px;
+  }
+  .cmdbar .search:focus { border-color: transparent; }
+  .cmdbar .searchwrap .si { left: 12px; font-size: 16px; }
+  .cmdbar .searchclear { right: 4px; }
+  .cmdmut { flex: 0 0 auto; align-self: stretch; width: 1px; margin: 8px 1px; background: var(--line); }
+  .cmdbar .rbtn { width: 40px; height: 40px; border-radius: 12px; font-size: 23px; }
+
+  /* the single hero CTA that replaces Ideen + Kombinieren + Rezepte */
+  .cookhero {
+    width: 100%; margin: 12px 0 4px; border: none; cursor: pointer;
+    border-radius: 16px; box-shadow: var(--shadow);
+    background: linear-gradient(110deg, var(--accent), var(--green-deep)); color: var(--accent-ink);
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 15.5px;
+    display: flex; align-items: center; justify-content: center; gap: 10px; padding: 15px;
+    transition: filter .18s var(--ease), transform .12s var(--ease);
+  }
+  .cookhero:hover { filter: brightness(1.05); }
+  .cookhero:active { transform: scale(.99); }
+  .cookhero .ci { font-size: 18px; line-height: 1; }
+  .cookhero .csub { font-weight: 500; font-size: 12px; opacity: .72; }
+
+  /* the cook-hub sheet the hero opens */
+  .cookhub-opts { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .hubopt {
+    display: flex; align-items: center; gap: 13px; width: 100%; cursor: pointer; text-align: left;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px; box-shadow: var(--shadow); transition: border-color .15s, transform .12s var(--ease);
+  }
+  .hubopt:hover { border-color: var(--accent); }
+  .hubopt:active { transform: scale(.99); }
+  .hubopt .he {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+    font-size: 21px; background: var(--surface-2); border: 1px solid var(--line-soft);
+  }
+  .hubopt .htxt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hubopt .htxt b { font-family: "Fraunces", serif; font-weight: 600; font-size: 16px; color: var(--ink); }
+  .hubopt .htxt span { font-size: 12.5px; color: var(--ink-faint); }
+  .hubopt .hgo { flex: 0 0 auto; font-size: 18px; color: var(--ink-faint); }
+
   .rbtn {
     width: 50px; height: 50px; flex: 0 0 auto; border-radius: 15px; cursor: pointer; border: none;
     font-size: 28px; font-weight: 300; line-height: 1; display: grid; place-items: center;
@@ -977,36 +1033,27 @@
         <button id="themeBtn" class="iconbtn" type="button" title="Mehr · Farbthema · neu laden" aria-label="Mehr">⋯</button>
       </div>
 
-      <div class="searchrow">
+      <div class="cmdbar">
+        <button id="sortPill" class="cmdsort" type="button" aria-haspopup="true" aria-expanded="false" title="Sortieren" aria-label="Sortieren">⇅</button>
         <div class="searchwrap">
           <span class="si">⌕</span>
           <input id="searchInput" class="search" type="search" inputmode="search" autocomplete="off"
                  placeholder="Suchen … (z. B. Milch)" aria-label="Vorrat durchsuchen" />
           <button id="searchClear" class="searchclear" type="button" title="Suche löschen" aria-label="Suche löschen">✕</button>
         </div>
+        <div class="cmdmut"></div>
         <button id="addBtn" class="rbtn add" type="button" title="Sprich, um nach dem Einkauf hinzuzufügen" aria-label="Einräumen">+</button>
         <button id="editBtn" class="rbtn edit" type="button" title="Sprich, um zu korrigieren oder als benutzt zu markieren" aria-label="Verbrauchen / Ändern">−</button>
       </div>
     </header>
 
-    <div class="toolbar">
-      <button id="ideasBtn" class="ideasbtn" type="button" title="Koch-Ideen aus deinem Vorrat">
-        <span class="ii">💡</span><span>Ideen holen</span>
-      </button>
-      <button id="bookBtn" class="bookbtn" type="button" title="Meine gespeicherten Rezepte">
-        <span>📖</span><span>Rezepte</span>
-      </button>
-      <button id="sortPill" class="sortpill" type="button" aria-haspopup="true" aria-expanded="false">
-        Sortieren: <span class="cur" id="sortCur">Fällig zuerst</span> <span class="chev">▾</span>
-      </button>
-      <button id="combineBtn" class="combinebtn" type="button" title="Zutaten zum Kombinieren auswählen">
-        <span class="ci">✦</span><span id="combineLabel">Kombinieren</span>
-      </button>
-    </div>
+    <button id="cookHero" class="cookhero" type="button" title="Koch-Ideen, Kombinieren & Rezepte">
+      <span class="ci">🍳</span><span>Was sollen wir kochen?</span><span class="csub">Ideen · Rezepte</span>
+    </button>
 
     <main id="shelves"><!-- rendered --></main>
 
-    <div class="hint" id="hint">tipp einen Artikel an für Aktionen · „Kombinieren“ für passende Zutaten</div>
+    <div class="hint" id="hint">tipp einen Artikel an für Aktionen · 🍳 für Koch-Ideen</div>
   </div>
 
   <!-- combine action bar -->
@@ -1722,7 +1769,7 @@ function enterCombine(){
   combineMode = true;
   appEl.classList.add('combining');
   shelvesEl.querySelectorAll('.item.expanded').forEach(e=>e.classList.remove('expanded'));
-  document.getElementById('combineLabel').textContent = 'Fertig';
+  const clEnter = document.getElementById('combineLabel'); if (clEnter) clEnter.textContent = 'Fertig';
   document.getElementById('hint').textContent = 'tippe Zutaten an · dann „Passt dazu“ oder KI fragen';
   syncBar();
 }
@@ -1731,13 +1778,37 @@ function exitCombine(){
   appEl.classList.remove('combining');
   selected.clear();
   shelvesEl.querySelectorAll('.item.selected').forEach(e=>e.classList.remove('selected'));
-  document.getElementById('combineLabel').textContent = 'Kombinieren';
-  document.getElementById('hint').textContent = 'tipp einen Artikel an für Aktionen · „Kombinieren“ für passende Zutaten';
+  const clExit = document.getElementById('combineLabel'); if (clExit) clExit.textContent = 'Kombinieren';
+  document.getElementById('hint').textContent = 'tipp einen Artikel an für Aktionen · 🍳 für Koch-Ideen';
   syncBar();
 }
-document.getElementById('combineBtn').addEventListener('click', ()=>{
-  combineMode ? exitCombine() : enterCombine();
-});
+/* ---- cook hub: the single hero CTA that merges Ideen + Kombinieren + Rezepte ---- */
+function openCookHub(){
+  openSheet(`
+    <h3>Was sollen wir kochen?</h3>
+    <div class="h3sub">aus deinem Vorrat</div>
+    <div class="cookhub-opts">
+      <button class="hubopt" id="hubIdeas" type="button">
+        <span class="he">💡</span>
+        <span class="htxt"><b>Ideen holen</b><span>Vorschläge aus dem ganzen Vorrat</span></span>
+        <span class="hgo">›</span>
+      </button>
+      <button class="hubopt" id="hubCombine" type="button">
+        <span class="he">✦</span>
+        <span class="htxt"><b>Zutaten kombinieren</b><span>Wähl aus, was weg muss</span></span>
+        <span class="hgo">›</span>
+      </button>
+      <button class="hubopt" id="hubBook" type="button">
+        <span class="he">📖</span>
+        <span class="htxt"><b>Meine Rezepte</b><span>Gespeicherte Rezepte</span></span>
+        <span class="hgo">›</span>
+      </button>
+    </div>`);
+  document.getElementById('hubIdeas').addEventListener('click', openInspiration);
+  document.getElementById('hubBook').addEventListener('click', openBook);
+  document.getElementById('hubCombine').addEventListener('click', ()=>{ closeSheet(); enterCombine(); });
+}
+document.getElementById('cookHero').addEventListener('click', openCookHub);
 
 /* ---- selection ---- */
 function toggleSelect(id, el){
@@ -1913,7 +1984,7 @@ document.querySelectorAll('#sortPop .sopt').forEach(b=>{
     document.querySelectorAll('#sortPop .sopt').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');
     currentSort = b.dataset.sort;
-    document.getElementById('sortCur').textContent = b.dataset.label;
+    const sc = document.getElementById('sortCur'); if (sc) sc.textContent = b.dataset.label;
     closeSortPop();
     render();
   });
@@ -2786,8 +2857,7 @@ function inspoError(title, err, retry){
   if (r && retry) r.addEventListener('click', retry);
 }
 
-document.getElementById('ideasBtn').addEventListener('click', openInspiration);
-document.getElementById('bookBtn').addEventListener('click', openBook);
+// Ideen + Rezepte moved into the cook hub (#cookHero → openCookHub); the ⋯ menu still links Meine Rezepte.
 document.getElementById('bookOpt').addEventListener('click', ()=>{ themePop.classList.remove('show'); openBook(); });
 document.getElementById('settingsOpt').addEventListener('click', ()=>{ themePop.classList.remove('show'); openRecipeSettings(); });
 
