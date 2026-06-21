@@ -198,6 +198,151 @@ def generate_recipe(
     }
 
 
+# --- 4. consumption estimate (after cooking) -------------------------------
+
+_CONSUME_SYSTEM = (
+    "Der Nutzer hat ein Gericht gekocht und will den Verbrauch in seinem "
+    "Inventar verbuchen. Schätze, WELCHE Zutaten und WIE VIEL davon das Gericht "
+    "verbraucht hat. Du bekommst:\n"
+    "- die Liste der vorhandenen Zutaten ('inventory') mit Menge+Einheit,\n"
+    "- optional eine Einkaufsliste ('buy') mit Zutaten, die NICHT im Vorrat "
+    "waren und für das Gericht gekauft wurden.\n\n"
+    "Regeln:\n"
+    "- Verbuche unter 'used' NUR Zutaten aus 'inventory', die das Gericht "
+    "wirklich nutzt. Nimm den Namen EXAKT wie in der Liste. 'amount' ist die "
+    "verbrauchte Menge in derselben Einheit; übertreibe nicht (eine typische "
+    "Portion), und überschreite nie die vorhandene Menge.\n"
+    "- Für jede gekaufte Zutat ('buy') gib unter 'bought' an: 'pack_amount' = "
+    "wie viel man üblicherweise kauft (eine Packung/ein Bund), 'used_amount' = "
+    "wie viel davon im Gericht landete (Rest bleibt im Kühlschrank), plus "
+    "'unit'. Im Modus 'stock' ist 'bought' IMMER leer.\n"
+    "- Wenn du dir bei einer Zutat unsicher bist, lass sie lieber weg.\n"
+    "- Antworte mit NUR diesem JSON:\n"
+    '{"used": [{"name": str, "amount": number, "unit": str|null}], '
+    '"bought": [{"name": str, "pack_amount": number, "used_amount": number, '
+    '"unit": str|null}]}'
+)
+
+
+def estimate_consumption(
+    *,
+    dish: str,
+    guidance: List[str],
+    mode: str,
+    candidates: List[dict],
+    buy: List[str],
+    model: str,
+    settings,
+    correction: str = "",
+    transport: Optional[Transport] = None,
+) -> dict:
+    """Estimate the inventory a cooked dish consumed (+ leftovers from purchases).
+
+    ``candidates`` are the in-stock items (``{name, amount, unit}``); ``buy`` are
+    shop-mode purchase names. ``correction`` is an optional spoken/typed nudge
+    ("ich hab mehr Knoblauch genommen") that re-shapes the estimate. The model
+    refers to items by name only — id resolution happens in the API. Degrades to
+    empty lists on any bad field.
+    """
+    mode = "shop" if mode == "shop" else "stock"
+    user = _consume_user_message(
+        dish=dish,
+        guidance=guidance or [],
+        mode=mode,
+        candidates=candidates or [],
+        buy=buy or [],
+        correction=correction,
+    )
+    data = post_chat_json(
+        settings=settings, model=model, system=_CONSUME_SYSTEM, user=user, transport=transport
+    )
+    used = [
+        cleaned
+        for row in (data.get("used") if isinstance(data.get("used"), list) else [])
+        for cleaned in (_clean_used(row),)
+        if cleaned is not None
+    ]
+    bought = (
+        []
+        if mode == "stock"
+        else [
+            cleaned
+            for row in (data.get("bought") if isinstance(data.get("bought"), list) else [])
+            for cleaned in (_clean_bought(row),)
+            if cleaned is not None
+        ]
+    )
+    return {"used": used, "bought": bought}
+
+
+def _consume_user_message(*, dish, guidance, mode, candidates, buy, correction="") -> str:
+    def line(row):
+        name = str(row.get("name") or "").strip()
+        amount = row.get("amount")
+        unit = str(row.get("unit") or "").strip()
+        qty = f"{_num(amount):g}" if amount is not None else "?"
+        return f"- {name} ({qty} {unit})".rstrip()
+
+    lines = [
+        f"Modus: {mode}",
+        f"Gericht: {str(dish or '').strip()}",
+    ]
+    if guidance:
+        lines.append("Zubereitung: " + " → ".join(str(g).strip() for g in guidance if str(g).strip()))
+    lines.append("Vorhandene Zutaten (inventory):")
+    lines.extend(line(c) for c in candidates) if candidates else lines.append("- —")
+    if mode == "shop":
+        lines.append("Eingekauft (buy): " + (", ".join(str(b).strip() for b in buy if str(b).strip()) or "—"))
+    correction = str(correction or "").strip()
+    if correction:
+        lines.append("Korrektur des Nutzers (berücksichtige sie unbedingt): " + correction)
+    return "\n".join(lines)
+
+
+def _clean_used(row) -> Optional[dict]:
+    if not isinstance(row, dict):
+        return None
+    name = str(row.get("name") or "").strip()
+    if not name:
+        return None
+    amount = _num(row.get("amount"))
+    if amount <= 0:
+        return None
+    return {"name": name, "amount": amount, "unit": _opt_unit(row.get("unit"))}
+
+
+def _clean_bought(row) -> Optional[dict]:
+    if not isinstance(row, dict):
+        return None
+    name = str(row.get("name") or "").strip()
+    if not name:
+        return None
+    pack = _num(row.get("pack_amount"))
+    if pack <= 0:
+        pack = 1.0
+    used = _num(row.get("used_amount"))
+    # Can't use more than the pack holds; default to the whole pack if unstated.
+    used = pack if used <= 0 or used > pack else used
+    return {
+        "name": name,
+        "pack_amount": pack,
+        "used_amount": used,
+        "unit": _opt_unit(row.get("unit")),
+    }
+
+
+def _num(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _opt_unit(value) -> Optional[str]:
+    unit = str(value or "").strip()
+    return unit or None
+
+
 # --- 3. twist extraction ---------------------------------------------------
 
 _TWIST_SYSTEM = (

@@ -30,6 +30,7 @@ def _skeleton() -> dict:
         "twists": [],
         "cooked": [],
         "book": [],
+        "sessions": [],
     }
 
 
@@ -141,6 +142,48 @@ def book(path) -> List[dict]:
     return list(reversed(data.get("book", [])))
 
 
+def add_session(path, *, dish: str, lines: Iterable[dict]) -> dict:
+    """Record a cooking session (its booked add/consume lines) and return it.
+
+    Each line keeps what's needed to correct it later: ``product_id``, the
+    booked ``amount``, the Grocy ``transaction_id`` (for undo), whether the
+    product is now ``depleted``, and its ``kind`` (``consume``/``bought``).
+    """
+    data = load(path)
+    entry = {
+        "id": str(uuid.uuid4()),
+        "dish": str(dish or "").strip(),
+        "lines": [_clean_line(line) for line in (lines or [])],
+        "ts": _now_iso(),
+    }
+    data["sessions"].append(entry)
+    save(path, data)
+    return entry
+
+
+def sessions(path) -> List[dict]:
+    """Cooking sessions, newest first (like :func:`book`)."""
+    data = load(path)
+    return list(reversed(data.get("sessions", [])))
+
+
+def update_session_line(path, session_id: str, line_index: int, **changes) -> Optional[dict]:
+    """Patch a single line of a stored session; returns the updated session."""
+    data = load(path)
+    for entry in data.get("sessions", []):
+        if entry.get("id") != session_id:
+            continue
+        lines = entry.get("lines") or []
+        if not (0 <= line_index < len(lines)):
+            return None
+        for key in ("amount", "transaction_id", "depleted"):
+            if key in changes:
+                lines[line_index][key] = changes[key]
+        save(path, data)
+        return entry
+    return None
+
+
 # --- internals -------------------------------------------------------------
 
 
@@ -152,11 +195,31 @@ def _normalize(data: dict) -> dict:
         str(x) for x in taste.get("dislikes", []) if str(x).strip()
     ]
     skel["taste"]["notes"] = str(taste.get("notes", "") or "")
-    for key in ("twists", "cooked", "book"):
+    for key in ("twists", "cooked", "book", "sessions"):
         value = data.get(key)
         if isinstance(value, list):
             skel[key] = [row for row in value if isinstance(row, dict)]
     return skel
+
+
+def _clean_line(line: dict) -> dict:
+    line = line or {}
+    return {
+        "name": str(line.get("name") or "").strip(),
+        "product_id": str(line.get("product_id") or ""),
+        "amount": _as_float(line.get("amount")),
+        "unit": str(line.get("unit") or "") or None,
+        "transaction_id": (str(line.get("transaction_id")) if line.get("transaction_id") else None),
+        "depleted": bool(line.get("depleted")),
+        "kind": str(line.get("kind") or "consume"),
+    }
+
+
+def _as_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _merge_unique(existing: List[str], additions) -> List[str]:

@@ -304,6 +304,18 @@
   .ideasbtn:active { transform: scale(.97); }
   .ideasbtn .ii { font-size: 14px; line-height: 1; }
 
+  /* top-level "Meine Rezepte" — compact icon pill next to Ideen holen */
+  .bookbtn {
+    flex: 0 0 auto; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 13px;
+    color: var(--accent); background: var(--surface);
+    border: 1.5px solid var(--accent); border-radius: 999px;
+    padding: 8px 12px; transition: all .18s var(--ease); box-shadow: var(--shadow);
+  }
+  .bookbtn:hover { background: var(--accent); color: var(--accent-ink); }
+  .bookbtn:active { transform: scale(.97); }
+
   /* ---------- recipe inspiration ---------- */
   .modetoggle { display: flex; gap: 6px; margin-bottom: 14px; }
   .modetoggle .mopt {
@@ -347,6 +359,39 @@
   .bookitem:last-child { border-bottom: none; }
   .bookitem .bt { font-weight: 700; font-size: 15px; color: var(--ink); }
   .bookitem .bg { font-size: 13px; color: var(--ink-dim); margin-top: 4px; line-height: 1.4; }
+
+  /* cook -> consumption review + Verlauf */
+  .crow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .crow:last-of-type { border-bottom: none; }
+  .crow.drop { opacity: .4; }
+  .crow .cname { font-weight: 700; font-size: 15px; color: var(--ink); flex: 1 1 auto; }
+  .crow .cname .emoji { margin-right: 5px; }
+  .crow label { display: inline-flex; flex-direction: column; font-size: 11px;
+    color: var(--ink-faint); gap: 3px; }
+  .crow input[type=number] { width: 72px; font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+  .crow .cunit { font-size: 12px; color: var(--ink-dim); align-self: flex-end; padding-bottom: 7px; }
+  .crow .cbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .crow .cbadge.bought { background: var(--amber); color: var(--amber-ink); }
+  .crow .cdrop { margin-left: auto; background: none; border: none; cursor: pointer;
+    color: var(--ink-faint); font-size: 16px; }
+  .cookgroup { margin: 8px 0; }
+  .cookgroup .ck { font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 10px 0 2px; }
+  .cresult { padding: 6px 0; font-size: 14px; color: var(--ink-dim); }
+  .cresult .depleted { color: var(--accent); font-weight: 700; }
+  .histsess { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .histsess:last-child { border-bottom: none; }
+  .histsess .ht { font-weight: 700; font-size: 15px; color: var(--ink); display: flex; justify-content: space-between; }
+  .histsess .hd { font-size: 11px; color: var(--ink-faint); font-weight: 400; }
+  .histline { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--ink-dim); }
+  .histline .hn { flex: 1 1 auto; }
+  .histline input[type=number] { width: 64px; font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--surface); border: 1.5px solid var(--line); border-radius: 9px; padding: 4px 7px; }
+  .histline .hsave { font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    color: var(--accent); background: none; border: 1.5px solid var(--accent); border-radius: 999px; padding: 4px 10px; }
+  .histline .hdep { color: var(--accent); font-weight: 700; font-size: 12px; }
   .setrow { margin-bottom: 16px; }
   .setrow .setlabel { font-weight: 600; font-size: 13px; color: var(--ink); margin-bottom: 7px; }
   .setrow select {
@@ -895,6 +940,9 @@
     <div class="toolbar">
       <button id="ideasBtn" class="ideasbtn" type="button" title="Koch-Ideen aus deinem Vorrat">
         <span class="ii">💡</span><span>Ideen holen</span>
+      </button>
+      <button id="bookBtn" class="bookbtn" type="button" title="Meine gespeicherten Rezepte">
+        <span>📖</span><span>Rezepte</span>
       </button>
       <button id="sortPill" class="sortpill" type="button" aria-haspopup="true" aria-expanded="false">
         Sortieren: <span class="cur" id="sortCur">Fällig zuerst</span> <span class="chev">▾</span>
@@ -1651,7 +1699,9 @@ function syncBar(){
   bar.classList.toggle('show', combineMode);
   const n = selected.size;
   document.getElementById('connectBtn').disabled = n < 1;
-  document.getElementById('askBtn').disabled = n < 1;
+  // askBtn was removed in the V4 redesign; guard so its absence isn't a load error.
+  const askBtn = document.getElementById('askBtn');
+  if (askBtn) askBtn.disabled = n < 1;
 }
 document.getElementById('clearSel').addEventListener('click', exitCombine);
 
@@ -2198,10 +2248,7 @@ function renderRecipe(rec, mode){
     </div>
     <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
   wireClose();
-  document.getElementById('cookedBtn').addEventListener('click', async e=>{
-    try { await apiPost('/api/recipes/cooked', { dish: rec.title }); e.target.textContent = 'Notiert ✓'; }
-    catch(err){ showError(err); }
-  });
+  document.getElementById('cookedBtn').addEventListener('click', ()=> openCookReview(rec, mode));
   document.getElementById('saveRecBtn').addEventListener('click', async e=>{
     try {
       await apiPost('/api/recipes/save', { title: rec.title, guidance: rec.guidance || [], buy: rec.buy || [] });
@@ -2245,6 +2292,194 @@ function openTwist(rec, mode){
   });
 }
 
+/* ---- Cook -> consumption tracking ----
+   "Gekocht ✓" estimates what the dish used, lets the user adjust (typed, or a
+   spoken correction re-estimates), books it to Grocy, then shows what landed. */
+let cookCtx = null; // { rec, mode }
+
+async function openCookReview(rec, mode){
+  cookCtx = { rec, mode };
+  openSheet(`<h3>${esc(rec.title)}</h3>
+    <div class="h3sub">Gekocht — was wurde verbraucht?</div>
+    <div class="loading">schätze den Verbrauch…</div>`);
+  await fetchCookEstimate('');
+}
+
+async function fetchCookEstimate(correction){
+  const { rec, mode } = cookCtx;
+  let data;
+  try {
+    data = await apiPost('/api/recipes/cook-estimate', {
+      dish: rec.title, guidance: rec.guidance || [], buy: rec.buy || [],
+      mode, correction: correction || '',
+    });
+  } catch (err){ return inspoError('Verbrauch konnte nicht geschätzt werden.', err, ()=>openCookReview(rec, mode)); }
+  renderCookReview(data);
+}
+
+function cookRow(it, i){
+  const emoji = emojiFor(it.name);
+  if (it.kind === 'bought'){
+    return `<div class="crow" data-i="${i}" data-kind="bought" data-pid="${esc(it.matched_product_id||'')}"
+         data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}">
+      <div class="cname"><span class="emoji">${emoji}</span>${esc(it.name)}</div>
+      <span class="cbadge bought">🛒 gekauft</span>
+      <label>Packung <input class="cpack" type="number" min="0" step="0.1" value="${Number(it.pack_amount)||1}" /></label>
+      <label>benutzt <input class="cused" type="number" min="0" step="0.1" value="${Number(it.used_amount)||0}" /></label>
+      <span class="cunit">${esc(it.unit||'')}</span>
+      <button class="cdrop" type="button" title="entfernen">✕</button>
+    </div>`;
+  }
+  const matched = !!it.matched_product_id;
+  const badge = matched ? `<span class="cbadge">✓</span>` : `<span class="cbadge">neu?</span>`;
+  return `<div class="crow${matched?'':' drop'}" data-i="${i}" data-kind="consume" data-pid="${esc(it.matched_product_id||'')}"
+       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}">
+    <div class="cname"><span class="emoji">${emoji}</span>${esc(it.name)}</div>
+    ${badge}
+    <label>Menge <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
+    <span class="cunit">${esc(it.unit||'')}</span>
+    <button class="cdrop" type="button" title="entfernen">✕</button>
+  </div>`;
+}
+
+function renderCookReview(data){
+  const { rec, mode } = cookCtx;
+  const items = data.items || [];
+  const consume = items.filter(x=>x.kind!=='bought');
+  const bought = items.filter(x=>x.kind==='bought');
+  const micHtml = SpeechRec
+    ? `<button type="button" class="micbtn" id="micBtn" title="Korrektur diktieren">🎙</button>` : '';
+  const rowsHtml = items.length
+    ? `${consume.length?`<div class="cookgroup"><div class="ck">Verbraucht</div>${consume.map((it)=>cookRow(it, items.indexOf(it))).join('')}</div>`:''}
+       ${bought.length?`<div class="cookgroup"><div class="ck">Gekauft (Pack rein, Rest bleibt)</div>${bought.map((it)=>cookRow(it, items.indexOf(it))).join('')}</div>`:''}`
+    : `<div class="empty">Nichts zum Verbuchen erkannt. Beschreib unten, was du benutzt hast.</div>`;
+  openSheet(`
+    <h3>${esc(rec.title)}</h3>
+    <div class="h3sub">prüfen & anpassen, dann verbuchen</div>
+    ${rowsHtml}
+    <div class="cookgroup">
+      <div class="ck">Korrektur (optional)</div>
+      <div class="micwrap">
+        <textarea id="intakeText" placeholder="z. B. „nur die halbe Zwiebel, dafür mehr Reis“"></textarea>
+        ${micHtml}
+      </div>
+      <button class="btn ghost" id="reEstimateBtn" type="button">Neu schätzen</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="closeSheet">Schließen</button>
+      <button class="btn solid" id="cookCommitBtn">Verbuchen</button>
+    </div>`);
+  wireClose();
+  const micBtn = document.getElementById('micBtn');
+  if (micBtn) micBtn.addEventListener('click', toggleRecording);
+  sheet.querySelectorAll('.cdrop').forEach(b=> b.addEventListener('click', ()=>{
+    const row = b.closest('.crow'); row.classList.toggle('drop');
+    const amt = row.querySelector('.camt'); if (amt) amt.disabled = row.classList.contains('drop');
+  }));
+  document.getElementById('reEstimateBtn').addEventListener('click', ()=>{
+    stopRecording();
+    const correction = (document.getElementById('intakeText')?.value || '').trim();
+    if (!correction) return;
+    openSheet(`<h3>${esc(rec.title)}</h3><div class="h3sub">neue Schätzung…</div>
+      <div class="loading">rechne neu…</div>`);
+    fetchCookEstimate(correction);
+  });
+  document.getElementById('cookCommitBtn').addEventListener('click', ()=> runCookCommit());
+}
+
+function collectCookItems(){
+  return [...sheet.querySelectorAll('.crow')]
+    .filter(row => !row.classList.contains('drop'))
+    .map(row => {
+      const base = { name: row.dataset.name, unit: row.dataset.unit || null,
+        matched_product_id: row.dataset.pid || null, kind: row.dataset.kind };
+      if (row.dataset.kind === 'bought'){
+        base.pack_amount = Number(row.querySelector('.cpack').value) || 1;
+        base.used_amount = Number(row.querySelector('.cused').value) || 0;
+      } else {
+        base.amount = Number(row.querySelector('.camt').value) || 0;
+      }
+      return base;
+    })
+    .filter(it => it.name && (it.kind === 'bought' || it.amount > 0));
+}
+
+async function runCookCommit(){
+  const { rec } = cookCtx;
+  const items = collectCookItems();
+  if (!items.length){ closeSheet(); return; }
+  const btn = document.getElementById('cookCommitBtn');
+  btn.disabled = true; btn.textContent = 'Verbuche…';
+  stopRecording();
+  let data;
+  try { data = await apiPost('/api/recipes/cook-commit', { dish: rec.title, items }); }
+  catch (err){ btn.disabled = false; btn.textContent = 'Verbuchen'; showError(err); return; }
+  renderCookResult(data);
+}
+
+function renderCookResult(data){
+  const lines = data.lines || [];
+  const failed = data.failed || [];
+  const added = lines.filter(l=>l.kind==='bought');
+  const used = lines.filter(l=>l.kind!=='bought');
+  const depleted = lines.filter(l=>l.depleted);
+  const line = l => `<div class="cresult">${emojiFor(l.name)} ${esc(l.name)} · ${Number(l.amount)||0}${l.unit?(' '+esc(l.unit)):''}${l.depleted?' <span class="depleted">ganz aufgebraucht ✓</span>':''}</div>`;
+  openSheet(`
+    <h3>Verbucht ✓</h3>
+    <div class="h3sub">${esc(data.dish)}</div>
+    ${added.length?`<div class="cookgroup"><div class="ck">Hinzugefügt</div>${added.map(line).join('')}</div>`:''}
+    ${used.length?`<div class="cookgroup"><div class="ck">Verbraucht</div>${used.map(line).join('')}</div>`:''}
+    ${depleted.length?`<div class="cookgroup"><div class="ck">Ganz aufgebraucht</div>${depleted.map(l=>`<div class="cresult">${emojiFor(l.name)} ${esc(l.name)}</div>`).join('')}</div>`:''}
+    ${failed.length?`<div class="sheet-error">Nicht verbucht: ${esc(failed.map(f=>f.name).join(', '))}</div>`:''}
+    <div class="row"><button class="btn solid" id="closeSheet" style="flex:1">Fertig</button></div>`);
+  wireClose();
+  reload();
+}
+
+/* Verlauf — past sessions, each consumed line correctable. */
+async function openCookHistory(){
+  openSheet(`<h3>Verlauf</h3><div class="h3sub">gekochte Gerichte</div><div class="loading">lade…</div>`);
+  let data;
+  try { data = await apiGet('/api/recipes/cook-history'); }
+  catch(err){ return inspoError('Konnte den Verlauf nicht laden.', err, openCookHistory); }
+  const sessions = data.sessions || [];
+  const fmtDate = ts => { try { return new Date(ts).toLocaleDateString('de-DE'); } catch(_){ return ''; } };
+  const lineHtml = (s, l, i) => {
+    if (!l.product_id) return '';
+    return `<div class="histline" data-sid="${esc(s.id)}" data-li="${i}">
+      <span class="hn">${emojiFor(l.name)} ${esc(l.name)}</span>
+      <input type="number" min="0" step="0.1" class="hamt" value="${Number(l.amount)||0}" />
+      <span class="hu">${esc(l.unit||'')}</span>
+      ${l.depleted?'<span class="hdep">leer ✓</span>':''}
+      <button class="hsave" type="button">Korrigieren</button>
+    </div>`;
+  };
+  const sess = s => `<div class="histsess">
+    <div class="ht"><span>${esc(s.dish)}</span><span class="hd">${fmtDate(s.ts)}</span></div>
+    ${(s.lines||[]).map((l,i)=>lineHtml(s,l,i)).join('')}
+  </div>`;
+  openSheet(`
+    <h3>Verlauf</h3>
+    <div class="h3sub">${sessions.length} gekocht · Mengen korrigierbar</div>
+    ${sessions.length ? sessions.map(sess).join('') : '<div class="sheet-error">Noch nichts gekocht.</div>'}
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
+  wireClose();
+  sheet.querySelectorAll('.histline .hsave').forEach(btn=> btn.addEventListener('click', async ()=>{
+    const row = btn.closest('.histline');
+    const newAmount = Number(row.querySelector('.hamt').value);
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const res = await apiPost('/api/recipes/cook-adjust', {
+        session_id: row.dataset.sid, line_index: Number(row.dataset.li), new_amount: newAmount });
+      btn.textContent = '✓';
+      const dep = row.querySelector('.hdep');
+      if (res.depleted && !dep){ const s=document.createElement('span'); s.className='hdep'; s.textContent='leer ✓'; row.insertBefore(s, btn); }
+      else if (!res.depleted && dep){ dep.remove(); }
+      reload();
+    } catch(err){ btn.disabled = false; btn.textContent = 'Korrigieren'; showError(err); }
+  }));
+}
+
 async function openBook(){
   openSheet(`<h3>Meine Rezepte</h3><div class="h3sub">gespeichert</div><div class="loading">lade…</div>`);
   let data;
@@ -2285,7 +2520,12 @@ async function openRecipeSettings(){
       <input type="range" id="balanceSel" min="0" max="100" value="${bal}" />
       <div class="scale"><span>frisch &amp; überraschend</span><span>nach meinem Geschmack</span></div>
     </div>
+    <div class="setrow">
+      <div class="setlabel">Koch-Verlauf</div>
+      <button class="btn ghost" id="openHistoryBtn" style="width:100%">📒 Verlauf öffnen — Mengen korrigieren</button>
+    </div>
     <div class="row"><button class="btn solid" id="settingsDone" style="flex:1">Fertig</button></div>`);
+  document.getElementById('openHistoryBtn').addEventListener('click', openCookHistory);
   document.getElementById('ideaModelSel').addEventListener('change', e=>{ SETTINGS.idea_model = e.target.value; saveSettings(); });
   document.getElementById('recipeModelSel').addEventListener('change', e=>{ SETTINGS.recipe_model = e.target.value; saveSettings(); });
   document.getElementById('balanceSel').addEventListener('input', e=>{ SETTINGS.balance = Number(e.target.value)/100; saveSettings(); });
@@ -2305,6 +2545,7 @@ function inspoError(title, err, retry){
 }
 
 document.getElementById('ideasBtn').addEventListener('click', openInspiration);
+document.getElementById('bookBtn').addEventListener('click', openBook);
 document.getElementById('bookOpt').addEventListener('click', ()=>{ themePop.classList.remove('show'); openBook(); });
 document.getElementById('settingsOpt').addEventListener('click', ()=>{ themePop.classList.remove('show'); openRecipeSettings(); });
 

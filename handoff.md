@@ -2,6 +2,124 @@
 
 Current date: 2026-06-12
 
+---
+
+## ✅ DONE (2026-06-21): Cook → consumption tracking + adjustable Verlauf
+
+**Shipped.** "Gekocht ✓" now books consumption to Grocy via an editable estimate
+review, keeps a correctable **Verlauf**, and surfaces **📖 Rezepte** at top level.
+
+- `recipes_llm.estimate_consumption` (mirrors `generate_recipe`; injectable
+  transport; normalizes `{used,bought}`, degrades to []; optional `correction`
+  for spoken/typed re-estimate).
+- `api.py`: injectable `consumption_estimator`; `recipe_cook_estimate`
+  (reconcile_items → intake-shaped `kind:"consume"`/`"bought"` rows),
+  `recipe_cook_commit` (consume rows → writeback.consume; bought rows → create/
+  reuse via `_ProductIndex`+`_NameResolver`, `add_stock(pack)` then `consume(used)`
+  → leftover stays; per-item failure isolation; `depleted` via `_live_stock_amount`
+  ≤0; folds in `add_cooked` anti-repeat; persists `cookmemory.add_session`),
+  `cook_history`, `cook_adjust` (undo old txn → reconsume new → recompute depleted
+  → `update_session_line`).
+- `cookmemory.py`: `sessions` in skeleton/normalize; `add_session`/`sessions`
+  (newest-first)/`update_session_line`.
+- `server.py`: `POST /api/recipes/cook-estimate|cook-commit|cook-adjust`,
+  `GET /api/recipes/cook-history` (kept `/cooked` for back-compat).
+- `prototype/fridge-now.html`: `openCookReview` (editable Menge consume rows +
+  "Packung/benutzt/Rest" bought rows + mic re-estimate borrowing #intakeText/
+  #micBtn) → grouped result (Hinzugefügt/Verbraucht/Ganz aufgebraucht ✓); Verlauf
+  inside Einstellungen (`openCookHistory`, per-line amount → cook-adjust);
+  top-level 📖 Rezepte button. Bonus: guarded a pre-existing `askBtn` null
+  (removed in V4 redesign) that threw on every load.
+- Tests: `tests/test_cook.py` (estimate reconcile, add+deduct-pack leftover,
+  depleted flag, failure isolation, history order, adjust undo+reconsume, HTTP
+  route flow), estimate normalization in `test_recipes_llm.py`, sessions in
+  `test_cookmemory.py`. Suite **196 (1 skipped)**, all green.
+- VERIFIED: SPA boots clean (no console errors), 📖 Rezepte + Verlauf render in a
+  headless browser. The full LLM estimate→commit path (real OpenRouter + Grocy
+  writes) was NOT auto-triggered — exercised via unit/HTTP tests with a fake
+  estimator + mutating fake Grocy. Walk it live on the phone after deploy.
+
+(Deploy: merge→main→push→`pct exec 105 -- git -C /opt/foodbrain pull` + restart.)
+
+---
+
+## 📋 ORIGINAL PLAN (2026-06-21): Cook → consumption tracking + adjustable Verlauf
+
+**Goal.** Tapping **"Gekocht ✓"** on a recommended recipe should *book the
+consumption* to Grocy (estimated), show an editable added/consumed/used-up
+review, allow speech + manual adjustment, and keep a persistent **Verlauf**
+(hidden in the recipe settings sheet) where past estimates stay correctable.
+Plus a bonus fix: surface the saved-recipes book ("Meine Rezepte") at top level
+(it's currently buried in the 🎨 color-theme popover — that's why a saved recipe
+felt "lost"; it was saved fine).
+
+**Confirmed product decisions.**
+- New groceries (shop-mode `buy` items not yet in stock): **add the full pack to
+  Grocy, then deduct the estimated used amount** → leftover stays in the fridge.
+- Verlauf lives **hidden inside the recipe Einstellungen sheet**, not top level.
+- Book gets a **top-level entry point**.
+
+**Approach — reuse the intake review→reconcile→commit machinery; don't reinvent.**
+
+Backend:
+1. `recipes_llm.py` — new `estimate_consumption` mirroring `generate_recipe`
+   (injectable `transport`, explicit `model` = cheap `recipe_model`, defensive
+   normalization). In: dish, guidance, mode, in-stock candidates (name+amount+
+   unit), shop `buy` list. Out (normalized, degrade to []):
+   `{"used":[{name,amount,unit}], "bought":[{name,pack_amount,used_amount,unit}]}`.
+   Model refers to items by **name only**; id resolution happens in the API.
+2. `api.py` (`FoodBrainAPI`) — add injectable `consumption_estimator`, plus:
+   - `recipe_cook_estimate(dish, guidance, buy, mode)`: pull stock via
+     `stock_provider`, call estimator, resolve `used` names → products with
+     **`reconcile_items`** (intake.py, already used by `intake_understand`),
+     return intake-shaped rows (`kind:"consume"` / `kind:"bought"`).
+   - `recipe_cook_commit(dish, items)`: per-item resilience like `intake_commit`
+     (failures → `failed[]`). consume rows → `writeback.consume`; bought rows →
+     resolve/create via existing **`_ProductIndex`+`_NameResolver`** (as
+     `_commit_add`), `add_stock(pack)` then `consume(used)`. "Used up" =
+     `_live_stock_amount` ≤ 0 after (writeback.py:40). Fold in old `add_cooked`
+     anti-repeat. Persist via `cookmemory.add_session` storing each line's
+     `product_id`/`amount`/`transaction_id`/`depleted`/`kind`. Return grouped
+     `{added, consumed, failed, session_id}`.
+   - `cook_history()` → `cookmemory.sessions`.
+   - `cook_adjust(session_id, line_index, new_amount)`: `undo(txn)` → if >0
+     `consume(pid,new)` → recompute depleted → `update_session_line`
+     (reuses `writeback.undo`/`consume`).
+3. `cookmemory.py` — add `"sessions":[]` to `_skeleton()`/`_normalize()`;
+   `add_session`, `sessions` (newest-first like `book`), `update_session_line`.
+4. `server.py` — routes mirroring existing recipe routes:
+   `POST /api/recipes/cook-estimate|cook-commit|cook-adjust`,
+   `GET /api/recipes/cook-history`. Leave `/api/recipes/cooked` for back-compat.
+
+Frontend (`prototype/fridge-now.html`):
+- `renderRecipe` (~L2201): **Gekocht ✓** → `openCookReview(rec, mode)` instead of
+  the bare `cooked` POST.
+- `openCookReview`: POST cook-estimate → review reusing **`editRow`/`renderReview`**
+  (~L2620): editable Menge per consume row; bought rows show "+Pack · −benutzt ·
+  Rest"; per-row manual edit + borrow the `#intakeText`/`#micBtn` speech engine
+  (as `openTwist` does) to **re-estimate from a spoken correction** = speech
+  adjust. Commit → cook-commit → grouped result: **Hinzugefügt / Verbraucht /
+  Ganz aufgebraucht ✓**.
+- Verlauf: add entry inside `openRecipeSettings` (~L2267) → `openCookHistory()`
+  listing sessions; each consumed line gets a manual amount input → cook-adjust.
+- Book: add a top-level 📖 **Meine Rezepte** affordance near the inspiration
+  button calling existing `openBook()` (keep the palette-menu entry too).
+
+Tests: `test_recipes_llm` (estimate normalization), `test_api` (reconcile,
+add+deduct-pack leaves leftover, depleted flag, failure isolation, adjust
+undo+reconsume, history order) with a fake estimator + fake `GrocyClient`;
+`test_cookmemory` sessions round-trip.
+
+Verify: `python -m pytest`; run SPA on sample/JSON stock, walk the cook flow
+(estimate → edit → mic re-estimate → commit → grouped result), adjust a line in
+Einstellungen→Verlauf, confirm 📖 top-level. Then merge→main→push→deploy CT 105
+(`pct exec 105 -- git -C /opt/foodbrain pull && systemctl restart foodbrain`;
+`curl localhost:8123/api/health`).
+
+(Full plan also at `~/.claude/plans/ticklish-meandering-walrus.md`.)
+
+---
+
 ## ✅ FIXED & DEPLOYED (2026-06-12): date-edit HTTP 400
 
 **Was:** editing an item's due date in the SPA always failed with

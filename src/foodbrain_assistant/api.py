@@ -37,6 +37,7 @@ from .grocy_client import GrocyClient, GrocyClientError, GrocyWriteDisabledError
 from .llm import LlmError, LlmNotConfigured
 from .intake import (
     IntakeError,
+    IntakeItem,
     IntakeNotConfigured,
     IntakeResult,
     reconcile_items,
@@ -51,6 +52,7 @@ from .scoring import score_stock_item
 from .writeback import (
     ConfirmationRequired,
     WriteOutcome,
+    _live_stock_amount,
     consume,
     rename_product,
     set_amount,
@@ -106,6 +108,7 @@ class FoodBrainAPI:
     idea_generator: Optional[Callable[..., dict]] = None
     recipe_generator: Optional[Callable[..., dict]] = None
     twist_extractor: Optional[Callable[..., dict]] = None
+    consumption_estimator: Optional[Callable[..., dict]] = None
     cook_store_path: Optional[object] = None  # str | Path
 
     # --- reads -----------------------------------------------------------
@@ -480,6 +483,274 @@ class FoodBrainAPI:
         """The saved-recipes book, newest first."""
         return {"recipes": cookmemory.book(self._cook_path())}
 
+    # --- cook -> consumption tracking -----------------------------------
+
+    def recipe_cook_estimate(
+        self,
+        dish: str,
+        guidance: Optional[List[str]] = None,
+        buy: Optional[List[str]] = None,
+        mode: str = "stock",
+        correction: str = "",
+    ) -> dict:
+        """Estimate what cooking ``dish`` consumed, as editable review rows.
+
+        Consume rows (``kind:"consume"``) carry the matched product; bought rows
+        (``kind:"bought"``, shop mode) carry a pack + used split. Names are
+        resolved to Grocy products with :func:`reconcile_items` — the same
+        machinery intake uses — so the user can edit before committing.
+        """
+        self._require_intake()
+        dish = str(dish or "").strip()
+        if not dish:
+            raise ApiError(400, "dish is required")
+        mode = "shop" if mode == "shop" else "stock"
+        model = self._resolve_model(None, self.settings.recipe_model)
+
+        stock = [item for item in self.stock_provider() if item.amount > 0]
+        candidates = [
+            {"name": item.name, "amount": item.amount, "unit": item.unit}
+            for item in stock
+            if item.name
+        ]
+        est = self.consumption_estimator or recipes_llm.estimate_consumption
+        try:
+            result = est(
+                dish=dish,
+                guidance=guidance or [],
+                mode=mode,
+                candidates=candidates,
+                buy=buy or [],
+                correction=str(correction or ""),
+                model=model,
+                settings=self.settings,
+            )
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+
+        catalog = self._catalog()
+        rows: List[dict] = []
+        used = result.get("used") if isinstance(result.get("used"), list) else []
+        as_items = [
+            IntakeItem(
+                name=str(u.get("name") or ""),
+                quantity=_safe_float(u.get("amount"), 1.0),
+                unit=u.get("unit"),
+                action="consume",
+            )
+            for u in used
+            if isinstance(u, dict) and str(u.get("name") or "").strip()
+        ]
+        for item in reconcile_items(as_items, catalog, self.aliases):
+            row = item.to_dict()
+            row["kind"] = "consume"
+            row["amount"] = row.pop("quantity")
+            rows.append(row)
+
+        bought = result.get("bought") if isinstance(result.get("bought"), list) else []
+        for b in bought if mode == "shop" else []:
+            if not isinstance(b, dict) or not str(b.get("name") or "").strip():
+                continue
+            rows.append(
+                {
+                    "kind": "bought",
+                    "name": str(b.get("name")).strip(),
+                    "unit": b.get("unit"),
+                    "pack_amount": _safe_float(b.get("pack_amount"), 1.0),
+                    "used_amount": _safe_float(b.get("used_amount"), 1.0),
+                    "matched_product_id": None,
+                    "match": "new",
+                }
+            )
+        return {"dish": dish, "mode": mode, "items": rows}
+
+    def recipe_cook_commit(self, dish: str, items: List[dict]) -> dict:
+        """Book a cooked dish's consumption to Grocy and persist the session.
+
+        consume rows are removed from stock; bought rows add the full pack then
+        deduct the used amount (the leftover stays in the fridge). Per-item
+        resilience mirrors :meth:`intake_commit` — one bad row is recorded in
+        ``failed`` and the rest proceed. The session is stored so each line stays
+        correctable later in the Verlauf.
+        """
+        dish = str(dish or "").strip()
+        if not dish:
+            raise ApiError(400, "dish is required")
+        if not items:
+            raise ApiError(400, "no items to commit")
+        client = self._writer()
+
+        resolvers: Optional[tuple] = None
+        product_index: Optional[_ProductIndex] = None
+        if any(_cook_kind(raw) == "bought" for raw in items):
+            resolvers = (
+                _NameResolver(client.get_quantity_units(), self.settings.intake_default_unit),
+                _NameResolver(client.get_locations(), self.settings.intake_default_location),
+            )
+            product_index = _ProductIndex(client.get_products(), self.aliases)
+
+        lines: List[dict] = []
+        failed: List[dict] = []
+        counts = {"added": 0, "consumed": 0}
+        for raw in items:
+            kind = _cook_kind(raw)
+            name = str(raw.get("name") or "").strip()
+            try:
+                if kind == "bought":
+                    lines.append(
+                        self._cook_commit_bought(client, raw, resolvers, product_index, counts)
+                    )
+                else:
+                    lines.append(self._cook_commit_consume(client, raw, counts))
+            except GrocyWriteDisabledError as exc:
+                raise ApiError(403, str(exc)) from exc
+            except (GrocyClientError, ApiError) as exc:
+                message = exc.message if isinstance(exc, ApiError) else str(exc)
+                failed.append({"name": name or "?", "kind": kind, "error": message})
+
+        cookmemory.add_cooked(self._cook_path(), dish=dish)
+        session = cookmemory.add_session(self._cook_path(), dish=dish, lines=lines)
+        return {
+            "session_id": session["id"],
+            "dish": dish,
+            "added": counts["added"],
+            "consumed": counts["consumed"],
+            "lines": lines,
+            "failed": failed,
+            "ok": True,
+        }
+
+    def cook_history(self) -> dict:
+        """Past cooking sessions, newest first."""
+        return {"sessions": cookmemory.sessions(self._cook_path())}
+
+    def cook_adjust(self, session_id: str, line_index: int, new_amount: float) -> dict:
+        """Correct one consumed line: undo the old booking and re-book ``new_amount``.
+
+        A correction first reverses the original Grocy transaction, then (if the
+        new amount is positive) consumes that amount fresh, recomputing whether
+        the product is now depleted. The stored session line is updated so the
+        Verlauf always reflects what's actually in Grocy.
+        """
+        session_id = str(session_id or "").strip()
+        if not session_id:
+            raise ApiError(400, "session_id is required")
+        try:
+            new_amount = float(new_amount)
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, "new_amount must be a number") from exc
+        if new_amount < 0:
+            raise ApiError(400, "new_amount cannot be negative")
+
+        sessions = cookmemory.sessions(self._cook_path())
+        session = next((s for s in sessions if s.get("id") == session_id), None)
+        if session is None:
+            raise ApiError(404, f"no cooking session {session_id!r}")
+        lines = session.get("lines") or []
+        if not (0 <= line_index < len(lines)):
+            raise ApiError(400, f"line {line_index} is out of range")
+        line = lines[line_index]
+        product_id = str(line.get("product_id") or "")
+        if not product_id:
+            raise ApiError(400, "this line has no product to adjust")
+
+        client = self._writer()
+        try:
+            old_txn = line.get("transaction_id")
+            if old_txn:
+                undo(client, old_txn)
+            new_txn = None
+            if new_amount > 0:
+                outcome = consume(client, product_id, new_amount)
+                new_txn = outcome.undo_transaction_id
+                new_amount = outcome.amount
+            depleted = _live_stock_amount(client, product_id) <= 0
+        except GrocyWriteDisabledError as exc:
+            raise ApiError(403, str(exc)) from exc
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+
+        cookmemory.update_session_line(
+            self._cook_path(),
+            session_id,
+            line_index,
+            amount=new_amount,
+            transaction_id=new_txn,
+            depleted=depleted,
+        )
+        return {
+            "session_id": session_id,
+            "line_index": line_index,
+            "amount": new_amount,
+            "depleted": depleted,
+            "ok": True,
+        }
+
+    def _cook_commit_consume(self, client, raw: dict, counts: dict) -> dict:
+        name = str(raw.get("name") or "").strip()
+        product_id = _require_known_product(raw, "use")
+        amount = _amount_of(raw)
+        outcome = consume(client, product_id, amount)
+        depleted = _live_stock_amount(client, product_id) <= 0
+        counts["consumed"] += 1
+        return {
+            "name": name or product_id,
+            "product_id": product_id,
+            "amount": outcome.amount,
+            "unit": raw.get("unit") or None,
+            "transaction_id": outcome.undo_transaction_id,
+            "depleted": depleted,
+            "kind": "consume",
+        }
+
+    def _cook_commit_bought(
+        self, client, raw: dict, resolvers, product_index, counts: dict
+    ) -> dict:
+        assert resolvers is not None  # built whenever a bought row is present
+        units, locations = resolvers
+        name = str(raw.get("name") or "").strip()
+        if not name:
+            raise ApiError(400, "a bought item needs a name")
+        pack = _safe_float(raw.get("pack_amount"), 1.0)
+        used = _safe_float(raw.get("used_amount"), pack)
+        if pack <= 0:
+            raise ApiError(400, "pack amount must be greater than zero")
+        used = min(max(used, 0.0), pack)
+        location_id = locations.resolve(raw.get("location"))
+
+        product_id = _pid(raw)
+        if not product_id:
+            existing_id = product_index.resolve(name) if product_index else ""
+            if existing_id:
+                product_id = existing_id
+            else:
+                product_id = client.create_product(
+                    name,
+                    qu_id_stock=units.resolve(raw.get("unit")),
+                    location_id=location_id,
+                )
+                if product_index is not None:
+                    product_index.add(name, product_id)
+        client.add_stock(product_id, pack, location_id=location_id)
+        counts["added"] += 1
+        txn = None
+        depleted = False
+        if used > 0:
+            outcome = consume(client, product_id, used)
+            txn = outcome.undo_transaction_id
+            counts["consumed"] += 1
+            depleted = _live_stock_amount(client, product_id) <= 0
+        return {
+            "name": name,
+            "product_id": product_id,
+            "amount": used,
+            "unit": raw.get("unit") or None,
+            "transaction_id": txn,
+            "depleted": depleted,
+            "kind": "bought",
+            "pack_amount": pack,
+        }
+
     # recipe helpers
 
     def _seed_and_inventory(self):
@@ -513,7 +784,12 @@ class FoodBrainAPI:
         return requested
 
     def _require_intake(self) -> None:
-        if self.idea_generator or self.recipe_generator or self.twist_extractor:
+        if (
+            self.idea_generator
+            or self.recipe_generator
+            or self.twist_extractor
+            or self.consumption_estimator
+        ):
             return  # injected generators don't need a real key (tests)
         if not getattr(self.settings, "intake_enabled", False):
             raise ApiError(503, "recipe inspiration needs FOODBRAIN_OPENROUTER_API_KEY")
@@ -907,6 +1183,19 @@ def _action_of(raw: dict) -> str:
     """The commit action for an item; anything but a known edit action is 'add'."""
     action = str(raw.get("action") or "add").strip().lower()
     return action if action in _EDIT_ACTIONS else "add"
+
+
+def _cook_kind(raw: dict) -> str:
+    """A cook-commit row is a 'bought' (add pack + deduct) or a plain 'consume'."""
+    return "bought" if str(raw.get("kind") or "").strip().lower() == "bought" else "consume"
+
+
+def _safe_float(value, default: float) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    return result if result > 0 else default
 
 
 def _pid(raw: dict) -> str:

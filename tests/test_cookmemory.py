@@ -88,5 +88,43 @@ class CookMemoryTest(unittest.TestCase):
         self.assertEqual(recent.count("Risotto"), 1)
 
 
+    def test_sessions_round_trip_newest_first(self) -> None:
+        cookmemory.add_session(
+            self.path, dish="Curry",
+            lines=[{"name": "Linsen", "product_id": "5", "amount": 1, "unit": "Tasse",
+                    "transaction_id": "tx1", "depleted": False, "kind": "consume"}],
+        )
+        second = cookmemory.add_session(self.path, dish="Risotto", lines=[])
+        sessions = cookmemory.sessions(self.path)
+        self.assertEqual(sessions[0]["id"], second["id"])  # newest first
+        self.assertEqual(sessions[1]["dish"], "Curry")
+        line = sessions[1]["lines"][0]
+        self.assertEqual(line["product_id"], "5")
+        self.assertEqual(line["transaction_id"], "tx1")
+        self.assertFalse(line["depleted"])
+
+    def test_update_session_line_patches_fields(self) -> None:
+        entry = cookmemory.add_session(
+            self.path, dish="Curry",
+            lines=[{"name": "Linsen", "product_id": "5", "amount": 1,
+                    "transaction_id": "tx1", "depleted": False, "kind": "consume"}],
+        )
+        cookmemory.update_session_line(
+            self.path, entry["id"], 0, amount=0.5, transaction_id="tx2", depleted=True
+        )
+        line = cookmemory.sessions(self.path)[0]["lines"][0]
+        self.assertEqual(line["amount"], 0.5)
+        self.assertEqual(line["transaction_id"], "tx2")
+        self.assertTrue(line["depleted"])
+
+    def test_update_session_line_unknown_session_returns_none(self) -> None:
+        self.assertIsNone(cookmemory.update_session_line(self.path, "nope", 0, amount=1))
+
+    def test_sessions_normalize_on_partial_file(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps({"taste": {}}), encoding="utf-8")
+        self.assertEqual(cookmemory.load(self.path)["sessions"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

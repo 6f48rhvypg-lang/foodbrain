@@ -28,6 +28,10 @@ Routes::
     POST /api/recipes/twist          {"dish", "transcript"? | "text"?}
     POST /api/recipes/cooked         {"dish"}
     POST /api/recipes/save           {"title", "guidance": [...], "buy"?, "twist"?}
+    POST /api/recipes/cook-estimate  {"dish", "guidance"?, "buy"?, "mode"?}
+    POST /api/recipes/cook-commit    {"dish", "items": [...]}
+    POST /api/recipes/cook-adjust    {"session_id", "line_index", "new_amount"}
+    GET  /api/recipes/cook-history   -> past cooking sessions (Verlauf)
     GET  /api/recipes/book           -> saved "Meine Rezepte"
     GET  /api/recipes/config         -> model choices + defaults for Settings
 
@@ -96,6 +100,8 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.product_entries(product_id))
                 elif route == "/api/locations":
                     self._send(200, api.get_locations())
+                elif route == "/api/recipes/cook-history":
+                    self._send(200, api.cook_history())
                 elif route == "/api/recipes/book":
                     self._send(200, api.recipe_book())
                 elif route == "/api/recipes/config":
@@ -209,6 +215,35 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     )
                 elif route == "/api/recipes/cooked":
                     self._send(200, api.recipe_cooked(_require(body, "dish")))
+                elif route == "/api/recipes/cook-estimate":
+                    self._send(
+                        200,
+                        api.recipe_cook_estimate(
+                            _require(body, "dish"),
+                            guidance=_str_list(body.get("guidance")),
+                            buy=_str_list(body.get("buy")),
+                            mode=str(body.get("mode", "stock")),
+                            correction=str(body.get("correction", "")),
+                        ),
+                    )
+                elif route == "/api/recipes/cook-commit":
+                    self._send(
+                        200,
+                        api.recipe_cook_commit(_require(body, "dish"), _items(body)),
+                    )
+                elif route == "/api/recipes/cook-adjust":
+                    try:
+                        new_amount = float(_require(body, "new_amount"))
+                    except (TypeError, ValueError) as exc:
+                        raise ApiError(400, "'new_amount' must be a number") from exc
+                    self._send(
+                        200,
+                        api.cook_adjust(
+                            _require(body, "session_id"),
+                            int(body.get("line_index", 0) or 0),
+                            new_amount,
+                        ),
+                    )
                 elif route == "/api/recipes/save":
                     self._send(
                         200,
