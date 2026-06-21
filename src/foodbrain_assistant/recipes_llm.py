@@ -278,10 +278,17 @@ _CONSUME_SYSTEM = (
     "wie viel davon im Gericht landete (Rest bleibt im Kühlschrank), plus "
     "'unit'. Im Modus 'stock' ist 'bought' IMMER leer.\n"
     "- Wenn du dir bei einer Zutat unsicher bist, lass sie lieber weg.\n"
+    "- NUR wenn der Nutzer in seiner Korrektur AUSDRÜCKLICH eine Zutat als "
+    "benutzt nennt, die NICHT in 'inventory' steht (und auch nicht gekauft "
+    "wurde), liste sie unter 'missing' mit {name, amount?, unit?}. Verbuche sie "
+    "NICHT unter 'used' — sie kann nicht abgezogen werden, der Nutzer soll nur "
+    "erfahren, dass sie nicht im Vorrat ist. Ohne solche Nennung bleibt "
+    "'missing' LEER. Erfinde hier nichts (kein Salz/Öl/Gewürz von dir aus).\n"
     "- Antworte mit NUR diesem JSON:\n"
     '{"used": [{"name": str, "amount": number, "unit": str|null}], '
     '"bought": [{"name": str, "pack_amount": number, "used_amount": number, '
-    '"unit": str|null}]}'
+    '"unit": str|null}], '
+    '"missing": [{"name": str, "amount": number|null, "unit": str|null}]}'
 )
 
 
@@ -333,7 +340,13 @@ def estimate_consumption(
             if cleaned is not None
         ]
     )
-    return {"used": used, "bought": bought}
+    missing = [
+        cleaned
+        for row in (data.get("missing") if isinstance(data.get("missing"), list) else [])
+        for cleaned in (_clean_missing(row),)
+        if cleaned is not None
+    ]
+    return {"used": used, "bought": bought, "missing": missing}
 
 
 def _consume_user_message(*, dish, guidance, mode, candidates, buy, correction="") -> str:
@@ -370,6 +383,21 @@ def _clean_used(row) -> Optional[dict]:
     if amount <= 0:
         return None
     return {"name": name, "amount": amount, "unit": _opt_unit(row.get("unit"))}
+
+
+def _clean_missing(row) -> Optional[dict]:
+    """A user-named ingredient that isn't in stock — informational, no amount gate."""
+    if not isinstance(row, dict):
+        return None
+    name = str(row.get("name") or "").strip()
+    if not name:
+        return None
+    amount = _num(row.get("amount"))
+    return {
+        "name": name,
+        "amount": amount if amount > 0 else None,
+        "unit": _opt_unit(row.get("unit")),
+    }
 
 
 def _clean_bought(row) -> Optional[dict]:

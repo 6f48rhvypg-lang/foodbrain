@@ -605,6 +605,26 @@ class FoodBrainAPI:
             row["stock_unit"] = stocked.unit if stocked else None
             rows.append(row)
 
+        # Ingredients the user explicitly named but that aren't in stock: shown
+        # as explained, non-committing rows so a correction like "I used olive
+        # oil" doesn't silently vanish when no olive oil is tracked.
+        missing = result.get("missing") if isinstance(result.get("missing"), list) else []
+        for m in missing:
+            if not isinstance(m, dict) or not str(m.get("name") or "").strip():
+                continue
+            rows.append(
+                {
+                    "kind": "consume",
+                    "name": str(m.get("name")).strip(),
+                    "amount": _safe_float(m.get("amount"), 1.0),
+                    "unit": m.get("unit"),
+                    "matched_product_id": None,
+                    "match": "missing",
+                    "stock_amount": None,
+                    "stock_unit": None,
+                }
+            )
+
         bought = result.get("bought") if isinstance(result.get("bought"), list) else []
         for b in bought if mode == "shop" else []:
             if not isinstance(b, dict) or not str(b.get("name") or "").strip():

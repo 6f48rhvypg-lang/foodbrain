@@ -202,6 +202,31 @@ class EstimateConsumptionTest(unittest.TestCase):
         )
         self.assertEqual(out["bought"][0]["used_amount"], 1.0)
 
+    def test_missing_surfaces_user_named_absent_ingredient(self) -> None:
+        transport, _ = _reply(
+            {"used": [], "bought": [],
+             "missing": [{"name": "Olivenöl", "amount": 2, "unit": "EL"},
+                         {"name": "", "amount": 1}]}  # no name -> dropped
+        )
+        out = recipes_llm.estimate_consumption(
+            dish="Avocado-Salat", guidance=[], mode="stock",
+            candidates=[{"name": "Rapsöl", "amount": 250, "unit": "ml"}], buy=[],
+            correction="ich hab Olivenöl benutzt, kein Rapsöl",
+            model="google/gemini-3.1-flash-lite", settings=_settings(), transport=transport,
+        )
+        self.assertEqual(out["used"], [])
+        self.assertEqual(len(out["missing"]), 1)
+        self.assertEqual(out["missing"][0]["name"], "Olivenöl")
+        self.assertEqual(out["missing"][0]["unit"], "EL")
+
+    def test_missing_defaults_to_empty(self) -> None:
+        transport, _ = _reply({"used": [], "bought": []})
+        out = recipes_llm.estimate_consumption(
+            dish="Pasta", guidance=[], mode="stock", candidates=[], buy=[],
+            model="google/gemini-3.1-flash-lite", settings=_settings(), transport=transport,
+        )
+        self.assertEqual(out["missing"], [])
+
     def test_correction_reaches_prompt(self) -> None:
         transport, captured = _reply({"used": [], "bought": []})
         recipes_llm.estimate_consumption(

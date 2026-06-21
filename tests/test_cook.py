@@ -139,6 +139,21 @@ class CookTest(unittest.TestCase):
         self.assertEqual(row["stock_amount"], 2)
         self.assertEqual(row["stock_unit"], "Stück")
 
+    def test_estimate_missing_named_item_becomes_explained_row(self) -> None:
+        client = FakeGrocy(products=[{"id": "5", "name": "Rapsöl"}], stock={"5": 250})
+
+        def est(**kwargs):
+            return {"used": [], "bought": [],
+                    "missing": [{"name": "Olivenöl", "amount": 2, "unit": "EL"}]}
+
+        out = self._api(client, consumption_estimator=est).recipe_cook_estimate(
+            "Avocado-Salat", mode="stock", correction="ich hab Olivenöl benutzt"
+        )
+        row = next(r for r in out["items"] if r["name"] == "Olivenöl")
+        self.assertEqual(row["match"], "missing")
+        self.assertIsNone(row["matched_product_id"])
+        self.assertIsNone(row["stock_amount"])
+
     def test_estimate_unmatched_row_has_null_stock(self) -> None:
         client = FakeGrocy(products=[{"id": "2", "name": "Zucchini"}], stock={"2": 2})
 
