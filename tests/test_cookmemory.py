@@ -73,6 +73,25 @@ class CookMemoryTest(unittest.TestCase):
         booked = cookmemory.book(self.path)
         self.assertEqual(booked[0]["id"], entry["id"])
 
+    def test_upsert_book_replaces_in_place_keeping_id(self) -> None:
+        original = cookmemory.add_to_book(self.path, title="Pasta", guidance=["alt"])
+        updated = cookmemory.upsert_book(
+            self.path, match_title="pasta", title="Pasta", guidance=["neu"], twist="mehr Chili"
+        )
+        booked = cookmemory.book(self.path)
+        self.assertEqual(len(booked), 1)  # replaced, not appended
+        self.assertEqual(updated["id"], original["id"])
+        self.assertEqual(booked[0]["guidance"], ["neu"])
+        self.assertEqual(booked[0]["twist"], "mehr Chili")
+
+    def test_upsert_book_appends_when_no_match(self) -> None:
+        cookmemory.add_to_book(self.path, title="Pasta", guidance=["x"])
+        entry = cookmemory.upsert_book(
+            self.path, match_title="Risotto", title="Risotto", guidance=["y"]
+        )
+        self.assertTrue(entry["id"])
+        self.assertEqual(len(cookmemory.book(self.path)), 2)
+
     def test_recent_cooked_excludes_old_and_dedupes(self) -> None:
         cookmemory.add_cooked(self.path, dish="Risotto")
         cookmemory.add_cooked(self.path, dish="Risotto")  # dup

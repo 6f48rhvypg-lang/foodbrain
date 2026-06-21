@@ -198,6 +198,67 @@ def generate_recipe(
     }
 
 
+# --- 2b. recipe revision ("Meine Version") ---------------------------------
+
+_REVISE_SYSTEM = (
+    "Der Nutzer hat ein vorhandenes Rezept und beschreibt (gesprochen oder "
+    "getippt), was er ANDERS macht — SEINE Version. Schreibe das Rezept so um, "
+    "dass es seine Änderungen WIRKLICH widerspiegelt: passe die Phasen, die Zeit "
+    "und ggf. die Einkaufsliste an. Tausche ersetzte Zutaten aus, ergänze "
+    "hinzugefügte, lass weggelassene weg. Behalte den Charakter des Gerichts, "
+    "erfinde nichts Unnötiges dazu. Gib KEINE nummerierten Mikro-Schritte, "
+    "sondern 3–6 grobe PHASEN als kurze Stichpunkte, wie im Original.\n"
+    "Im Modus 'stock' ist 'buy' leer; im Modus 'shop' liste die zu kaufenden "
+    "Zutaten in 'buy'. Deutsch. Antworte mit NUR diesem JSON:\n"
+    '{"title": str, "time": str, "uses": str, "buy": [str], "guidance": [str]}'
+)
+
+
+def revise_recipe(
+    *,
+    recipe: dict,
+    transcript: str,
+    mode: str,
+    model: str,
+    settings,
+    transport: Optional[Transport] = None,
+) -> dict:
+    """Rewrite an existing recipe to reflect the user's 'Meine Version' changes.
+
+    Same output shape as :func:`generate_recipe`. ``recipe`` is the current
+    recipe (title/time/uses/buy/guidance); ``transcript`` is the free-text or
+    spoken description of what the user did differently. Degrades to the
+    original fields when the model omits something.
+    """
+    mode = "shop" if mode == "shop" else "stock"
+    recipe = recipe or {}
+    title = str(recipe.get("title") or "").strip()
+    phases = _str_list(recipe.get("guidance"))
+    user = "\n".join(
+        [
+            f"Modus: {mode}",
+            f"Gericht: {title}",
+            "Bisherige Zeit: " + (str(recipe.get("time") or "").strip() or "—"),
+            "Nutzt vor allem: " + (str(recipe.get("uses") or "").strip() or "—"),
+            "Bisherige Einkäufe: " + (", ".join(_str_list(recipe.get("buy"))) or "—"),
+            "Bisherige Phasen:",
+            *([f"- {g}" for g in phases] or ["- —"]),
+            "",
+            "Meine Version (was ich anders mache): " + str(transcript or "").strip(),
+        ]
+    )
+    data = post_chat_json(
+        settings=settings, model=model, system=_REVISE_SYSTEM, user=user, transport=transport
+    )
+    return {
+        "title": str(data.get("title") or title).strip() or title,
+        "time": str(data.get("time") or recipe.get("time") or "").strip(),
+        "uses": str(data.get("uses") or recipe.get("uses") or "").strip(),
+        "buy": [] if mode == "stock" else _str_list(data.get("buy"))[:3],
+        "guidance": _str_list(data.get("guidance")) or _str_list(recipe.get("guidance")),
+    }
+
+
 # --- 4. consumption estimate (after cooking) -------------------------------
 
 _CONSUME_SYSTEM = (

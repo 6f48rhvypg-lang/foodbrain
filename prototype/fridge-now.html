@@ -355,9 +355,14 @@
   .rectime { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint); margin-bottom: 4px; }
   .recbuy { margin: 12px 0; padding: 10px 12px; background: var(--surface-2); border-radius: 12px; }
   .recbuy .rk { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
-  .bookitem { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .bookitem { display: block; width: 100%; text-align: left; padding: 12px 4px; border: none;
+    border-bottom: 1px solid var(--line); background: none; cursor: pointer; border-radius: 8px;
+    -webkit-tap-highlight-color: transparent; }
   .bookitem:last-child { border-bottom: none; }
+  .bookitem:hover { background: var(--surface-2); }
+  .bookitem:active { transform: scale(.99); }
   .bookitem .bt { font-weight: 700; font-size: 15px; color: var(--ink); }
+  .bookitem .bcook { font-weight: 500; font-size: 12px; color: var(--accent); }
   .bookitem .bg { font-size: 13px; color: var(--ink-dim); margin-top: 4px; line-height: 1.4; }
 
   /* cook -> consumption review + Verlauf */
@@ -2128,6 +2133,14 @@ async function loadRecipeConfig(){
 }
 
 let inspoMode = 'stock'; // 'stock' (cook from inventory) | 'shop' (with shopping)
+let ideaCache = null;    // { sig, data } — last generated batch, reused until refreshed
+
+/* Signature of the inputs that shape a batch. Reusing the cache only when this
+   matches means changing mode/mood/model still regenerates, but tapping
+   "Ideen holen" again with the same settings shows the last batch instantly. */
+function ideaSig(preferences){
+  return JSON.stringify({ mode: inspoMode, preferences, balance: SETTINGS.balance, idea_model: SETTINGS.idea_model });
+}
 
 function inspoEntryHtml(){
   const moodGroup = g => `
@@ -2168,11 +2181,14 @@ async function openInspiration(){
   document.getElementById('refineToggle').addEventListener('click', ()=>{
     document.getElementById('refineBody').classList.toggle('show');
   });
-  document.getElementById('getIdeasBtn').addEventListener('click', fetchIdeas);
+  document.getElementById('getIdeasBtn').addEventListener('click', ()=>fetchIdeas(false));
 }
 
-async function fetchIdeas(){
+async function fetchIdeas(force){
   const preferences = { cuisine: mood.cuisine, style: mood.style, needs: [...mood.needs] };
+  const sig = ideaSig(preferences);
+  // Show the last batch instantly unless the user explicitly refreshes.
+  if (!force && ideaCache && ideaCache.sig === sig){ renderIdeas(ideaCache.data); return; }
   openSheet(`<h3>Ideen holen</h3>
     <div class="h3sub">${inspoMode==='shop'?'mit Einkauf':'aus dem Vorrat'}</div>
     <div class="loading">koche mir was aus…</div>`);
@@ -2184,6 +2200,7 @@ async function fetchIdeas(){
       balance: SETTINGS.balance,
     });
   } catch (err){ return inspoError('Keine Ideen bekommen.', err, openInspiration); }
+  ideaCache = { sig, data };
   renderIdeas(data);
 }
 
@@ -2207,11 +2224,13 @@ function renderIdeas(data){
     <div class="h3sub">${data.mode==='shop'?'mit Einkauf':'aus dem Vorrat'} · tipp eine an</div>
     ${ideas.map(card).join('')}
     <div class="row">
-      <button class="btn ghost" id="closeSheet">Schließen</button>
-      <button class="btn solid" id="moreIdeas">Zurück</button>
-    </div>`);
+      <button class="btn ghost" id="moreIdeas">‹ Zurück</button>
+      <button class="btn solid" id="refreshIdeas">🔄 Neue Ideen</button>
+    </div>
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
   wireClose();
   document.getElementById('moreIdeas').addEventListener('click', openInspiration);
+  document.getElementById('refreshIdeas').addEventListener('click', ()=>fetchIdeas(true));
   sheet.querySelectorAll('.ideacard').forEach(c=>c.addEventListener('click', ()=>{
     openRecipe(ideas[Number(c.dataset.idx)], data.mode);
   }));
@@ -2266,14 +2285,14 @@ function openTwist(rec, mode){
     ? `<button type="button" class="micbtn" id="micBtn" title="Zum Diktieren tippen">🎙</button>` : '';
   openSheet(`
     <h3>Meine Version</h3>
-    <div class="h3sub">${esc(rec.title)} · was hast du anders gemacht?</div>
+    <div class="h3sub">${esc(rec.title)} · was machst du anders? Das Rezept wird umgeschrieben.</div>
     <div class="micwrap">
       <textarea id="intakeText" placeholder="z. B. „mehr Knoblauch, statt Sahne Crème fraîche“"></textarea>
       ${micHtml}
     </div>
     <div class="row">
       <button class="btn ghost" id="twistBack">Zurück</button>
-      <button class="btn solid" id="twistSave">Speichern</button>
+      <button class="btn solid" id="twistSave">Übernehmen</button>
     </div>`);
   const micBtn = document.getElementById('micBtn');
   if (micBtn) micBtn.addEventListener('click', toggleRecording);
@@ -2282,13 +2301,19 @@ function openTwist(rec, mode){
     stopRecording();
     const text = (document.getElementById('intakeText')?.value || '').trim();
     if (!text) return;
-    e.target.disabled = true; e.target.textContent = 'Speichere…';
+    e.target.disabled = true; e.target.textContent = 'Schreibe um…';
+    let data;
     try {
-      await apiPost('/api/recipes/twist', { dish: rec.title, text });
-      await apiPost('/api/recipes/save', { title: rec.title, guidance: rec.guidance || [], buy: rec.buy || [], twist: text });
-      showSnack(`<b>${esc(rec.title)}</b> mit deiner Version gespeichert`);
-      closeSheet();
-    } catch(err){ e.target.disabled = false; e.target.textContent = 'Speichern'; showError(err); }
+      // Fold the change into the recipe itself (regenerated guidance) and update
+      // its book entry in place; the returned recipe carries `twist` so the
+      // cook-estimate flow seeds its guess with the user's version.
+      data = await apiPost('/api/recipes/revise', { recipe: rec, text, mode });
+    } catch(err){ e.target.disabled = false; e.target.textContent = 'Übernehmen'; showError(err); return; }
+    ideaCache = null; // recipe text changed — don't reshow a stale idea batch
+    const revised = data.recipe || rec;
+    if (!revised.twist) revised.twist = text;
+    showSnack(`<b>${esc(revised.title)}</b> als deine Version aktualisiert`);
+    renderRecipe(revised, mode);
   });
 }
 
@@ -2307,11 +2332,15 @@ async function openCookReview(rec, mode){
 
 async function fetchCookEstimate(correction){
   const { rec, mode } = cookCtx;
+  // Seed every estimate with the recipe's saved "Meine Version" twist so the
+  // consumption guess already reflects how the user really cooks it; any live
+  // correction is appended on top.
+  const combined = [(rec.twist || '').trim(), (correction || '').trim()].filter(Boolean).join('. ');
   let data;
   try {
     data = await apiPost('/api/recipes/cook-estimate', {
       dish: rec.title, guidance: rec.guidance || [], buy: rec.buy || [],
-      mode, correction: correction || '',
+      mode, correction: combined,
     });
   } catch (err){ return inspoError('Verbrauch konnte nicht geschätzt werden.', err, ()=>openCookReview(rec, mode)); }
   renderCookReview(data);
@@ -2486,17 +2515,25 @@ async function openBook(){
   try { data = await apiGet('/api/recipes/book'); }
   catch(err){ return inspoError('Konnte die Rezepte nicht laden.', err, openBook); }
   const recipes = data.recipes || [];
-  const item = r => `<div class="bookitem">
-    <div class="bt">${esc(r.title)}</div>
+  const item = (r, i) => `<button class="bookitem" type="button" data-idx="${i}">
+    <div class="bt">${esc(r.title)} <span class="bcook">tippen zum Kochen ›</span></div>
     ${r.twist?`<div class="bg">✎ ${esc(r.twist)}</div>`:''}
     ${(r.guidance&&r.guidance.length)?`<div class="bg">${esc(r.guidance.join(' → '))}</div>`:''}
-  </div>`;
+  </button>`;
   openSheet(`
     <h3>Meine Rezepte</h3>
-    <div class="h3sub">${recipes.length} gespeichert</div>
+    <div class="h3sub">${recipes.length} gespeichert · tipp eins zum Kochen an</div>
     ${recipes.length ? recipes.map(item).join('') : '<div class="sheet-error">Noch keine Rezepte gespeichert.</div>'}
     <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
   wireClose();
+  sheet.querySelectorAll('.bookitem[data-idx]').forEach(b=> b.addEventListener('click', ()=>{
+    const r = recipes[Number(b.dataset.idx)];
+    // A saved entry is a full recipe; reopen it in the recipe view so the user
+    // can cook it, tweak "Meine Version", or re-save. shop mode if it has buys.
+    const rec = { title: r.title, guidance: r.guidance || [], buy: r.buy || [],
+      uses: '', time: '', twist: r.twist || '' };
+    renderRecipe(rec, (r.buy && r.buy.length) ? 'shop' : 'stock');
+  }));
 }
 
 async function openRecipeSettings(){

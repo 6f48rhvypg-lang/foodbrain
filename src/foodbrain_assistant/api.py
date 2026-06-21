@@ -107,6 +107,7 @@ class FoodBrainAPI:
     # from settings.data_dir.
     idea_generator: Optional[Callable[..., dict]] = None
     recipe_generator: Optional[Callable[..., dict]] = None
+    recipe_reviser: Optional[Callable[..., dict]] = None
     twist_extractor: Optional[Callable[..., dict]] = None
     consumption_estimator: Optional[Callable[..., dict]] = None
     cook_store_path: Optional[object] = None  # str | Path
@@ -454,6 +455,56 @@ class FoodBrainAPI:
             tags=twist.get("tags", {}),
         )
         return {"dish": dish, "twist": twist, "ok": True}
+
+    def recipe_revise(
+        self, recipe: dict, transcript: str = "", text: str = "", mode: str = "stock"
+    ) -> dict:
+        """'Meine Version': rewrite a recipe to match the user's changes.
+
+        Folds the change into the recipe itself (regenerated guidance), updates
+        the matching book entry in place (so it's not a near-duplicate), and
+        persists the taste tags — the same learning signal :meth:`recipe_twist`
+        wrote. The returned recipe carries ``twist`` so the cook-estimate flow
+        can seed its consumption guess with the user's version.
+        """
+        self._require_intake()
+        if not isinstance(recipe, dict) or not str(recipe.get("title") or "").strip():
+            raise ApiError(400, "recipe with a title is required")
+        spoken = (transcript or text or "").strip()
+        if not spoken:
+            raise ApiError(400, "describe what you did differently")
+        mode = "shop" if mode == "shop" else "stock"
+        original_title = str(recipe.get("title")).strip()
+        model = self._resolve_model(None, self.settings.recipe_model)
+        store = self._cook_path()
+        extract = self.twist_extractor or recipes_llm.extract_twist
+        reviser = self.recipe_reviser or recipes_llm.revise_recipe
+        try:
+            twist = extract(
+                transcript=spoken, dish=original_title, model=model, settings=self.settings
+            )
+            revised = reviser(
+                recipe=recipe, transcript=spoken, mode=mode, model=model, settings=self.settings
+            )
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+        cookmemory.add_twist(
+            store,
+            dish=original_title,
+            change=twist.get("change", ""),
+            note=twist.get("note", ""),
+            tags=twist.get("tags", {}),
+        )
+        revised["twist"] = spoken
+        entry = cookmemory.upsert_book(
+            store,
+            match_title=original_title,
+            title=revised.get("title") or original_title,
+            guidance=revised.get("guidance", []),
+            buy=revised.get("buy", []),
+            twist=spoken,
+        )
+        return {"recipe": revised, "twist": twist, "entry": entry, "ok": True}
 
     def recipe_cooked(self, dish: str) -> dict:
         """Log a cooked dish so it's avoided in future idea generation."""

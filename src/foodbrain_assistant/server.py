@@ -26,6 +26,7 @@ Routes::
     POST /api/recipes/ideas          {"mode", "preferences"?, "idea_model"?, "balance"?, "count"?}
     POST /api/recipes/recipe         {"idea": {...}, "mode", "recipe_model"?}
     POST /api/recipes/twist          {"dish", "transcript"? | "text"?}
+    POST /api/recipes/revise         {"recipe": {...}, "transcript"? | "text"?, "mode"?}
     POST /api/recipes/cooked         {"dish"}
     POST /api/recipes/save           {"title", "guidance": [...], "buy"?, "twist"?}
     POST /api/recipes/cook-estimate  {"dish", "guidance"?, "buy"?, "mode"?}
@@ -213,6 +214,16 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             text=str(body.get("text", "")),
                         ),
                     )
+                elif route == "/api/recipes/revise":
+                    self._send(
+                        200,
+                        api.recipe_revise(
+                            _idea(body, key="recipe"),
+                            transcript=str(body.get("transcript", "")),
+                            text=str(body.get("text", "")),
+                            mode=str(body.get("mode", "stock")),
+                        ),
+                    )
                 elif route == "/api/recipes/cooked":
                     self._send(200, api.recipe_cooked(_require(body, "dish")))
                 elif route == "/api/recipes/cook-estimate":
@@ -329,10 +340,10 @@ def _items(body: dict) -> list:
     return items
 
 
-def _idea(body: dict) -> dict:
-    idea = body.get("idea")
+def _idea(body: dict, key: str = "idea") -> dict:
+    idea = body.get(key)
     if not isinstance(idea, dict):
-        raise ApiError(400, "'idea' must be an object")
+        raise ApiError(400, f"{key!r} must be an object")
     return idea
 
 

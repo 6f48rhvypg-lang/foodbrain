@@ -117,6 +117,42 @@ class RecipeApiTest(unittest.TestCase):
         self.assertIn("Chili", cookmemory.taste_summary(self.store)["likes"])
         self.assertEqual(len(cookmemory.load(self.store)["twists"]), 1)
 
+    def test_revise_rewrites_recipe_and_updates_book_in_place(self) -> None:
+        # Seed a saved recipe, then revise it: the book entry is replaced (same
+        # id, new guidance), not duplicated, and taste tags are persisted.
+        original = self._api().recipe_save("Pasta", ["alt phase"], buy=[])["recipe"]
+
+        def reviser(**kwargs):
+            return {"title": "Pasta", "time": "25 Min", "uses": "Sahne",
+                    "guidance": ["neue phase"], "buy": []}
+
+        def extract(**kwargs):
+            return {"change": "Crème fraîche", "note": "",
+                    "tags": {"likes": ["Crème fraîche"], "dislikes": []}}
+
+        api = self._api(recipe_reviser=reviser, twist_extractor=extract)
+        out = api.recipe_revise(
+            {"title": "Pasta", "guidance": ["alt phase"], "buy": []},
+            text="Crème fraîche statt Sahne", mode="stock",
+        )
+        self.assertEqual(out["recipe"]["guidance"], ["neue phase"])
+        self.assertEqual(out["recipe"]["twist"], "Crème fraîche statt Sahne")
+        book = api.recipe_book()["recipes"]
+        self.assertEqual(len(book), 1)  # replaced, not duplicated
+        self.assertEqual(book[0]["id"], original["id"])
+        self.assertEqual(book[0]["guidance"], ["neue phase"])
+        self.assertIn("Crème fraîche", cookmemory.taste_summary(self.store)["likes"])
+
+    def test_revise_requires_recipe_title(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api().recipe_revise({}, text="x")
+        self.assertEqual(ctx.exception.status, 400)
+
+    def test_revise_requires_description(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api().recipe_revise({"title": "Pasta"}, text="  ")
+        self.assertEqual(ctx.exception.status, 400)
+
     def test_cooked_logs_dish(self) -> None:
         self._api().recipe_cooked("Risotto")
         self.assertIn("Risotto", cookmemory.recent_cooked(self.store))
@@ -142,6 +178,8 @@ class RecipeHttpRoutesTest(unittest.TestCase):
             idea_generator=lambda **k: {"ideas": [{"title": "T", "uses": "Joghurt", "buy": []}]},
             recipe_generator=lambda **k: {"title": "T", "time": "20 Min",
                                           "guidance": ["a", "b"], "buy": []},
+            recipe_reviser=lambda **k: {"title": "T", "time": "25 Min",
+                                        "guidance": ["c", "d"], "buy": []},
             twist_extractor=lambda **k: {"change": "mehr Chili", "note": "",
                                          "tags": {"likes": ["Chili"], "dislikes": []}},
             source="test",
@@ -187,6 +225,26 @@ class RecipeHttpRoutesTest(unittest.TestCase):
         self._post("/api/recipes/save", {"title": "Pasta", "guidance": ["x"]})
         s, body = self._get("/api/recipes/book")
         self.assertEqual(body["recipes"][0]["title"], "Pasta")
+
+    def test_revise_route(self) -> None:
+        s, body = self._post(
+            "/api/recipes/revise",
+            {"recipe": {"title": "T", "guidance": ["a"]}, "text": "mehr chili", "mode": "stock"},
+        )
+        self.assertEqual(s, 200)
+        self.assertEqual(body["recipe"]["guidance"], ["c", "d"])
+        self.assertEqual(body["recipe"]["twist"], "mehr chili")
+
+    def test_revise_route_rejects_non_object_recipe(self) -> None:
+        req = Request(
+            f"http://127.0.0.1:{self.port}/api/recipes/revise",
+            data=json.dumps({"recipe": "nope", "text": "x"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(Exception) as ctx:
+            urlopen(req)
+        self.assertEqual(ctx.exception.code, 400)
 
     def test_config_route(self) -> None:
         status, body = self._get("/api/recipes/config")

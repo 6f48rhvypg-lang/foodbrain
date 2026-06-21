@@ -102,6 +102,41 @@ class GenerateRecipeTest(unittest.TestCase):
         self.assertEqual(out["buy"], [])
 
 
+class ReviseRecipeTest(unittest.TestCase):
+    def test_rewrites_guidance_and_passes_change_to_prompt(self) -> None:
+        transport, captured = _reply(
+            {"title": "Pasta", "time": "25 Min", "uses": "Crème fraîche", "buy": [],
+             "guidance": ["Knoblauch anbraten", "Crème fraîche dazu"]}
+        )
+        out = recipes_llm.revise_recipe(
+            recipe={"title": "Pasta", "guidance": ["alt"], "buy": []},
+            transcript="Crème fraîche statt Sahne, mehr Knoblauch", mode="stock",
+            model="google/gemini-3.1-flash-lite", settings=_settings(), transport=transport,
+        )
+        self.assertEqual(out["guidance"], ["Knoblauch anbraten", "Crème fraîche dazu"])
+        user_msg = captured["body"]["messages"][1]["content"]
+        self.assertIn("Crème fraîche statt Sahne", user_msg)
+        self.assertIn("alt", user_msg)  # original phases reach the prompt
+
+    def test_falls_back_to_original_guidance(self) -> None:
+        transport, _ = _reply({"title": "Pasta", "guidance": []})
+        out = recipes_llm.revise_recipe(
+            recipe={"title": "Pasta", "guidance": ["original phase"]},
+            transcript="weniger Salz", mode="stock",
+            model="google/gemini-3.1-flash-lite", settings=_settings(), transport=transport,
+        )
+        self.assertEqual(out["guidance"], ["original phase"])
+
+    def test_stock_mode_forces_empty_buy(self) -> None:
+        transport, _ = _reply({"title": "Pasta", "guidance": ["x"], "buy": ["Feta"]})
+        out = recipes_llm.revise_recipe(
+            recipe={"title": "Pasta", "guidance": ["x"]},
+            transcript="mehr Feta", mode="stock",
+            model="google/gemini-3.1-flash-lite", settings=_settings(), transport=transport,
+        )
+        self.assertEqual(out["buy"], [])
+
+
 class ExtractTwistTest(unittest.TestCase):
     def test_parses_change_and_tags(self) -> None:
         transport, _ = _reply(

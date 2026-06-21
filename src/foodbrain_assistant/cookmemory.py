@@ -102,6 +102,41 @@ def add_to_book(path, *, title: str, guidance: Iterable[str], buy: Iterable[str]
     return entry
 
 
+def upsert_book(
+    path,
+    *,
+    match_title: str,
+    title: str,
+    guidance: Iterable[str],
+    buy: Iterable[str] = (),
+    twist: str = "",
+) -> dict:
+    """Replace the book entry titled ``match_title`` in place, else append.
+
+    Used by "Meine Version": revising a recipe should update its existing book
+    entry (keeping its id) rather than pile up near-duplicates. Match is
+    case-insensitive on the title; the stored entry takes the new ``title``.
+    """
+    data = load(path)
+    entry = {
+        "title": str(title or "").strip(),
+        "guidance": [str(g).strip() for g in (guidance or []) if str(g).strip()],
+        "buy": [str(b).strip() for b in (buy or []) if str(b).strip()],
+        "twist": str(twist or "").strip(),
+        "ts": _now_iso(),
+    }
+    key = str(match_title or "").strip().lower()
+    for existing in data["book"]:
+        if str(existing.get("title") or "").strip().lower() == key and key:
+            existing.update(entry, id=existing.get("id") or str(uuid.uuid4()))
+            save(path, data)
+            return existing
+    entry["id"] = str(uuid.uuid4())
+    data["book"].append(entry)
+    save(path, data)
+    return entry
+
+
 def recent_cooked(path, *, days: int = 21) -> List[str]:
     """Dish titles cooked within ``days`` — the list to AVOID in idea generation."""
     data = load(path)
