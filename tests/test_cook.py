@@ -135,6 +135,22 @@ class CookTest(unittest.TestCase):
         self.assertEqual(row["kind"], "consume")
         self.assertEqual(row["matched_product_id"], "2")
         self.assertEqual(row["amount"], 1)
+        # current stock is attached so the review can show "X of Y -> Z left".
+        self.assertEqual(row["stock_amount"], 2)
+        self.assertEqual(row["stock_unit"], "Stück")
+
+    def test_estimate_unmatched_row_has_null_stock(self) -> None:
+        client = FakeGrocy(products=[{"id": "2", "name": "Zucchini"}], stock={"2": 2})
+
+        def est(**kwargs):
+            return {"used": [{"name": "Einhornfleisch", "amount": 1}], "bought": []}
+
+        out = self._api(client, consumption_estimator=est).recipe_cook_estimate(
+            "Fantasie", mode="stock"
+        )
+        row = out["items"][0]
+        self.assertIsNone(row["matched_product_id"])
+        self.assertIsNone(row["stock_amount"])
 
     def test_estimate_bought_rows_only_in_shop_mode(self) -> None:
         client = FakeGrocy()

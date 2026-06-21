@@ -381,6 +381,18 @@
   .crow .cbadge.bought { background: var(--amber); color: var(--amber-ink); }
   .crow .cdrop { margin-left: auto; background: none; border: none; cursor: pointer;
     color: var(--ink-faint); font-size: 16px; }
+  .crow .cbadge.ok { background: var(--accent-bg, var(--surface-2)); color: var(--accent); }
+  .crow .cbadge.fuzzy { background: var(--amber); color: var(--amber-ink); }
+  .crow .cbadge.new { background: var(--surface-2); color: var(--ink-faint); }
+  /* full-width sub-line under the name: which entry matched + stock + remainder */
+  .crow .cmeta { flex: 1 1 100%; font-size: 12px; color: var(--ink-dim); line-height: 1.4;
+    display: flex; flex-wrap: wrap; gap: 4px 10px; margin: -2px 0 2px; }
+  .crow .cmeta .cmatch { font-weight: 600; }
+  .crow .cmeta.fuzzy .cmatch { color: var(--amber-ink); }
+  .crow .cmeta.new .cmatch { color: var(--ink-faint); }
+  .crow .cleft { font-weight: 700; }
+  .crow .cleft.empty { color: var(--accent); }
+  .crow .cleft.over { color: var(--hot, #c0392b); }
   .cookgroup { margin: 8px 0; }
   .cookgroup .ck { font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--ink-faint); margin: 10px 0 2px; }
@@ -2360,15 +2372,54 @@ function cookRow(it, i){
     </div>`;
   }
   const matched = !!it.matched_product_id;
-  const badge = matched ? `<span class="cbadge">✓</span>` : `<span class="cbadge">neu?</span>`;
+  const fuzzy = matched && it.match === 'fuzzy';
+  const cls = !matched ? 'new' : (fuzzy ? 'fuzzy' : 'ok');
+  const badge = matched
+    ? `<span class="cbadge ${cls}">${fuzzy ? '~' : '✓'}</span>`
+    : `<span class="cbadge new">neu?</span>`;
+  // Sub-line: which inventory entry this matched (so the user can confirm it's
+  // the right "Römersalat" and not a wrongly-assumed fresh one), plus how much
+  // is in stock and a live "bleibt" readout updated as the amount is edited.
+  const hasStock = it.stock_amount != null;
+  const su = esc(it.stock_unit || it.unit || '');
+  const match = matched
+    ? (fuzzy ? `vermutlich „${esc(it.matched_product_name || it.name)}" — passt das?`
+             : `Vorrat: ${esc(it.matched_product_name || it.name)}`)
+    : `nicht im Vorrat — wird übersprungen`;
+  const stockHave = hasStock ? `<span>im Vorrat: ${nfmt(it.stock_amount)}${su?(' '+su):''}</span>` : '';
+  const leftSlot = hasStock ? `<span class="cleft" data-sunit="${su}"></span>` : '';
   return `<div class="crow${matched?'':' drop'}" data-i="${i}" data-kind="consume" data-pid="${esc(it.matched_product_id||'')}"
-       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}">
+       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}" data-stock="${hasStock?it.stock_amount:''}">
     <div class="cname"><span class="emoji">${emoji}</span>${esc(it.name)}</div>
     ${badge}
-    <label>Menge <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
+    <div class="cmeta ${cls}"><span class="cmatch">↳ ${match}</span>${stockHave}${leftSlot}</div>
+    <label>verbraucht <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
     <span class="cunit">${esc(it.unit||'')}</span>
     <button class="cdrop" type="button" title="entfernen">✕</button>
   </div>`;
+}
+
+/* compact number: drop trailing zeros, German-friendly (1.5 -> "1,5") */
+function nfmt(n){
+  const v = Number(n);
+  if (!isFinite(v)) return '';
+  return (Math.round(v * 100) / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+}
+
+/* Recompute one consume row's "bleibt" readout from its stock + current input. */
+function updateCookLeft(row){
+  const slot = row.querySelector('.cleft');
+  if (!slot) return;
+  const stock = Number(row.dataset.stock);
+  if (!isFinite(stock)) { slot.textContent = ''; return; }
+  const amt = row.classList.contains('drop') ? 0 : (Number(row.querySelector('.camt')?.value) || 0);
+  const left = stock - amt;
+  const su = slot.dataset.sunit ? (' ' + slot.dataset.sunit) : '';
+  slot.classList.toggle('empty', left <= 0.0001 && left >= -0.0001);
+  slot.classList.toggle('over', left < -0.0001);
+  slot.textContent = left < -0.0001
+    ? `mehr als vorhanden! (nur ${nfmt(stock)}${su})`
+    : (left <= 0.0001 ? 'bleibt: 0 — alles aufgebraucht ✓' : `bleibt: ${nfmt(left)}${su}`);
 }
 
 function renderCookReview(data){
@@ -2404,7 +2455,14 @@ function renderCookReview(data){
   sheet.querySelectorAll('.cdrop').forEach(b=> b.addEventListener('click', ()=>{
     const row = b.closest('.crow'); row.classList.toggle('drop');
     const amt = row.querySelector('.camt'); if (amt) amt.disabled = row.classList.contains('drop');
+    updateCookLeft(row);
   }));
+  // Live "bleibt" readout: seed each consume row, then recompute as edited.
+  sheet.querySelectorAll('.crow[data-kind="consume"]').forEach(row=>{
+    updateCookLeft(row);
+    const amt = row.querySelector('.camt');
+    if (amt) amt.addEventListener('input', ()=> updateCookLeft(row));
+  });
   document.getElementById('reEstimateBtn').addEventListener('click', ()=>{
     stopRecording();
     const correction = (document.getElementById('intakeText')?.value || '').trim();

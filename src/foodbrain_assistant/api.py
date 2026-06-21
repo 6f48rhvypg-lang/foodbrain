@@ -580,6 +580,7 @@ class FoodBrainAPI:
             raise self._llm_error(exc) from exc
 
         catalog = self._catalog()
+        stock_by_pid = {item.product_id: item for item in stock}
         rows: List[dict] = []
         used = result.get("used") if isinstance(result.get("used"), list) else []
         as_items = [
@@ -596,6 +597,12 @@ class FoodBrainAPI:
             row = item.to_dict()
             row["kind"] = "consume"
             row["amount"] = row.pop("quantity")
+            # Attach the matched product's CURRENT stock so the review can show
+            # "X used of Y in stock -> Z left" and let the user sanity-check both
+            # the amount and whether the right inventory entry was matched.
+            stocked = stock_by_pid.get(row.get("matched_product_id"))
+            row["stock_amount"] = stocked.amount if stocked else None
+            row["stock_unit"] = stocked.unit if stocked else None
             rows.append(row)
 
         bought = result.get("bought") if isinstance(result.get("bought"), list) else []
