@@ -4,6 +4,56 @@ Current date: 2026-06-12
 
 ---
 
+## 📋 NEXT (planned, NOT built): "In Grocy anlegen" for missing cook ingredients
+
+**Context.** The cook-review (Verbrauch) now shows `match:"missing"` rows when a
+correction names an ingredient that isn't tracked in Grocy — e.g. the user cooked
+an "Avocado-Olivenöl" salad, corrected "ich hab Olivenöl benutzt", but their Grocy
+has Rapsöl/Leinöl/Erdnussöl/… and **no Olivenöl** (verified live 2026-06-21). Those
+rows are greyed and explain "nicht in deinem Vorrat — leg es in Grocy an". This is
+the follow-up to actually let them create it. (Shipped pieces: commits c126168
+`missing` channel; ea72c65 stock/bleibt; 09200cd revise/cache/cookable.)
+
+**Goal.** On a `missing` row, a small **"In Grocy anlegen"** button opens a compact
+popup (familiar intake-style fields) → creates the product + initial stock in
+Grocy → the row flips from "fehlt" to a normal matched/consume row (or just
+confirms "angelegt ✓"). Keep it one-tap-light; don't make the user leave the
+cook flow.
+
+**Reuse (don't reinvent — the new-product write path already exists):**
+- `api._commit_add` / `GrocyClient.create_product` (name + `qu_id_stock` + location)
+  then `add_stock(...)`. Unit/location come from `_NameResolver` over
+  `client.get_quantity_units()` / `get_locations()`; `_ProductIndex` (+ aliases)
+  dedupes by unique Grocy name. `intake_commit` already drives this for `action:"add"`
+  rows — the cleanest backend is to POST a single `add` item to the **existing**
+  `/api/intake/commit`, OR add a thin `POST /api/recipes/add-missing`
+  `{name, amount, unit, location}` that wraps `_commit_add` (build resolvers +
+  product_index exactly as `recipe_cook_commit` does for bought rows, api.py ~636).
+- SPA: model the popup on the existing intake "new product" review UX (the
+  Einräumen flow in fridge-now.html — `cookRow` bought-row inputs and the intake
+  add rows are the visual reference). Prefill name from `it.name`; default unit
+  from the row's `unit`; default amount = 1; location optional
+  (`settings.intake_default_location`).
+
+**Open product decisions (ask the user before building):**
+1. After creating, **also book the cooked consumption?** Options: (a) just create
+   it as tracked stock, leave consumption alone; (b) create with an initial
+   amount then immediately deduct what the dish used (checkbox "und gleich als
+   verbraucht buchen"). Leaning (a) — the user's intent is "start tracking this
+   staple", and oils/staples are awkward to quantify per-dish.
+2. **Initial amount/unit** for a staple like oil — bottle vs ml? Probably let the
+   user type it (default 1 + the row's unit), since Grocy stock unit matters for
+   future matching.
+3. **Where the button lives** — inline on the missing row vs a small sheet. A
+   sheet gives room for amount/unit/location with the familiar look.
+
+**Definition of done:** missing row → tap → popup → product exists in Grocy (shows
+up in `/api/stock`), row reflects it, no console errors; unit test over the new
+endpoint with fake Grocy (mirror `test_cook.py` add-path tests); deploy CT 105 per
+`[[deploy-on-main-to-ct105]]`. Validate live by adding Olivenöl from a real cook.
+
+---
+
 ## ✅ DONE (2026-06-21): Cook → consumption tracking + adjustable Verlauf
 
 **Shipped.** "Gekocht ✓" now books consumption to Grocy via an editable estimate
