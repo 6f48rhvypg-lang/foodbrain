@@ -20,7 +20,9 @@ the Vorrat exactly as it was, then shows "Rückgängig gemacht ✓".
   new `cookmemory.remove_session`.
 - `server.py`: `POST /api/recipes/cook-undo {session_id}`.
 - `fridge-now.html`: `renderCookResult` adds the undo button (when a session was
-  booked) → `undoCookSession` → confirmation screen.
+  booked) → `undoCookSession` → confirmation screen. **Also in the Verlauf**
+  (Einstellungen → Verlauf): each session header has a ↩︎ Rückgängig button
+  (confirm → `cook-undo` → the session greys out as "rückgängig gemacht").
 - Tests: +4 in `test_cook.py` (consume restore + session dropped, bought pack+consume
   reversed with persisted add txn, unknown-session 404, HTTP route). Suite
   **221 (1 skipped)**, green.

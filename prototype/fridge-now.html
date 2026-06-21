@@ -430,8 +430,13 @@
   .cresult .depleted { color: var(--accent); font-weight: 700; }
   .histsess { padding: 12px 0; border-bottom: 1px solid var(--line); }
   .histsess:last-child { border-bottom: none; }
-  .histsess .ht { font-weight: 700; font-size: 15px; color: var(--ink); display: flex; justify-content: space-between; }
-  .histsess .hd { font-size: 11px; color: var(--ink-faint); font-weight: 400; }
+  .histsess .ht { font-weight: 700; font-size: 15px; color: var(--ink); display: flex;
+    justify-content: space-between; align-items: center; gap: 8px; }
+  .histsess .hd { font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: auto; }
+  .histsess .hundo { font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    color: var(--ink-dim); background: none; border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+  .histsess .hundo:hover { border-color: var(--ink-dim); }
+  .histsess.undone { opacity: .45; }
   .histline { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--ink-dim); }
   .histline .hn { flex: 1 1 auto; }
   .histline input[type=number] { width: 64px; font: inherit; font-size: 13px; color: var(--ink);
@@ -2663,8 +2668,9 @@ async function openCookHistory(){
       <button class="hsave" type="button">Korrigieren</button>
     </div>`;
   };
-  const sess = s => `<div class="histsess">
-    <div class="ht"><span>${esc(s.dish)}</span><span class="hd">${fmtDate(s.ts)}</span></div>
+  const sess = s => `<div class="histsess" data-sid="${esc(s.id)}">
+    <div class="ht"><span>${esc(s.dish)}</span><span class="hd">${fmtDate(s.ts)}</span>
+      <button class="hundo" type="button">↩︎ Rückgängig</button></div>
     ${(s.lines||[]).map((l,i)=>lineHtml(s,l,i)).join('')}
   </div>`;
   openSheet(`
@@ -2686,6 +2692,25 @@ async function openCookHistory(){
       else if (!res.depleted && dep){ dep.remove(); }
       reload();
     } catch(err){ btn.disabled = false; btn.textContent = 'Korrigieren'; showError(err); }
+  }));
+  // Whole-session undo from the Verlauf — reverses the booking and removes the
+  // session (the backend drops it on full success).
+  sheet.querySelectorAll('.histsess .hundo').forEach(btn=> btn.addEventListener('click', async ()=>{
+    const block = btn.closest('.histsess');
+    if (!confirm('Diese Buchung ganz rückgängig machen? Der Vorrat wird wiederhergestellt.')) return;
+    btn.disabled = true; btn.textContent = 'Mache rückgängig…';
+    try {
+      const res = await apiPost('/api/recipes/cook-undo', { session_id: block.dataset.sid });
+      if (res.removed){
+        block.classList.add('undone');
+        block.querySelectorAll('input,button').forEach(el=> el.disabled = true);
+        btn.textContent = '↩︎ rückgängig gemacht';
+      } else {
+        btn.disabled = false; btn.textContent = '↩︎ Rückgängig';
+        showError(new ApiError(207, 'Nicht alles konnte zurückgenommen werden.'));
+      }
+      reload();
+    } catch(err){ btn.disabled = false; btn.textContent = '↩︎ Rückgängig'; showError(err); }
   }));
 }
 
