@@ -31,6 +31,7 @@ Routes::
     POST /api/recipes/save           {"title", "guidance": [...], "buy"?, "twist"?}
     POST /api/recipes/cook-estimate  {"dish", "guidance"?, "buy"?, "mode"?}
     POST /api/recipes/cook-commit    {"dish", "items": [...]}
+    POST /api/recipes/add-missing    {"name", "amount"?, "unit"?, "location"?, "used"?}
     POST /api/recipes/cook-adjust    {"session_id", "line_index", "new_amount"}
     GET  /api/recipes/cook-history   -> past cooking sessions (Verlauf)
     GET  /api/recipes/book           -> saved "Meine Rezepte"
@@ -241,6 +242,21 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(
                         200,
                         api.recipe_cook_commit(_require(body, "dish"), _items(body)),
+                    )
+                elif route == "/api/recipes/add-missing":
+                    self._send(
+                        200,
+                        api.recipe_add_missing(
+                            _require(body, "name"),
+                            amount=body.get("amount", 1.0),
+                            unit=(str(body.get("unit")) if body.get("unit") else None),
+                            location=(
+                                str(body.get("location"))
+                                if body.get("location")
+                                else None
+                            ),
+                            used=body.get("used", 0.0),
+                        ),
                     )
                 elif route == "/api/recipes/cook-adjust":
                     try:

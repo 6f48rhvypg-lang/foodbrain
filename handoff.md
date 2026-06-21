@@ -4,53 +4,44 @@ Current date: 2026-06-12
 
 ---
 
-## 📋 NEXT (planned, NOT built): "In Grocy anlegen" for missing cook ingredients
+## ✅ DONE (2026-06-21): "In Grocy anlegen" for missing cook ingredients
 
-**Context.** The cook-review (Verbrauch) now shows `match:"missing"` rows when a
-correction names an ingredient that isn't tracked in Grocy — e.g. the user cooked
-an "Avocado-Olivenöl" salad, corrected "ich hab Olivenöl benutzt", but their Grocy
-has Rapsöl/Leinöl/Erdnussöl/… and **no Olivenöl** (verified live 2026-06-21). Those
-rows are greyed and explain "nicht in deinem Vorrat — leg es in Grocy an". This is
-the follow-up to actually let them create it. (Shipped pieces: commits c126168
-`missing` channel; ea72c65 stock/bleibt; 09200cd revise/cache/cookable.)
+**Shipped.** A `match:"missing"` cook-review row (an ingredient the user named
+but that isn't tracked, e.g. Olivenöl when only Rapsöl exists) now carries an
+**"In Grocy anlegen"** button. It opens a compact centered modal (layered above
+the cook bottom-sheet) prefilled with name + **Anfangsmenge** (default = the
+estimated used amount, min 1) + unit, and a **checkbox "und gleich N … verbraucht
+buchen"** (checked by default — product decision: *create then deduct*). Confirm →
+creates/reuses the Grocy product, adds the initial stock, optionally consumes the
+used amount → the row flips in place to "in Grocy angelegt: … (· N verbraucht)".
 
-**Goal.** On a `missing` row, a small **"In Grocy anlegen"** button opens a compact
-popup (familiar intake-style fields) → creates the product + initial stock in
-Grocy → the row flips from "fehlt" to a normal matched/consume row (or just
-confirms "angelegt ✓"). Keep it one-tap-light; don't make the user leave the
-cook flow.
+**Product decisions (settled with the user):** (1) create **then deduct** the
+used amount right away (checkbox toggles the deduct); (2) user **types** the
+initial amount (default = used, min 1) so the Grocy stock unit is theirs;
+(3) **compact sheet/popup**, not inline.
 
-**Reuse (don't reinvent — the new-product write path already exists):**
-- `api._commit_add` / `GrocyClient.create_product` (name + `qu_id_stock` + location)
-  then `add_stock(...)`. Unit/location come from `_NameResolver` over
-  `client.get_quantity_units()` / `get_locations()`; `_ProductIndex` (+ aliases)
-  dedupes by unique Grocy name. `intake_commit` already drives this for `action:"add"`
-  rows — the cleanest backend is to POST a single `add` item to the **existing**
-  `/api/intake/commit`, OR add a thin `POST /api/recipes/add-missing`
-  `{name, amount, unit, location}` that wraps `_commit_add` (build resolvers +
-  product_index exactly as `recipe_cook_commit` does for bought rows, api.py ~636).
-- SPA: model the popup on the existing intake "new product" review UX (the
-  Einräumen flow in fridge-now.html — `cookRow` bought-row inputs and the intake
-  add rows are the visual reference). Prefill name from `it.name`; default unit
-  from the row's `unit`; default amount = 1; location optional
-  (`settings.intake_default_location`).
+- `api.recipe_add_missing(name, amount=1, unit, location, used=0)` — validates
+  name + positive amount, builds `_NameResolver` (units/locations) + `_ProductIndex`
+  over the live writer, reuses an existing product of the same name or
+  `create_product`, `add_stock(initial)`, then `consume(used)` (clamped to initial)
+  when `used>0` → `depleted` via `_live_stock_amount`. Standalone (no cook session
+  written). Returns `{ok,name,product_id,created,amount,used,unit,transaction_id,depleted}`.
+- `server.py`: `POST /api/recipes/add-missing {name, amount?, unit?, location?, used?}`.
+- `prototype/fridge-now.html`: `cookRow` renders `.cmake` on missing rows;
+  `openAddMissing(row)` builds the `.modal`/`.modalcard` overlay, POSTs, flips the
+  row (keeps `drop` so it stays out of the cook-commit batch — no double count).
+- Tests: 7 in `tests/test_cook.py` (create+deduct leftover, no-deduct keeps full,
+  reuse-by-name, clamp→depleted, name/amount validation, HTTP route). Suite
+  **217 (1 skipped)**, all green.
+- VERIFIED headless (Playwright on `--sample`): SPA boots **no console errors**;
+  missing row → button → modal renders; submit POSTs
+  `{name:"Olivenöl", amount:2, unit:"EL", used:2}` and the row flips to "in Grocy
+  angelegt: 2 EL · 2 verbraucht". The real create→add→consume against live Grocy
+  was exercised only via unit/HTTP tests with a mutating fake — **walk it live on
+  the phone** (cook an Olivenöl dish, correct it, tap anlegen, confirm Olivenöl
+  shows in `/api/stock`).
 
-**Open product decisions (ask the user before building):**
-1. After creating, **also book the cooked consumption?** Options: (a) just create
-   it as tracked stock, leave consumption alone; (b) create with an initial
-   amount then immediately deduct what the dish used (checkbox "und gleich als
-   verbraucht buchen"). Leaning (a) — the user's intent is "start tracking this
-   staple", and oils/staples are awkward to quantify per-dish.
-2. **Initial amount/unit** for a staple like oil — bottle vs ml? Probably let the
-   user type it (default 1 + the row's unit), since Grocy stock unit matters for
-   future matching.
-3. **Where the button lives** — inline on the missing row vs a small sheet. A
-   sheet gives room for amount/unit/location with the familiar look.
-
-**Definition of done:** missing row → tap → popup → product exists in Grocy (shows
-up in `/api/stock`), row reflects it, no console errors; unit test over the new
-endpoint with fake Grocy (mirror `test_cook.py` add-path tests); deploy CT 105 per
-`[[deploy-on-main-to-ct105]]`. Validate live by adding Olivenöl from a real cook.
+(Deploy: merge→main→push→`pct exec 105 -- git -C /opt/foodbrain pull` + restart per `[[deploy-on-main-to-ct105]]`.)
 
 ---
 

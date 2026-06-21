@@ -764,6 +764,77 @@ class FoodBrainAPI:
             "ok": True,
         }
 
+    def recipe_add_missing(
+        self,
+        name: str,
+        amount: float = 1.0,
+        unit: Optional[str] = None,
+        location: Optional[str] = None,
+        used: float = 0.0,
+    ) -> dict:
+        """Create a cook-review "missing" ingredient in Grocy as tracked stock.
+
+        Adds an initial amount, then — if ``used`` > 0 — immediately deducts
+        what the dish consumed so the leftover stays in the fridge (same
+        create → add_stock → consume path as a bought cook row, but standalone
+        so it does not open a cook session). Reuses an existing product of the
+        same name rather than creating a duplicate.
+        """
+        name = str(name or "").strip()
+        if not name:
+            raise ApiError(400, "name is required")
+        try:
+            initial = float(amount)
+        except (TypeError, ValueError):
+            initial = 1.0  # non-numeric -> sensible default
+        if initial <= 0:
+            raise ApiError(400, "amount must be greater than zero")
+        used_amt = min(max(_safe_float(used, 0.0), 0.0), initial)
+        client = self._writer()
+        units = _NameResolver(
+            client.get_quantity_units(), self.settings.intake_default_unit
+        )
+        locations = _NameResolver(
+            client.get_locations(), self.settings.intake_default_location
+        )
+        product_index = _ProductIndex(client.get_products(), self.aliases)
+        loc = location if location is not None else self.settings.intake_default_location
+        location_id = locations.resolve(loc)
+
+        try:
+            product_id = product_index.resolve(name)
+            created = False
+            if not product_id:
+                product_id = client.create_product(
+                    name, qu_id_stock=units.resolve(unit), location_id=location_id
+                )
+                created = True
+            client.add_stock(product_id, initial, location_id=location_id)
+            txn = None
+            depleted = False
+            if used_amt > 0:
+                outcome = consume(client, product_id, used_amt)
+                txn = outcome.undo_transaction_id
+                used_amt = outcome.amount
+                depleted = _live_stock_amount(client, product_id) <= 0
+        except GrocyWriteDisabledError as exc:
+            raise ApiError(403, str(exc)) from exc
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+
+        return {
+            "ok": True,
+            "name": name,
+            "product_id": product_id,
+            "created": created,
+            "amount": initial,
+            "used": used_amt,
+            "unit": unit or None,
+            "location": loc or None,
+            "transaction_id": txn,
+            "depleted": depleted,
+        }
+
     def _cook_commit_consume(self, client, raw: dict, counts: dict) -> dict:
         name = str(raw.get("name") or "").strip()
         product_id = _require_known_product(raw, "use")

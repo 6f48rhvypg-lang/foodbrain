@@ -393,6 +393,36 @@
   .crow .cleft { font-weight: 700; }
   .crow .cleft.empty { color: var(--accent); }
   .crow .cleft.over { color: var(--hot, #c0392b); }
+  /* "In Grocy anlegen" on a missing (untracked) cook ingredient */
+  .crow .cmake { margin-left: auto; font: inherit; font-size: 12px; font-weight: 700;
+    cursor: pointer; background: var(--accent, #2e7d32); color: var(--accent-ink, #fff);
+    border: none; border-radius: 999px; padding: 6px 12px; }
+  .crow .cmake:hover { filter: brightness(1.06); }
+  .crow.made { opacity: .85; }
+  .crow.made .cbadge { background: var(--accent-bg, var(--surface-2)); color: var(--accent); }
+  /* centered modal layered above the bottom sheet (missing-ingredient form) */
+  .modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center;
+    justify-content: center; padding: 20px;
+    background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .15s; }
+  .modal.show { opacity: 1; pointer-events: auto; }
+  .modalcard { width: 100%; max-width: 360px; background: var(--surface, #fff);
+    border-radius: 18px; padding: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.3);
+    transform: translateY(8px) scale(.98); transition: transform .15s; }
+  .modal.show .modalcard { transform: translateY(0) scale(1); }
+  .modalcard h3 { margin: 0 0 2px; font-size: 17px; color: var(--ink); }
+  .modalcard .h3sub { font-size: 12px; color: var(--ink-dim); margin-bottom: 12px; }
+  .modalcard label { display: block; font-size: 12px; color: var(--ink-faint); margin: 10px 0 4px; }
+  .modalcard input[type=number], .modalcard input[type=text] { width: 100%; font: inherit;
+    font-size: 15px; color: var(--ink); background: var(--surface); box-sizing: border-box;
+    border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 11px; }
+  .modalcard .chk { display: flex; align-items: center; gap: 8px; margin: 14px 0 2px;
+    font-size: 13px; color: var(--ink); }
+  .modalcard .chk input { width: 18px; height: 18px; }
+  .modalcard .row { display: flex; gap: 10px; margin-top: 16px; }
+  .modalcard .row .btn { flex: 1; }
+  .modalcard .btn.ghost { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+  .modalcard .btn.solid { background: var(--accent); color: var(--accent-ink); }
+  .modalcard .merr { color: var(--hot, #c0392b); font-size: 12px; margin-top: 10px; min-height: 0; }
   .cookgroup { margin: 8px 0; }
   .cookgroup .ck { font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--ink-faint); margin: 10px 0 2px; }
@@ -2391,13 +2421,18 @@ function cookRow(it, i){
         : `nicht im Vorrat — wird übersprungen`);
   const stockHave = hasStock ? `<span>im Vorrat: ${nfmt(it.stock_amount)}${su?(' '+su):''}</span>` : '';
   const leftSlot = hasStock ? `<span class="cleft" data-sunit="${su}"></span>` : '';
+  // A "missing" row can't be consumed (nothing tracked) — offer to create it in
+  // Grocy instead of the (disabled) amount input.
+  const tail = missing
+    ? `<button class="cmake" type="button">In Grocy anlegen</button>`
+    : `<label>verbraucht <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
+       <span class="cunit">${esc(it.unit||'')}</span>`;
   return `<div class="crow${matched?'':' drop'}" data-i="${i}" data-kind="consume" data-pid="${esc(it.matched_product_id||'')}"
-       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}" data-stock="${hasStock?it.stock_amount:''}">
+       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}" data-amount="${Number(it.amount)||1}" data-stock="${hasStock?it.stock_amount:''}">
     <div class="cname"><span class="emoji">${emoji}</span>${esc(it.name)}</div>
     ${badge}
     <div class="cmeta ${cls}"><span class="cmatch">↳ ${match}</span>${stockHave}${leftSlot}</div>
-    <label>verbraucht <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
-    <span class="cunit">${esc(it.unit||'')}</span>
+    ${tail}
     <button class="cdrop" type="button" title="entfernen">✕</button>
   </div>`;
 }
@@ -2460,6 +2495,7 @@ function renderCookReview(data){
     const amt = row.querySelector('.camt'); if (amt) amt.disabled = row.classList.contains('drop');
     updateCookLeft(row);
   }));
+  sheet.querySelectorAll('.cmake').forEach(b=> b.addEventListener('click', ()=> openAddMissing(b.closest('.crow'))));
   // Live "bleibt" readout: seed each consume row, then recompute as edited.
   sheet.querySelectorAll('.crow[data-kind="consume"]').forEach(row=>{
     updateCookLeft(row);
@@ -2475,6 +2511,63 @@ function renderCookReview(data){
     fetchCookEstimate(correction);
   });
   document.getElementById('cookCommitBtn').addEventListener('click', ()=> runCookCommit());
+}
+
+/* Compact modal over the cook review: create a "missing" (untracked) ingredient
+   in Grocy as tracked stock, optionally deducting what this dish used right away.
+   On success the originating row flips to "angelegt ✓" in place. */
+function openAddMissing(row){
+  const name = row.dataset.name || '';
+  const unit = row.dataset.unit || '';
+  const used = Number(row.dataset.amount) || 1;
+  const emoji = emojiFor(name);
+  const usedLabel = `und gleich ${nfmt(used)}${unit?(' '+esc(unit)):''} verbraucht buchen`;
+  const el = document.createElement('div');
+  el.className = 'modal';
+  el.innerHTML = `<div class="modalcard">
+    <h3>${emoji} ${esc(name)} anlegen</h3>
+    <div class="h3sub">neues Produkt in Grocy — ab jetzt getrackt</div>
+    <label>Anfangsmenge${unit?(' ('+esc(unit)+')'):''}</label>
+    <input id="amInit" type="number" min="0.1" step="0.1" value="${nfmt(Math.max(used,1))}" />
+    <label class="chk"><input id="amUse" type="checkbox" checked /> ${usedLabel}</label>
+    <div class="merr" id="amErr"></div>
+    <div class="row">
+      <button class="btn ghost" id="amCancel" type="button">Abbrechen</button>
+      <button class="btn solid" id="amOk" type="button">Anlegen</button>
+    </div>
+  </div>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  const close = ()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 160); };
+  el.addEventListener('click', e=>{ if (e.target === el) close(); });
+  el.querySelector('#amCancel').addEventListener('click', close);
+  el.querySelector('#amOk').addEventListener('click', async ()=>{
+    const init = Number(el.querySelector('#amInit').value) || 0;
+    const deduct = el.querySelector('#amUse').checked;
+    const err = el.querySelector('#amErr');
+    if (init <= 0){ err.textContent = 'Anfangsmenge muss größer als 0 sein.'; return; }
+    const ok = el.querySelector('#amOk');
+    ok.disabled = true; ok.textContent = 'Lege an…'; err.textContent = '';
+    try {
+      const res = await apiPost('/api/recipes/add-missing', {
+        name, amount: init, unit: unit || null, used: deduct ? used : 0,
+      });
+      close();
+      // Flip the row in place: now tracked + already booked here, so it keeps
+      // the `drop` class to stay out of the cook-commit batch (no double count).
+      row.classList.add('made');
+      row.dataset.pid = res.product_id || '';
+      const badge = row.querySelector('.cbadge'); if (badge) badge.textContent = '✓';
+      const matchEl = row.querySelector('.cmatch');
+      if (matchEl) matchEl.textContent = res.depleted
+        ? `in Grocy angelegt — ganz aufgebraucht ✓`
+        : `in Grocy angelegt: ${nfmt(res.amount)}${unit?(' '+esc(unit)):''}${res.used?` · ${nfmt(res.used)} verbraucht`:''}`;
+      const mk = row.querySelector('.cmake'); if (mk) mk.remove();
+    } catch (e2){
+      ok.disabled = false; ok.textContent = 'Anlegen';
+      err.textContent = (e2 && e2.message) ? e2.message : 'Anlegen fehlgeschlagen.';
+    }
+  });
 }
 
 function collectCookItems(){

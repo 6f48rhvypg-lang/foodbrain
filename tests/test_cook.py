@@ -254,6 +254,56 @@ class CookTest(unittest.TestCase):
             self._api(FakeGrocy()).recipe_cook_commit("Pasta", [])
         self.assertEqual(ctx.exception.status, 400)
 
+    # --- add-missing (create an untracked cook ingredient in Grocy) ---
+
+    def test_add_missing_creates_and_deducts(self) -> None:
+        client = FakeGrocy(products=[{"id": "5", "name": "Rapsöl"}], stock={"5": 250})
+        out = self._api(client).recipe_add_missing(
+            "Olivenöl", amount=1, unit="Flasche", used=0.5
+        )
+        self.assertTrue(out["ok"])
+        self.assertTrue(out["created"])
+        pid = out["product_id"]
+        self.assertIn(("create", "Olivenöl", pid), client.calls)
+        self.assertAlmostEqual(client.stock[pid], 0.5)  # 1 in, 0.5 used -> leftover
+        self.assertEqual(out["used"], 0.5)
+        self.assertFalse(out["depleted"])
+        self.assertTrue(out["transaction_id"])
+
+    def test_add_missing_without_deduct_keeps_full_stock(self) -> None:
+        client = FakeGrocy()
+        out = self._api(client).recipe_add_missing("Olivenöl", amount=2, used=0)
+        pid = out["product_id"]
+        self.assertAlmostEqual(client.stock[pid], 2.0)
+        self.assertIsNone(out["transaction_id"])
+        self.assertFalse(out["depleted"])
+        self.assertNotIn("consume", [c[0] for c in client.calls])
+
+    def test_add_missing_reuses_existing_product_by_name(self) -> None:
+        client = FakeGrocy(products=[{"id": "7", "name": "Olivenöl"}], stock={"7": 0})
+        out = self._api(client).recipe_add_missing("Olivenöl", amount=1, used=0)
+        self.assertEqual(out["product_id"], "7")
+        self.assertFalse(out["created"])
+        self.assertNotIn("create", [c[0] for c in client.calls])
+
+    def test_add_missing_depletes_when_used_meets_initial(self) -> None:
+        client = FakeGrocy()
+        out = self._api(client).recipe_add_missing("Olivenöl", amount=1, used=5)
+        # used is clamped to the initial amount; nothing is left.
+        self.assertEqual(out["used"], 1.0)
+        self.assertTrue(out["depleted"])
+        self.assertAlmostEqual(client.stock[out["product_id"]], 0.0)
+
+    def test_add_missing_requires_name(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api(FakeGrocy()).recipe_add_missing("  ")
+        self.assertEqual(ctx.exception.status, 400)
+
+    def test_add_missing_rejects_nonpositive_amount(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api(FakeGrocy()).recipe_add_missing("Olivenöl", amount=0)
+        self.assertEqual(ctx.exception.status, 400)
+
     # --- history + adjust ---
 
     def test_history_newest_first(self) -> None:
@@ -369,6 +419,13 @@ class CookHttpRoutesTest(unittest.TestCase):
                                  {"session_id": sid, "line_index": 0, "new_amount": 2})
         self.assertEqual(status, 200)
         self.assertEqual(adj["amount"], 2.0)
+
+    def test_add_missing_over_http(self) -> None:
+        status, res = self._post("/api/recipes/add-missing",
+                                 {"name": "Olivenöl", "amount": 1, "unit": "Flasche", "used": 0.5})
+        self.assertEqual(status, 200)
+        self.assertTrue(res["created"])
+        self.assertIn("Olivenöl", [p["name"] for p in self.client.get_products()])
 
 
 if __name__ == "__main__":
