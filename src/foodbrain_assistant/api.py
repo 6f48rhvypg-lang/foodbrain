@@ -764,6 +764,58 @@ class FoodBrainAPI:
             "ok": True,
         }
 
+    def recipe_cook_undo(self, session_id: str) -> dict:
+        """Reverse a whole cooking session — the "rückgängig machen" on the result.
+
+        For each booked line this undoes the consume (restoring what the dish
+        used) and, for a bought row, also the purchase (removing the added pack),
+        leaving stock as it was before "Verbucht". On full success the session is
+        dropped from the Verlauf; if any line fails the session is kept so it can
+        be retried, and the failures are returned. A newly created product stays
+        in Grocy with 0 stock (Grocy keeps products; only the booking is undone).
+        """
+        session_id = str(session_id or "").strip()
+        if not session_id:
+            raise ApiError(400, "session_id is required")
+        session = next(
+            (
+                s
+                for s in cookmemory.sessions(self._cook_path())
+                if s.get("id") == session_id
+            ),
+            None,
+        )
+        if session is None:
+            raise ApiError(404, f"no cooking session {session_id!r}")
+
+        client = self._writer()
+        reversed_count = 0
+        failed: List[dict] = []
+        for line in session.get("lines") or []:
+            txns = [t for t in (line.get("transaction_id"), line.get("add_transaction_id")) if t]
+            if not txns:
+                continue
+            try:
+                for txn in txns:
+                    undo(client, txn)
+                reversed_count += 1
+            except GrocyWriteDisabledError as exc:
+                raise ApiError(403, str(exc)) from exc
+            except GrocyClientError as exc:
+                failed.append({"name": line.get("name") or "?", "error": str(exc)})
+
+        removed = False
+        if not failed:
+            removed = cookmemory.remove_session(self._cook_path(), session_id) is not None
+        return {
+            "ok": not failed,
+            "session_id": session_id,
+            "dish": session.get("dish") or "",
+            "reversed": reversed_count,
+            "removed": removed,
+            "failed": failed,
+        }
+
     def recipe_add_missing(
         self,
         name: str,
@@ -880,7 +932,7 @@ class FoodBrainAPI:
                 )
                 if product_index is not None:
                     product_index.add(name, product_id)
-        client.add_stock(product_id, pack, location_id=location_id)
+        add_txn = _extract_txn(client.add_stock(product_id, pack, location_id=location_id))
         counts["added"] += 1
         txn = None
         depleted = False
@@ -895,6 +947,7 @@ class FoodBrainAPI:
             "amount": used,
             "unit": raw.get("unit") or None,
             "transaction_id": txn,
+            "add_transaction_id": add_txn,
             "depleted": depleted,
             "kind": "bought",
             "pack_amount": pack,

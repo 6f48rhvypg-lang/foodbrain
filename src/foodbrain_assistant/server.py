@@ -33,6 +33,7 @@ Routes::
     POST /api/recipes/cook-commit    {"dish", "items": [...]}
     POST /api/recipes/add-missing    {"name", "amount"?, "unit"?, "location"?, "used"?}
     POST /api/recipes/cook-adjust    {"session_id", "line_index", "new_amount"}
+    POST /api/recipes/cook-undo      {"session_id"}  -> reverse a whole session
     GET  /api/recipes/cook-history   -> past cooking sessions (Verlauf)
     GET  /api/recipes/book           -> saved "Meine Rezepte"
     GET  /api/recipes/config         -> model choices + defaults for Settings
@@ -257,6 +258,10 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             ),
                             used=body.get("used", 0.0),
                         ),
+                    )
+                elif route == "/api/recipes/cook-undo":
+                    self._send(
+                        200, api.recipe_cook_undo(_require(body, "session_id"))
                     )
                 elif route == "/api/recipes/cook-adjust":
                     try:

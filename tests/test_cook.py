@@ -347,6 +347,42 @@ class CookTest(unittest.TestCase):
             self._api(FakeGrocy()).cook_adjust("nope", 0, 1.0)
         self.assertEqual(ctx.exception.status, 404)
 
+    # --- whole-session undo (rückgängig machen on the Verbucht result) ---
+
+    def test_undo_restores_consumed_stock_and_drops_session(self) -> None:
+        client = FakeGrocy(stock={"2": 3.0})
+        api = self._api(client, consumption_estimator=lambda **k: {})
+        out = api.recipe_cook_commit(
+            "Pasta", [{"kind": "consume", "name": "Zucchini", "matched_product_id": "2", "amount": 1}]
+        )
+        self.assertEqual(client.stock["2"], 2.0)
+        res = api.recipe_cook_undo(out["session_id"])
+        self.assertTrue(res["ok"])
+        self.assertTrue(res["removed"])
+        self.assertEqual(res["reversed"], 1)
+        self.assertEqual(client.stock["2"], 3.0)  # back to before
+        self.assertEqual(cookmemory.sessions(self.store), [])  # gone from Verlauf
+
+    def test_undo_reverses_bought_pack_and_consume(self) -> None:
+        client = FakeGrocy()
+        api = self._api(client, consumption_estimator=lambda **k: {})
+        out = api.recipe_cook_commit(
+            "Pasta",
+            [{"kind": "bought", "name": "Sahne", "pack_amount": 1, "used_amount": 0.5, "unit": "Becher"}],
+        )
+        pid = out["lines"][0]["product_id"]
+        self.assertAlmostEqual(client.stock[pid], 0.5)  # leftover after cooking
+        # the purchase txn must be persisted so undo can remove the added pack
+        self.assertIsNotNone(cookmemory.sessions(self.store)[0]["lines"][0]["add_transaction_id"])
+        res = api.recipe_cook_undo(out["session_id"])
+        self.assertTrue(res["ok"])
+        self.assertAlmostEqual(client.stock[pid], 0.0)  # pack fully removed
+
+    def test_undo_unknown_session_404(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api(FakeGrocy()).recipe_cook_undo("nope")
+        self.assertEqual(ctx.exception.status, 404)
+
 
 class CookHttpRoutesTest(unittest.TestCase):
     """Real socket round-trip to catch cook route wiring (param names)."""
@@ -419,6 +455,20 @@ class CookHttpRoutesTest(unittest.TestCase):
                                  {"session_id": sid, "line_index": 0, "new_amount": 2})
         self.assertEqual(status, 200)
         self.assertEqual(adj["amount"], 2.0)
+
+    def test_cook_undo_over_http(self) -> None:
+        before = self.client.stock["2"]
+        status, commit = self._post(
+            "/api/recipes/cook-commit",
+            {"dish": "Pasta", "items": [
+                {"kind": "consume", "name": "Zucchini", "matched_product_id": "2", "amount": 1}]},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(self.client.stock["2"], before - 1)
+        status, undo = self._post("/api/recipes/cook-undo", {"session_id": commit["session_id"]})
+        self.assertEqual(status, 200)
+        self.assertTrue(undo["ok"])
+        self.assertEqual(self.client.stock["2"], before)  # restored
 
     def test_add_missing_over_http(self) -> None:
         status, res = self._post("/api/recipes/add-missing",

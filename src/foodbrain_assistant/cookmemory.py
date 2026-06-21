@@ -202,6 +202,22 @@ def sessions(path) -> List[dict]:
     return list(reversed(data.get("sessions", [])))
 
 
+def remove_session(path, session_id: str) -> Optional[dict]:
+    """Drop a stored session (used after a whole-session undo); return it, or None."""
+    data = load(path)
+    kept, removed = [], None
+    for entry in data.get("sessions", []):
+        if entry.get("id") == session_id and removed is None:
+            removed = entry
+        else:
+            kept.append(entry)
+    if removed is None:
+        return None
+    data["sessions"] = kept
+    save(path, data)
+    return removed
+
+
 def update_session_line(path, session_id: str, line_index: int, **changes) -> Optional[dict]:
     """Patch a single line of a stored session; returns the updated session."""
     data = load(path)
@@ -245,6 +261,11 @@ def _clean_line(line: dict) -> dict:
         "amount": _as_float(line.get("amount")),
         "unit": str(line.get("unit") or "") or None,
         "transaction_id": (str(line.get("transaction_id")) if line.get("transaction_id") else None),
+        # The purchase txn for a bought row (so a whole-session undo can remove
+        # the added pack, not just the consumed part).
+        "add_transaction_id": (
+            str(line.get("add_transaction_id")) if line.get("add_transaction_id") else None
+        ),
         "depleted": bool(line.get("depleted")),
         "kind": str(line.get("kind") or "consume"),
     }

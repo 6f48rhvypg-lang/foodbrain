@@ -2614,6 +2614,32 @@ function renderCookResult(data){
     ${used.length?`<div class="cookgroup"><div class="ck">Verbraucht</div>${used.map(line).join('')}</div>`:''}
     ${depleted.length?`<div class="cookgroup"><div class="ck">Ganz aufgebraucht</div>${depleted.map(l=>`<div class="cresult">${emojiFor(l.name)} ${esc(l.name)}</div>`).join('')}</div>`:''}
     ${failed.length?`<div class="sheet-error">Nicht verbucht: ${esc(failed.map(f=>f.name).join(', '))}</div>`:''}
+    <div class="row">
+      ${data.session_id && (added.length||used.length)?`<button class="btn ghost" id="cookUndoBtn" type="button">↩︎ Rückgängig machen</button>`:''}
+      <button class="btn solid" id="closeSheet" style="flex:1">Fertig</button>
+    </div>`);
+  wireClose();
+  const undoBtn = document.getElementById('cookUndoBtn');
+  if (undoBtn) undoBtn.addEventListener('click', ()=> undoCookSession(data));
+  reload();
+}
+
+/* Reverse the whole just-booked session (the "rückgängig machen" affordance). */
+async function undoCookSession(data){
+  const btn = document.getElementById('cookUndoBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'Mache rückgängig…'; }
+  let res;
+  try { res = await apiPost('/api/recipes/cook-undo', { session_id: data.session_id }); }
+  catch(err){
+    if (btn){ btn.disabled = false; btn.textContent = '↩︎ Rückgängig machen'; }
+    return showError(err);
+  }
+  const failed = res.failed || [];
+  openSheet(`
+    <h3>${failed.length?'Teilweise rückgängig':'Rückgängig gemacht ✓'}</h3>
+    <div class="h3sub">${esc(data.dish||'')}</div>
+    <div class="cookgroup"><div class="cresult">${res.reversed||0} Buchung(en) zurückgenommen — Vorrat wie vorher.</div></div>
+    ${failed.length?`<div class="sheet-error">Nicht zurückgenommen: ${esc(failed.map(f=>f.name).join(', '))}</div>`:''}
     <div class="row"><button class="btn solid" id="closeSheet" style="flex:1">Fertig</button></div>`);
   wireClose();
   reload();

@@ -4,6 +4,33 @@ Current date: 2026-06-12
 
 ---
 
+## ✅ DONE (2026-06-21): "Rückgängig machen" on the Verbucht result
+
+**Shipped.** The "Verbucht ✓" result screen (after a cook is booked) now has a
+**↩︎ Rückgängig machen** button that reverses the *whole* session and restores
+the Vorrat exactly as it was, then shows "Rückgängig gemacht ✓".
+
+- `api.recipe_cook_undo(session_id)` — finds the persisted session, undoes every
+  booked txn per line (the consume **and**, for a bought row, the purchase that
+  added the pack), drops the session from the Verlauf on full success. Per-line
+  failure isolation → kept session + `failed[]` if anything errors. A newly
+  created product stays in Grocy with 0 stock (Grocy keeps products).
+- To make bought rows fully reversible, `_cook_commit_bought` now captures the
+  **add** transaction (`add_transaction_id`), persisted via `cookmemory._clean_line`;
+  new `cookmemory.remove_session`.
+- `server.py`: `POST /api/recipes/cook-undo {session_id}`.
+- `fridge-now.html`: `renderCookResult` adds the undo button (when a session was
+  booked) → `undoCookSession` → confirmation screen.
+- Tests: +4 in `test_cook.py` (consume restore + session dropped, bought pack+consume
+  reversed with persisted add txn, unknown-session 404, HTTP route). Suite
+  **221 (1 skipped)**, green.
+- VERIFIED headless: no console errors; Verbucht result → undo button → POST
+  `/api/recipes/cook-undo` → "Rückgängig gemacht ✓ · 2 Buchung(en) zurückgenommen".
+  Reversal against live Grocy exercised only via the mutating fake — confirm on
+  the phone (cook → Verbucht → Rückgängig → stock back to before).
+
+---
+
 ## ✅ DONE (2026-06-21): "In Grocy anlegen" for missing cook ingredients
 
 **Shipped.** A `match:"missing"` cook-review row (an ingredient the user named
