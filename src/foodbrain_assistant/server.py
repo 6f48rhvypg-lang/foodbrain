@@ -23,6 +23,13 @@ Routes::
     POST /api/undo                   {"transaction_id": ID}
     POST /api/intake/understand      {"transcript": "...", "answers": "..."}
     POST /api/intake/commit          {"items": [{name, matched_product_id, amount, ...}]}
+    POST /api/recipes/ideas          {"mode", "preferences"?, "idea_model"?, "balance"?, "count"?}
+    POST /api/recipes/recipe         {"idea": {...}, "mode", "recipe_model"?}
+    POST /api/recipes/twist          {"dish", "transcript"? | "text"?}
+    POST /api/recipes/cooked         {"dish"}
+    POST /api/recipes/save           {"title", "guidance": [...], "buy"?, "twist"?}
+    GET  /api/recipes/book           -> saved "Meine Rezepte"
+    GET  /api/recipes/config         -> model choices + defaults for Settings
 
 CORS is permissive so the SPA can be developed from a separate dev origin.
 """
@@ -89,6 +96,10 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.product_entries(product_id))
                 elif route == "/api/locations":
                     self._send(200, api.get_locations())
+                elif route == "/api/recipes/book":
+                    self._send(200, api.recipe_book())
+                elif route == "/api/recipes/config":
+                    self._send(200, _recipes_config(api))
                 else:
                     raise ApiError(404, f"no route for GET {route}")
             except ApiError as exc:
@@ -167,6 +178,47 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     )
                 elif route == "/api/intake/commit":
                     self._send(200, api.intake_commit(_items(body)))
+                elif route == "/api/recipes/ideas":
+                    self._send(
+                        200,
+                        api.recipe_ideas(
+                            mode=str(body.get("mode", "stock")),
+                            preferences=_preferences(body),
+                            idea_model=_opt_str(body.get("idea_model")),
+                            balance=_opt_float(body.get("balance")),
+                            count=int(body.get("count", 8) or 8),
+                        ),
+                    )
+                elif route == "/api/recipes/recipe":
+                    self._send(
+                        200,
+                        api.recipe_detail(
+                            _idea(body),
+                            mode=str(body.get("mode", "stock")),
+                            recipe_model=_opt_str(body.get("recipe_model")),
+                        ),
+                    )
+                elif route == "/api/recipes/twist":
+                    self._send(
+                        200,
+                        api.recipe_twist(
+                            _require(body, "dish"),
+                            transcript=str(body.get("transcript", "")),
+                            text=str(body.get("text", "")),
+                        ),
+                    )
+                elif route == "/api/recipes/cooked":
+                    self._send(200, api.recipe_cooked(_require(body, "dish")))
+                elif route == "/api/recipes/save":
+                    self._send(
+                        200,
+                        api.recipe_save(
+                            _require(body, "title"),
+                            _str_list(body.get("guidance")),
+                            buy=_str_list(body.get("buy")),
+                            twist=str(body.get("twist", "")),
+                        ),
+                    )
                 else:
                     raise ApiError(404, f"no route for POST {route}")
             except ApiError as exc:
@@ -242,6 +294,47 @@ def _items(body: dict) -> list:
     return items
 
 
+def _idea(body: dict) -> dict:
+    idea = body.get("idea")
+    if not isinstance(idea, dict):
+        raise ApiError(400, "'idea' must be an object")
+    return idea
+
+
+def _str_list(value) -> list:
+    if not isinstance(value, list):
+        return []
+    return [str(x).strip() for x in value if str(x).strip()]
+
+
+def _opt_str(value):
+    text = str(value or "").strip()
+    return text or None
+
+
+def _opt_float(value):
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ApiError(400, "'balance' must be a number") from exc
+
+
+def _recipes_config(api: FoodBrainAPI) -> dict:
+    """Curated model list + current defaults, for the SPA Settings panel."""
+    from .recipes_llm import MODEL_CHOICES
+
+    settings = api.settings
+    return {
+        "models": MODEL_CHOICES,
+        "idea_model": getattr(settings, "idea_model", ""),
+        "recipe_model": getattr(settings, "recipe_model", ""),
+        "balance": getattr(settings, "recipe_explore_balance", 0.7),
+        "enabled": getattr(settings, "intake_enabled", False),
+    }
+
+
 def _require(body: dict, key: str) -> str:
     value = body.get(key)
     if value in (None, ""):
@@ -277,6 +370,8 @@ def build_api(args, settings: Settings) -> FoodBrainAPI:
         product_catalog_provider=_catalog_provider(settings),
         source=source,
     )
+    # idea_generator/recipe_generator/twist_extractor default to None so the
+    # real recipes_llm.* run; cook_store_path defaults from settings.data_dir.
 
 
 def _catalog_provider(settings: Settings):

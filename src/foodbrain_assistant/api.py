@@ -29,9 +29,12 @@ write operations fail closed with a 403-style :class:`ApiError`.
 
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+from . import cookmemory, recipes_llm
 from .grocy_client import GrocyClient, GrocyClientError, GrocyWriteDisabledError
+from .llm import LlmError, LlmNotConfigured
 from .intake import (
     IntakeError,
     IntakeNotConfigured,
@@ -96,6 +99,14 @@ class FoodBrainAPI:
     # tests can stub the model call. Both default to None and degrade safely.
     product_catalog_provider: Optional[Callable[[], List[dict]]] = None
     intake_understander: Optional[Callable[..., IntakeResult]] = None
+    # Recipe inspiration. The three generators are injectable (tests stub the
+    # model call); when None the real recipes_llm.* functions run. cook_store_path
+    # locates the durable learning store (cookmemory.json); when None it's derived
+    # from settings.data_dir.
+    idea_generator: Optional[Callable[..., dict]] = None
+    recipe_generator: Optional[Callable[..., dict]] = None
+    twist_extractor: Optional[Callable[..., dict]] = None
+    cook_store_path: Optional[object] = None  # str | Path
 
     # --- reads -----------------------------------------------------------
 
@@ -363,6 +374,154 @@ class FoodBrainAPI:
             "created_products": counts["created_products"],
             "changed": counts["changed"],
         }
+
+    # --- recipe inspiration ---------------------------------------------
+
+    def recipe_ideas(
+        self,
+        mode: str = "stock",
+        preferences: Optional[dict] = None,
+        idea_model: Optional[str] = None,
+        balance: Optional[float] = None,
+        count: int = 8,
+    ) -> dict:
+        """Urgency-seeded dish headlines from current stock (+ optional shopping)."""
+        self._require_intake()
+        mode = "shop" if mode == "shop" else "stock"
+        model = self._resolve_model(idea_model, self.settings.idea_model)
+        balance = (
+            self.settings.recipe_explore_balance if balance is None else float(balance)
+        )
+        seeds, inventory = self._seed_and_inventory()
+        store = self._cook_path()
+        gen = self.idea_generator or recipes_llm.generate_ideas
+        try:
+            result = gen(
+                seeds=seeds,
+                inventory=inventory,
+                taste=cookmemory.taste_summary(store),
+                recent_cooked=cookmemory.recent_cooked(store),
+                mode=mode,
+                preferences=preferences or {},
+                balance=balance,
+                count=count,
+                model=model,
+                settings=self.settings,
+            )
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+        return {"mode": mode, "seeds": seeds, "ideas": result.get("ideas", [])}
+
+    def recipe_detail(
+        self, idea: dict, mode: str = "stock", recipe_model: Optional[str] = None
+    ) -> dict:
+        """Turn a chosen idea into rough phase guidance (never numbered steps)."""
+        self._require_intake()
+        if not isinstance(idea, dict) or not str(idea.get("title") or "").strip():
+            raise ApiError(400, "idea with a title is required")
+        mode = "shop" if mode == "shop" else "stock"
+        model = self._resolve_model(recipe_model, self.settings.recipe_model)
+        gen = self.recipe_generator or recipes_llm.generate_recipe
+        try:
+            return gen(idea=idea, mode=mode, model=model, settings=self.settings)
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+
+    def recipe_twist(self, dish: str, transcript: str = "", text: str = "") -> dict:
+        """Extract a 'Meine Version' twist, persist it, and merge its taste tags."""
+        self._require_intake()
+        dish = str(dish or "").strip()
+        if not dish:
+            raise ApiError(400, "dish is required")
+        spoken = (transcript or text or "").strip()
+        if not spoken:
+            raise ApiError(400, "describe what you did differently")
+        model = self.settings.recipe_model
+        store = self._cook_path()
+        gen = self.twist_extractor or recipes_llm.extract_twist
+        try:
+            twist = gen(transcript=spoken, dish=dish, model=model, settings=self.settings)
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+        cookmemory.add_twist(
+            store,
+            dish=dish,
+            change=twist.get("change", ""),
+            note=twist.get("note", ""),
+            tags=twist.get("tags", {}),
+        )
+        return {"dish": dish, "twist": twist, "ok": True}
+
+    def recipe_cooked(self, dish: str) -> dict:
+        """Log a cooked dish so it's avoided in future idea generation."""
+        dish = str(dish or "").strip()
+        if not dish:
+            raise ApiError(400, "dish is required")
+        cookmemory.add_cooked(self._cook_path(), dish=dish)
+        return {"dish": dish, "ok": True}
+
+    def recipe_save(
+        self, title: str, guidance: List[str], buy: Optional[List[str]] = None, twist: str = ""
+    ) -> dict:
+        """Save a recipe into the browsable 'Meine Rezepte' book."""
+        title = str(title or "").strip()
+        if not title:
+            raise ApiError(400, "title is required")
+        entry = cookmemory.add_to_book(
+            self._cook_path(),
+            title=title,
+            guidance=guidance or [],
+            buy=buy or [],
+            twist=str(twist or ""),
+        )
+        return {"recipe": entry, "ok": True}
+
+    def recipe_book(self) -> dict:
+        """The saved-recipes book, newest first."""
+        return {"recipes": cookmemory.book(self._cook_path())}
+
+    # recipe helpers
+
+    def _seed_and_inventory(self):
+        """Split current stock into urgent seeds (hot+warm) and supporting inventory."""
+        today = self.today_provider()
+        window = self.settings.expiry_window_days
+        scored = [
+            score_stock_item(item, today=today, expiry_window_days=window)
+            for item in self.stock_provider()
+            if item.amount > 0
+        ]
+        scored.sort(key=lambda u: (-u.urgency_score, u.item.name.lower()))
+        seeds, inventory = [], []
+        for urgency in scored:
+            band = band_for(urgency.days_until_expiry, window)
+            (seeds if band in ("hot", "warm") else inventory).append(urgency.item.name)
+        return seeds, inventory
+
+    def _cook_path(self):
+        if self.cook_store_path is not None:
+            return self.cook_store_path
+        data_dir = getattr(self.settings, "data_dir", "data") or "data"
+        return Path(data_dir) / "cookmemory.json"
+
+    def _resolve_model(self, requested: Optional[str], default: str) -> str:
+        requested = str(requested or "").strip()
+        if not requested:
+            return default
+        if not recipes_llm.is_valid_model(requested):
+            raise ApiError(400, f"unknown model {requested!r}")
+        return requested
+
+    def _require_intake(self) -> None:
+        if self.idea_generator or self.recipe_generator or self.twist_extractor:
+            return  # injected generators don't need a real key (tests)
+        if not getattr(self.settings, "intake_enabled", False):
+            raise ApiError(503, "recipe inspiration needs FOODBRAIN_OPENROUTER_API_KEY")
+
+    def _llm_error(self, exc) -> "ApiError":
+        if isinstance(exc, LlmNotConfigured):
+            return ApiError(503, str(exc))
+        return ApiError(502, str(exc))
 
     def _commit_add(self, client, raw: dict, resolvers, product_index, counts: dict) -> dict:
         assert resolvers is not None  # built whenever an add is present

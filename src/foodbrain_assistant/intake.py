@@ -18,21 +18,19 @@ runtime stays dependency-free (stdlib :mod:`urllib`), matching the project rule.
 """
 
 from dataclasses import dataclass, field
-import json
-from typing import Any, Callable, Dict, List, Optional
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from typing import Any, Dict, List, Optional
 
+from .llm import LlmError, LlmNotConfigured, Transport, post_chat_json
 from .normalization import normalize_ingredient_name
 
-Transport = Callable[[str, Dict[str, str], bytes, int], str]
 
-
-class IntakeError(RuntimeError):
+# Intake errors are the shared LLM errors under intake-specific names, so callers
+# (api.py) and existing tests keep importing them from here unchanged.
+class IntakeError(LlmError):
     """A recoverable intake failure (bad model output, transport error)."""
 
 
-class IntakeNotConfigured(IntakeError):
+class IntakeNotConfigured(LlmNotConfigured, IntakeError):
     """Raised when intake is used without an OpenRouter API key configured."""
 
 
@@ -197,28 +195,20 @@ def understand_transcript(
         user_parts += ["", f"Answers to earlier questions:\n{answers.strip()}"]
 
     system_prompt = _EDIT_SYSTEM_PROMPT if mode == "edit" else _SYSTEM_PROMPT
-    body = json.dumps(
-        {
-            "model": settings.openrouter_model,
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "\n".join(user_parts)},
-            ],
-        }
-    ).encode("utf-8")
-
-    url = settings.openrouter_base_url.rstrip("/") + "/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "Content-Type": "application/json",
-        "X-Title": "FoodBrain",
-    }
-    send = transport or _http_post
-    raw = send(url, headers, body, timeout_seconds)
-    content = _extract_message_content(raw)
-    return _parse_result(content)
+    try:
+        data = post_chat_json(
+            settings=settings,
+            model=settings.openrouter_model,
+            system=system_prompt,
+            user="\n".join(user_parts),
+            transport=transport,
+            timeout=timeout_seconds,
+        )
+    except LlmNotConfigured as exc:  # pragma: no cover - guarded above
+        raise IntakeNotConfigured(str(exc)) from exc
+    except LlmError as exc:
+        raise IntakeError(str(exc)) from exc
+    return _parse_result(data)
 
 
 def reconcile_items(
@@ -290,43 +280,7 @@ def _with_match(
     )
 
 
-def _http_post(url: str, headers: Dict[str, str], body: bytes, timeout: int) -> str:
-    request = Request(url, data=body, headers=headers, method="POST")
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            return response.read().decode("utf-8")
-    except HTTPError as exc:
-        detail = ""
-        try:
-            detail = exc.read().decode("utf-8")[:300]
-        except Exception:  # pragma: no cover - best-effort error detail
-            pass
-        raise IntakeError(
-            f"OpenRouter request failed with HTTP {exc.code}: {detail}".rstrip(": ")
-        ) from exc
-    except URLError as exc:
-        raise IntakeError(f"OpenRouter request failed: {exc.reason}") from exc
-
-
-def _extract_message_content(raw: str) -> str:
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise IntakeError("OpenRouter response was not valid JSON") from exc
-    if isinstance(payload, dict) and payload.get("error"):
-        error = payload["error"]
-        message = error.get("message") if isinstance(error, dict) else str(error)
-        raise IntakeError(f"OpenRouter error: {message}")
-    try:
-        return payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise IntakeError("OpenRouter response had no message content") from exc
-
-
-def _parse_result(content: str) -> IntakeResult:
-    data = json.loads(_strip_fences(content)) if content else {}
-    if not isinstance(data, dict):
-        raise IntakeError("model did not return a JSON object")
+def _parse_result(data: dict) -> IntakeResult:
     raw_items = data.get("items")
     items: List[IntakeItem] = []
     if isinstance(raw_items, list):
@@ -384,18 +338,6 @@ def _clean_action(value: Any) -> str:
     if cleaned in _VALID_ACTIONS:
         return cleaned
     return _ACTION_SYNONYMS.get(cleaned, "add")
-
-
-def _strip_fences(content: str) -> str:
-    text = content.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1] if "\n" in text else text
-        if text.endswith("```"):
-            text = text[: -len("```")]
-        # Drop a leading language tag like "json" left on the first line.
-        if text.lstrip().lower().startswith("json"):
-            text = text.lstrip()[len("json") :]
-    return text.strip()
 
 
 def _to_float(value: Any, default: float) -> float:

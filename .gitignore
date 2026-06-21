@@ -11,6 +11,9 @@ dist/
 build/
 *.egg-info/
 
+# Runtime learning store (recipe taste/twists/book) — per-deployment state
+/data/cookmemory.json
+
 # Claude Code skill tooling (not FoodBrain code)
 .agents/
 skills-lock.json

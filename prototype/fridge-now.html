@@ -291,6 +291,71 @@
   .combinebtn .ci { font-size: 14px; line-height: 1; }
   .app.combining .combinebtn { background: var(--accent); color: var(--accent-ink); }
 
+  /* primary "Ideen holen" pill — leads the toolbar */
+  .ideasbtn {
+    flex: 0 0 auto; cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 13px;
+    color: var(--amber-ink); background: var(--amber);
+    border: 1.5px solid var(--amber); border-radius: 999px;
+    padding: 8px 14px; transition: all .18s var(--ease); box-shadow: var(--shadow);
+  }
+  .ideasbtn:hover { filter: brightness(1.06); }
+  .ideasbtn:active { transform: scale(.97); }
+  .ideasbtn .ii { font-size: 14px; line-height: 1; }
+
+  /* ---------- recipe inspiration ---------- */
+  .modetoggle { display: flex; gap: 6px; margin-bottom: 14px; }
+  .modetoggle .mopt {
+    flex: 1 1 0; cursor: pointer; text-align: center; font-weight: 600; font-size: 13px;
+    color: var(--ink-dim); background: var(--surface-2); border: 1.5px solid var(--line);
+    border-radius: 12px; padding: 9px 8px; transition: all .15s var(--ease);
+  }
+  .modetoggle .mopt.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+  .refine-toggle {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    font-size: 12px; color: var(--ink-faint); background: none; border: none;
+    margin: 2px 0 12px; padding: 0;
+  }
+  .refine-toggle:hover { color: var(--ink); }
+  .refine-body { display: none; }
+  .refine-body.show { display: block; }
+  .ideacard {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 13px 14px; margin-bottom: 10px; transition: all .15s var(--ease); box-shadow: var(--shadow);
+  }
+  .ideacard:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .ideacard .it { font-weight: 700; font-size: 15px; color: var(--ink); }
+  .ideacard .ih { font-size: 13px; color: var(--ink-dim); margin-top: 3px; line-height: 1.35; }
+  .ideacard .imeta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .usebadge, .buybadge {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 999px;
+  }
+  .usebadge { color: var(--warm); background: var(--warm-bg); }
+  .buybadge { color: var(--accent); background: var(--surface-2); }
+  .phase {
+    display: flex; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--ink);
+  }
+  .phase:last-child { border-bottom: none; }
+  .phase .pdot { color: var(--accent); flex: 0 0 auto; font-weight: 700; }
+  .rectime { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint); margin-bottom: 4px; }
+  .recbuy { margin: 12px 0; padding: 10px 12px; background: var(--surface-2); border-radius: 12px; }
+  .recbuy .rk { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
+  .bookitem { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .bookitem:last-child { border-bottom: none; }
+  .bookitem .bt { font-weight: 700; font-size: 15px; color: var(--ink); }
+  .bookitem .bg { font-size: 13px; color: var(--ink-dim); margin-top: 4px; line-height: 1.4; }
+  .setrow { margin-bottom: 16px; }
+  .setrow .setlabel { font-weight: 600; font-size: 13px; color: var(--ink); margin-bottom: 7px; }
+  .setrow select {
+    width: 100%; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+    border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  }
+  .setrow input[type=range] { width: 100%; accent-color: var(--accent); }
+  .setrow .scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+
   /* ---------- shelf / band ---------- */
   .shelf { margin-top: var(--shelf-gap); }
   .shelf-head {
@@ -828,6 +893,9 @@
     </header>
 
     <div class="toolbar">
+      <button id="ideasBtn" class="ideasbtn" type="button" title="Koch-Ideen aus deinem Vorrat">
+        <span class="ii">💡</span><span>Ideen holen</span>
+      </button>
       <button id="sortPill" class="sortpill" type="button" aria-haspopup="true" aria-expanded="false">
         Sortieren: <span class="cur" id="sortCur">Fällig zuerst</span> <span class="chev">▾</span>
       </button>
@@ -846,8 +914,7 @@
     <div class="panel">
       <span class="selcount"><b id="selN">0</b> ausgewählt</span>
       <button class="btn ghost" id="clearSel">Fertig</button>
-      <button class="btn ghost" id="connectBtn">Passt dazu</button>
-      <button class="btn solid" id="askBtn">KI&nbsp;fragen</button>
+      <button class="btn solid" id="connectBtn">Passt dazu</button>
     </div>
   </div>
 
@@ -879,6 +946,9 @@
 
   <!-- theme picker popover -->
   <div class="pop themepop" id="themePop">
+    <button class="topt" type="button" id="bookOpt"><span class="ti">📖</span><span>Meine Rezepte</span></button>
+    <button class="topt" type="button" id="settingsOpt"><span class="ti">⚙️</span><span>Einstellungen</span></button>
+    <div class="popdiv"></div>
     <div class="pk">Farbthema</div>
     <div id="themeList"></div>
     <div class="popdiv"></div>
@@ -1988,43 +2058,255 @@ function wireMood(){
   });
 }
 
-document.getElementById('askBtn').addEventListener('click', ()=>{
-  if (!selected.size) return;
-  const sel = [...selected];
-  const names = selectedNames();
-  openSheet(moodSheetHtml(names));
+/* ============================================================
+   Recipe inspiration — urgency-seeded ideas, phase guidance, learning.
+   Entry: "Ideen holen" (stock-wide, one tap). Refine reveals the mood chips.
+   ============================================================ */
+
+/* client settings: model choices + personalization, persisted in localStorage */
+let SETTINGS = { idea_model: '', recipe_model: '', balance: 0.7 };
+let RECIPE_CONFIG = { models: [], idea_model: '', recipe_model: '', balance: 0.7 };
+try { SETTINGS = Object.assign(SETTINGS, JSON.parse(localStorage.getItem('fb-settings') || '{}')); } catch(_){}
+function saveSettings(){ try { localStorage.setItem('fb-settings', JSON.stringify(SETTINGS)); } catch(_){} }
+async function loadRecipeConfig(){
+  if (RECIPE_CONFIG.models.length) return RECIPE_CONFIG;
+  try { RECIPE_CONFIG = await apiGet('/api/recipes/config'); } catch(_){}
+  // Seed unset client choices from the server defaults.
+  if (!SETTINGS.idea_model)   SETTINGS.idea_model   = RECIPE_CONFIG.idea_model || '';
+  if (!SETTINGS.recipe_model) SETTINGS.recipe_model = RECIPE_CONFIG.recipe_model || '';
+  return RECIPE_CONFIG;
+}
+
+let inspoMode = 'stock'; // 'stock' (cook from inventory) | 'shop' (with shopping)
+
+function inspoEntryHtml(){
+  const moodGroup = g => `
+    <div class="moodq">
+      <div class="moodlabel">${g.label}${g.sub?` <span class="opt">(${g.sub})</span>`:''}</div>
+      <div class="moodopts" data-group="${g.key}" data-multi="${g.multi?1:0}">
+        ${g.opts.map(([val,txt])=>{
+          const on = g.multi ? mood[g.key].has(val) : mood[g.key]===val;
+          return `<span class="chip${on?' active':''}" data-val="${val}">${esc(txt)}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  return `
+    <h3>Ideen holen</h3>
+    <div class="h3sub">koch aus dem, was da ist</div>
+    <div class="modetoggle">
+      <div class="mopt${inspoMode==='stock'?' active':''}" data-mode="stock">🥕 Aus dem Vorrat</div>
+      <div class="mopt${inspoMode==='shop'?' active':''}" data-mode="shop">🛒 Mit Einkauf</div>
+    </div>
+    <button class="refine-toggle" id="refineToggle" type="button">⚙︎ Verfeinern <span class="chev">▾</span></button>
+    <div class="refine-body" id="refineBody">${MOOD_GROUPS.map(moodGroup).join('')}</div>
+    <div class="row">
+      <button class="btn ghost" id="closeSheet">Schließen</button>
+      <button class="btn solid" id="getIdeasBtn">Ideen holen</button>
+    </div>`;
+}
+
+async function openInspiration(){
+  stopRecording();
+  await loadRecipeConfig();
+  openSheet(inspoEntryHtml());
   wireClose();
   wireMood();
-  document.getElementById('genBtn').addEventListener('click', async ()=>{
-    const preferences = { cuisine: mood.cuisine, style: mood.style, needs: [...mood.needs] };
-    openSheet(`
-      <h3>KI fragen</h3>
-      <div class="h3sub">Prompt wird erstellt…</div>
-      <div class="loading">Prompt wird erstellt…</div>`);
-    let data;
-    try { data = await apiPost('/api/build-prompt', { selection: sel, preferences }); }
-    catch (err){ sheet.innerHTML = `<div class="grip"></div><h3>KI fragen</h3>
-      <div class="sheet-error"><b>Prompt konnte nicht erstellt werden.</b><br>${esc(err.message)}</div>
-      <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`; wireClose(); return; }
-
-    openSheet(`
-      <h3>KI fragen</h3>
-      <div class="h3sub">bearbeitbarer Prompt · ${names.length} Zutat${names.length>1?'en':''}</div>
-      <textarea id="prompt">${esc(data.prompt)}</textarea>
-      <div class="row">
-        <button class="btn ghost" id="backToMood">Zurück</button>
-        <button class="btn solid" id="copyBtn">Prompt kopieren</button>
-      </div>`);
-    document.getElementById('backToMood').addEventListener('click', ()=>{
-      document.getElementById('askBtn').click();
-    });
-    document.getElementById('copyBtn').addEventListener('click', e=>{
-      navigator.clipboard.writeText(document.getElementById('prompt').value).then(()=>{
-        e.target.textContent='Kopiert ✓'; setTimeout(()=>e.target.textContent='Prompt kopieren',1600);
-      });
-    });
+  sheet.querySelectorAll('.modetoggle .mopt').forEach(b=>b.addEventListener('click', ()=>{
+    inspoMode = b.dataset.mode;
+    sheet.querySelectorAll('.modetoggle .mopt').forEach(x=>x.classList.toggle('active', x===b));
+  }));
+  document.getElementById('refineToggle').addEventListener('click', ()=>{
+    document.getElementById('refineBody').classList.toggle('show');
   });
-});
+  document.getElementById('getIdeasBtn').addEventListener('click', fetchIdeas);
+}
+
+async function fetchIdeas(){
+  const preferences = { cuisine: mood.cuisine, style: mood.style, needs: [...mood.needs] };
+  openSheet(`<h3>Ideen holen</h3>
+    <div class="h3sub">${inspoMode==='shop'?'mit Einkauf':'aus dem Vorrat'}</div>
+    <div class="loading">koche mir was aus…</div>`);
+  let data;
+  try {
+    data = await apiPost('/api/recipes/ideas', {
+      mode: inspoMode, preferences,
+      idea_model: SETTINGS.idea_model || undefined,
+      balance: SETTINGS.balance,
+    });
+  } catch (err){ return inspoError('Keine Ideen bekommen.', err, openInspiration); }
+  renderIdeas(data);
+}
+
+function renderIdeas(data){
+  const ideas = data.ideas || [];
+  if (!ideas.length){
+    return inspoError('Keine Ideen gefunden — vielleicht ist der Vorrat zu leer.',
+      { message: 'Versuch es mit „Mit Einkauf“.' }, openInspiration);
+  }
+  const card = (idea, i) => `
+    <button class="ideacard" data-idx="${i}" type="button">
+      <div class="it">${esc(idea.title)}</div>
+      ${idea.hook?`<div class="ih">${esc(idea.hook)}</div>`:''}
+      <div class="imeta">
+        ${idea.uses?`<span class="usebadge">rettet: ${esc(idea.uses)}</span>`:''}
+        ${(idea.buy&&idea.buy.length)?`<span class="buybadge">🛒 ${esc(idea.buy.join(', '))}</span>`:''}
+      </div>
+    </button>`;
+  openSheet(`
+    <h3>Ideen</h3>
+    <div class="h3sub">${data.mode==='shop'?'mit Einkauf':'aus dem Vorrat'} · tipp eine an</div>
+    ${ideas.map(card).join('')}
+    <div class="row">
+      <button class="btn ghost" id="closeSheet">Schließen</button>
+      <button class="btn solid" id="moreIdeas">Zurück</button>
+    </div>`);
+  wireClose();
+  document.getElementById('moreIdeas').addEventListener('click', openInspiration);
+  sheet.querySelectorAll('.ideacard').forEach(c=>c.addEventListener('click', ()=>{
+    openRecipe(ideas[Number(c.dataset.idx)], data.mode);
+  }));
+}
+
+async function openRecipe(idea, mode){
+  openSheet(`<h3>${esc(idea.title)}</h3>
+    <div class="h3sub">wird zubereitet…</div>
+    <div class="loading">schreibe das Rezept…</div>`);
+  let rec;
+  try {
+    rec = await apiPost('/api/recipes/recipe', {
+      idea, mode, recipe_model: SETTINGS.recipe_model || undefined,
+    });
+  } catch (err){ return inspoError('Rezept konnte nicht erstellt werden.', err, ()=>openRecipe(idea, mode)); }
+  renderRecipe(rec, mode);
+}
+
+function renderRecipe(rec, mode){
+  const phases = (rec.guidance || []).map(p=>`<div class="phase"><span class="pdot">→</span><span>${esc(p)}</span></div>`).join('')
+    || `<div class="phase"><span>Keine Anleitung erhalten.</span></div>`;
+  const buy = (mode==='shop' && rec.buy && rec.buy.length)
+    ? `<div class="recbuy"><div class="rk">Einkaufsliste</div>${esc(rec.buy.join(' · '))}</div>` : '';
+  openSheet(`
+    <h3>${esc(rec.title)}</h3>
+    <div class="h3sub">${rec.uses?('nutzt '+esc(rec.uses)):'Rezept'}</div>
+    ${rec.time?`<div class="rectime">⏱ ${esc(rec.time)}</div>`:''}
+    ${buy}
+    ${phases}
+    <div class="row" style="margin-top:16px">
+      <button class="btn ghost" id="cookedBtn">Gekocht ✓</button>
+      <button class="btn ghost" id="twistBtn">Meine Version</button>
+      <button class="btn solid" id="saveRecBtn">Speichern</button>
+    </div>
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
+  wireClose();
+  document.getElementById('cookedBtn').addEventListener('click', async e=>{
+    try { await apiPost('/api/recipes/cooked', { dish: rec.title }); e.target.textContent = 'Notiert ✓'; }
+    catch(err){ showError(err); }
+  });
+  document.getElementById('saveRecBtn').addEventListener('click', async e=>{
+    try {
+      await apiPost('/api/recipes/save', { title: rec.title, guidance: rec.guidance || [], buy: rec.buy || [] });
+      e.target.textContent = 'Gespeichert ✓';
+    } catch(err){ showError(err); }
+  });
+  document.getElementById('twistBtn').addEventListener('click', ()=> openTwist(rec, mode));
+}
+
+/* "Meine Version" — capture a twist via text or voice (reuses the speech engine
+   by borrowing the #intakeText / #micBtn ids the engine targets). */
+function openTwist(rec, mode){
+  stopRecording();
+  const micHtml = SpeechRec
+    ? `<button type="button" class="micbtn" id="micBtn" title="Zum Diktieren tippen">🎙</button>` : '';
+  openSheet(`
+    <h3>Meine Version</h3>
+    <div class="h3sub">${esc(rec.title)} · was hast du anders gemacht?</div>
+    <div class="micwrap">
+      <textarea id="intakeText" placeholder="z. B. „mehr Knoblauch, statt Sahne Crème fraîche“"></textarea>
+      ${micHtml}
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="twistBack">Zurück</button>
+      <button class="btn solid" id="twistSave">Speichern</button>
+    </div>`);
+  const micBtn = document.getElementById('micBtn');
+  if (micBtn) micBtn.addEventListener('click', toggleRecording);
+  document.getElementById('twistBack').addEventListener('click', ()=>{ stopRecording(); renderRecipe(rec, mode); });
+  document.getElementById('twistSave').addEventListener('click', async e=>{
+    stopRecording();
+    const text = (document.getElementById('intakeText')?.value || '').trim();
+    if (!text) return;
+    e.target.disabled = true; e.target.textContent = 'Speichere…';
+    try {
+      await apiPost('/api/recipes/twist', { dish: rec.title, text });
+      await apiPost('/api/recipes/save', { title: rec.title, guidance: rec.guidance || [], buy: rec.buy || [], twist: text });
+      showSnack(`<b>${esc(rec.title)}</b> mit deiner Version gespeichert`);
+      closeSheet();
+    } catch(err){ e.target.disabled = false; e.target.textContent = 'Speichern'; showError(err); }
+  });
+}
+
+async function openBook(){
+  openSheet(`<h3>Meine Rezepte</h3><div class="h3sub">gespeichert</div><div class="loading">lade…</div>`);
+  let data;
+  try { data = await apiGet('/api/recipes/book'); }
+  catch(err){ return inspoError('Konnte die Rezepte nicht laden.', err, openBook); }
+  const recipes = data.recipes || [];
+  const item = r => `<div class="bookitem">
+    <div class="bt">${esc(r.title)}</div>
+    ${r.twist?`<div class="bg">✎ ${esc(r.twist)}</div>`:''}
+    ${(r.guidance&&r.guidance.length)?`<div class="bg">${esc(r.guidance.join(' → '))}</div>`:''}
+  </div>`;
+  openSheet(`
+    <h3>Meine Rezepte</h3>
+    <div class="h3sub">${recipes.length} gespeichert</div>
+    ${recipes.length ? recipes.map(item).join('') : '<div class="sheet-error">Noch keine Rezepte gespeichert.</div>'}
+    <div class="row"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
+  wireClose();
+}
+
+async function openRecipeSettings(){
+  await loadRecipeConfig();
+  const opts = (sel) => RECIPE_CONFIG.models.map(m =>
+    `<option value="${esc(m.id)}"${m.id===sel?' selected':''}>${esc(m.label)}</option>`).join('');
+  const bal = Math.round((SETTINGS.balance ?? 0.7) * 100);
+  openSheet(`
+    <h3>Einstellungen</h3>
+    <div class="h3sub">Rezept-Ideen</div>
+    <div class="setrow">
+      <div class="setlabel">Ideen-Modell</div>
+      <select id="ideaModelSel">${opts(SETTINGS.idea_model || RECIPE_CONFIG.idea_model)}</select>
+    </div>
+    <div class="setrow">
+      <div class="setlabel">Rezept-Modell</div>
+      <select id="recipeModelSel">${opts(SETTINGS.recipe_model || RECIPE_CONFIG.recipe_model)}</select>
+    </div>
+    <div class="setrow">
+      <div class="setlabel">Personalisierung</div>
+      <input type="range" id="balanceSel" min="0" max="100" value="${bal}" />
+      <div class="scale"><span>frisch &amp; überraschend</span><span>nach meinem Geschmack</span></div>
+    </div>
+    <div class="row"><button class="btn solid" id="settingsDone" style="flex:1">Fertig</button></div>`);
+  document.getElementById('ideaModelSel').addEventListener('change', e=>{ SETTINGS.idea_model = e.target.value; saveSettings(); });
+  document.getElementById('recipeModelSel').addEventListener('change', e=>{ SETTINGS.recipe_model = e.target.value; saveSettings(); });
+  document.getElementById('balanceSel').addEventListener('input', e=>{ SETTINGS.balance = Number(e.target.value)/100; saveSettings(); });
+  document.getElementById('settingsDone').addEventListener('click', closeSheet);
+}
+
+function inspoError(title, err, retry){
+  sheet.innerHTML = `<div class="grip"></div><h3>${esc(title)}</h3>
+    <div class="sheet-error"><b>${esc(title)}</b><br>${esc(err && err.message || '')}</div>
+    <div class="row">
+      <button class="btn ghost" id="closeSheet">Schließen</button>
+      <button class="btn solid" id="inspoRetry">Nochmal</button>
+    </div>`;
+  wireClose();
+  const r = document.getElementById('inspoRetry');
+  if (r && retry) r.addEventListener('click', retry);
+}
+
+document.getElementById('ideasBtn').addEventListener('click', openInspiration);
+document.getElementById('bookOpt').addEventListener('click', ()=>{ themePop.classList.remove('show'); openBook(); });
+document.getElementById('settingsOpt').addEventListener('click', ()=>{ themePop.classList.remove('show'); openRecipeSettings(); });
 
 /* Connect — pairings among the selection + the recipes it unlocks. */
 document.getElementById('connectBtn').addEventListener('click', async ()=>{

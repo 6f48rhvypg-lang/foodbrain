@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from .recipes_llm import DEFAULT_IDEA_MODEL, DEFAULT_RECIPE_MODEL
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -26,6 +28,17 @@ class Settings:
     # Defaults used when intake has to create a brand-new Grocy product.
     intake_default_location: Optional[str] = None
     intake_default_unit: Optional[str] = None
+    # Recipe inspiration: the idea/headline step is the creative bottleneck
+    # (strong model by default); the recipe step is mechanical (cheap by default).
+    # Both are overridable per request from the SPA Settings panel.
+    idea_model: str = DEFAULT_IDEA_MODEL
+    recipe_model: str = DEFAULT_RECIPE_MODEL
+    # How fresh-vs-personalized idea generation leans (0=only fresh .. 1=fully
+    # personalized to taste). Default leans fresh.
+    recipe_explore_balance: float = 0.7
+    # Where server-side learning state (cookmemory.json) lives. Must be a
+    # persistent, writable path in deployment so the recipe book survives restarts.
+    data_dir: str = "data"
 
     @property
     def grocy_enabled(self) -> bool:
@@ -72,6 +85,14 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
         intake_default_unit=_blank_to_none(
             _setting("FOODBRAIN_INTAKE_DEFAULT_UNIT", file_values)
         ),
+        idea_model=_blank_to_none(_setting("FOODBRAIN_IDEA_MODEL", file_values))
+        or DEFAULT_IDEA_MODEL,
+        recipe_model=_blank_to_none(_setting("FOODBRAIN_RECIPE_MODEL", file_values))
+        or DEFAULT_RECIPE_MODEL,
+        recipe_explore_balance=_float_setting(
+            "FOODBRAIN_RECIPE_EXPLORE_BALANCE", 0.7, file_values
+        ),
+        data_dir=_blank_to_none(_setting("FOODBRAIN_DATA_DIR", file_values)) or "data",
     )
 
 
@@ -130,3 +151,13 @@ def _int_setting(name: str, default: int, file_values: dict[str, str]) -> int:
         return int(raw_value)
     except ValueError as exc:
         raise ValueError(f"{name} must be an integer") from exc
+
+
+def _float_setting(name: str, default: float, file_values: dict[str, str]) -> float:
+    raw_value = _setting(name, file_values)
+    if raw_value is None or raw_value.strip() == "":
+        return default
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number") from exc
