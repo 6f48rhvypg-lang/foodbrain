@@ -257,7 +257,19 @@ class GrocyClient:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 raw = response.read().decode("utf-8")
         except HTTPError as exc:
-            raise GrocyClientError(f"Grocy request failed with HTTP {exc.code}") from exc
+            # Grocy puts the real reason (bad column, amount too high, validation
+            # message) in the response body — surface it so a failed write is
+            # diagnosable instead of an opaque "HTTP 400".
+            detail = ""
+            try:
+                detail = exc.read().decode("utf-8", "replace").strip()
+            except Exception:  # pragma: no cover - best-effort error detail
+                pass
+            detail = _short_grocy_error(detail)
+            suffix = f": {detail}" if detail else ""
+            raise GrocyClientError(
+                f"Grocy request failed with HTTP {exc.code}{suffix}"
+            ) from exc
         except URLError as exc:
             raise GrocyClientError(f"Grocy request failed: {exc.reason}") from exc
         if allow_empty and not raw.strip():
@@ -266,6 +278,26 @@ class GrocyClient:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
             raise GrocyClientError("Grocy response was not valid JSON") from exc
+
+
+def _short_grocy_error(detail: str) -> str:
+    """Reduce a Grocy error body to a short, human message.
+
+    Grocy returns errors as ``{"error_message": "..."}`` (sometimes nested);
+    fall back to a trimmed snippet of whatever came back.
+    """
+    if not detail:
+        return ""
+    try:
+        payload = json.loads(detail)
+    except json.JSONDecodeError:
+        return detail[:200]
+    if isinstance(payload, dict):
+        for key in ("error_message", "error", "message"):
+            value = payload.get(key)
+            if value:
+                return str(value)[:200]
+    return detail[:200]
 
 
 def parse_stock_entries_response(payload: Any) -> list[StockEntry]:

@@ -2483,15 +2483,39 @@ async function runCommit(transcript){
     showError(err);
     return;
   }
+  const failed = data.failed || [];
+  const done = isEdit ? (data.changed || 0) : (data.added || 0);
+
+  // Everything failed: keep the sheet open so the items aren't lost, and show
+  // why (the first couple of reasons) so it's fixable.
+  if (done === 0 && failed.length){
+    btn.disabled = false; btn.textContent = commitLabel;
+    showError({ message: failItemsMsg(failed) });
+    return;
+  }
+
   closeSheet();
-  if (isEdit){
-    const n = data.changed || 0;
-    showSnack(`<b>${n}</b> Artikel im Kühlschrank aktualisiert`);
+  if (failed.length){
+    // Partial success: report what landed and which items didn't, so the user
+    // knows not to re-add the whole list (which would duplicate the rest).
+    const verb = isEdit ? 'aktualisiert' : 'hinzugefügt';
+    showError({ message: `${done} ${verb}, ${failed.length} nicht: ${failItemsMsg(failed)}` });
+  } else if (isEdit){
+    showSnack(`<b>${done}</b> Artikel im Kühlschrank aktualisiert`);
   } else {
     const made = data.created_products ? ` (${data.created_products} neu)` : '';
-    showSnack(`<b>${data.added}</b> Artikel${made} hinzugefügt`);
+    showSnack(`<b>${done}</b> Artikel${made} hinzugefügt`);
   }
   await reload();
+}
+
+/* Compact German summary of failed commit items (names, first few reasons). */
+function failItemsMsg(failed){
+  const names = failed.map(f => f.name).filter(Boolean);
+  const shown = names.slice(0, 4).join(', ');
+  const more = names.length > 4 ? ` +${names.length - 4} weitere` : '';
+  const reason = failed[0] && failed[0].error ? ` (${failed[0].error})` : '';
+  return `${shown}${more}${reason}`;
 }
 
 /* ---- load / reload from the API ---- */

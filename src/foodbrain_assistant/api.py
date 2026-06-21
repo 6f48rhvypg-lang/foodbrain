@@ -316,14 +316,21 @@ class FoodBrainAPI:
         client = self._writer()
 
         # Master data (units/locations) is only needed when we might add/create.
+        # The product index lets a new item whose name already exists in Grocy —
+        # or that repeats within this same dump (two "Sonnenblumenöl", two
+        # "Beluga Linsen") — reuse that product instead of creating a duplicate,
+        # which Grocy rejects because product names are unique.
         resolvers: Optional[tuple] = None
+        product_index: Optional[_ProductIndex] = None
         if any(_action_of(raw) == "add" for raw in items):
             resolvers = (
                 _NameResolver(client.get_quantity_units(), self.settings.intake_default_unit),
                 _NameResolver(client.get_locations(), self.settings.intake_default_location),
             )
+            product_index = _ProductIndex(client.get_products(), self.aliases)
 
         results = []
+        failed = []
         counts = {"added": 0, "created_products": 0, "changed": 0}
         for raw in items:
             action = _action_of(raw)
@@ -335,21 +342,29 @@ class FoodBrainAPI:
                 elif action == "set_date":
                     results.append(self._commit_set_date(client, raw, counts))
                 else:
-                    results.append(self._commit_add(client, raw, resolvers, counts))
+                    results.append(
+                        self._commit_add(client, raw, resolvers, product_index, counts)
+                    )
             except GrocyWriteDisabledError as exc:
+                # Writes being off is a whole-client problem, not a per-item one;
+                # nothing in this batch can succeed, so fail the request.
                 raise ApiError(403, str(exc)) from exc
-            except GrocyClientError as exc:
-                name = str(raw.get("name") or "")
-                raise ApiError(502, f"failed to update {name or '?'!r}: {exc}") from exc
+            except (GrocyClientError, ApiError) as exc:
+                # One bad item must not sink the rest of a large dump: record it
+                # and keep going. The UI reports the partial result + failures.
+                name = str(raw.get("name") or "").strip()
+                message = exc.message if isinstance(exc, ApiError) else str(exc)
+                failed.append({"name": name or "?", "action": action, "error": message})
 
         return {
             "results": results,
+            "failed": failed,
             "added": counts["added"],
             "created_products": counts["created_products"],
             "changed": counts["changed"],
         }
 
-    def _commit_add(self, client, raw: dict, resolvers, counts: dict) -> dict:
+    def _commit_add(self, client, raw: dict, resolvers, product_index, counts: dict) -> dict:
         assert resolvers is not None  # built whenever an add is present
         units, locations = resolvers
         name = str(raw.get("name") or "").strip()
@@ -361,13 +376,21 @@ class FoodBrainAPI:
         if not product_id:
             if not name:
                 raise ApiError(400, "a new item needs a name")
-            product_id = client.create_product(
-                name,
-                qu_id_stock=units.resolve(raw.get("unit")),
-                location_id=location_id,
-            )
-            was_created = True
-            counts["created_products"] += 1
+            # Reuse an existing/just-created product of the same name (Grocy
+            # product names are unique); only create when truly new.
+            existing_id = product_index.resolve(name) if product_index else ""
+            if existing_id:
+                product_id = existing_id
+            else:
+                product_id = client.create_product(
+                    name,
+                    qu_id_stock=units.resolve(raw.get("unit")),
+                    location_id=location_id,
+                )
+                if product_index is not None:
+                    product_index.add(name, product_id)
+                was_created = True
+                counts["created_products"] += 1
         add_response = client.add_stock(
             product_id, amount, best_before_date=best_before, location_id=location_id
         )
@@ -738,6 +761,31 @@ def _require_known_product(raw: dict, verb: str) -> str:
         name = str(raw.get("name") or "that").strip() or "that"
         raise ApiError(400, f"can't {verb} {name!r}: it isn't in your fridge")
     return product_id
+
+
+class _ProductIndex:
+    """Map a product name to its Grocy id, by normalized name.
+
+    Seeded from the live product master list and extended as products are
+    created during a commit, so a repeated name (within the dump or already in
+    Grocy) reuses the existing product rather than creating a duplicate — Grocy
+    enforces unique product names, so a duplicate ``create_product`` 400s.
+    """
+
+    def __init__(self, products: List[dict], aliases: Optional[Dict[str, str]]) -> None:
+        self._aliases = aliases
+        self._by_norm: Dict[str, str] = {}
+        for product in products:
+            self.add(str(product.get("name") or ""), str(product.get("id") or ""))
+
+    def add(self, name: str, product_id: str) -> None:
+        norm = normalize_ingredient_name(name, self._aliases)
+        if norm and product_id:
+            self._by_norm.setdefault(norm, product_id)
+
+    def resolve(self, name) -> str:
+        norm = normalize_ingredient_name(str(name or ""), self._aliases)
+        return self._by_norm.get(norm, "")
 
 
 class _NameResolver:

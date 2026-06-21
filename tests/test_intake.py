@@ -171,6 +171,11 @@ class _FakeWriteClient:
     def get_locations(self):
         return [{"id": "1", "name": "Fridge"}, {"id": "2", "name": "Pantry"}]
 
+    def get_products(self):
+        # Master list seen by intake_commit's duplicate-name guard. Starts empty;
+        # products created during the commit get registered in-memory by the API.
+        return [{"id": str(p["id"]), "name": p["name"]} for p in self.created]
+
     def create_product(self, name, *, qu_id_stock, location_id, qu_id_purchase=None):
         self._next_id += 1
         new_id = str(self._next_id)
@@ -315,6 +320,33 @@ class IntakeCommitApiTest(unittest.TestCase):
         self.assertEqual(client.added[0]["product_id"], client.created[0]["id"])
         self.assertTrue(out["results"][0]["created"])
 
+    def test_repeated_name_reuses_product_instead_of_duplicate(self) -> None:
+        # The voice dump named two "Sonnenblumenöl" (full + half-open). Grocy
+        # rejects a duplicate product name, so the second add must reuse the
+        # product created for the first and just book a second stock entry.
+        client = _FakeWriteClient()
+        out = _api(client).intake_commit(
+            [
+                {"name": "Sonnenblumenöl", "unit": "bottle", "quantity": 1},
+                {"name": "Sonnenblumenöl", "unit": "bottle", "quantity": 0.5, "opened": True},
+            ]
+        )
+        self.assertEqual(out["created_products"], 1)   # created once
+        self.assertEqual(out["added"], 2)              # but stocked twice
+        self.assertEqual(len(client.created), 1)
+        self.assertEqual(len(client.added), 2)
+        self.assertEqual(client.added[0]["product_id"], client.added[1]["product_id"])
+
+    def test_add_reuses_existing_grocy_product_by_name(self) -> None:
+        # A "new" item whose name already exists in Grocy adds stock to it
+        # rather than creating a duplicate.
+        client = _FakeWriteClient()
+        client.created.append({"id": "55", "name": "Couscous", "qu": "1", "location": "1"})
+        out = _api(client).intake_commit([{"name": "couscous", "quantity": 0.5}])
+        self.assertEqual(out["created_products"], 0)
+        self.assertEqual(out["added"], 1)
+        self.assertEqual(client.added[0]["product_id"], "55")
+
     def test_unknown_unit_falls_back_to_first(self) -> None:
         client = _FakeWriteClient()
         api = _api(client)
@@ -332,12 +364,27 @@ class IntakeCommitApiTest(unittest.TestCase):
             _api(_FakeWriteClient()).intake_commit([])
         self.assertEqual(ctx.exception.status, 400)
 
-    def test_zero_amount_rejected(self) -> None:
-        with self.assertRaises(ApiError) as ctx:
-            _api(_FakeWriteClient()).intake_commit(
-                [{"name": "Milk", "matched_product_id": "10", "quantity": 0}]
-            )
-        self.assertEqual(ctx.exception.status, 400)
+    def test_zero_amount_reported_as_failed_not_raised(self) -> None:
+        # A bad item is reported in 'failed' so it doesn't sink the rest of a
+        # batch, rather than aborting the whole commit.
+        out = _api(_FakeWriteClient()).intake_commit(
+            [{"name": "Milk", "matched_product_id": "10", "quantity": 0}]
+        )
+        self.assertEqual(out["added"], 0)
+        self.assertEqual(len(out["failed"]), 1)
+        self.assertEqual(out["failed"][0]["name"], "Milk")
+
+    def test_one_bad_item_does_not_block_the_rest(self) -> None:
+        client = _FakeWriteClient()
+        out = _api(client).intake_commit(
+            [
+                {"name": "Milk", "matched_product_id": "10", "quantity": 0},  # bad
+                {"name": "Sourdough", "unit": "Piece", "quantity": 1},        # good
+            ]
+        )
+        self.assertEqual(out["added"], 1)
+        self.assertEqual(len(out["failed"]), 1)
+        self.assertEqual(client.created[0]["name"], "Sourdough")
 
 
 class EditModeUnderstandTest(unittest.TestCase):
@@ -423,19 +470,20 @@ class EditModeCommitTest(unittest.TestCase):
         self.assertEqual(client.redated[0]["stock_entry_id"], "entry-10")
         self.assertEqual(client.redated[0]["best_before_date"], date(2026, 6, 20))
 
-    def test_edit_without_match_is_rejected(self) -> None:
-        with self.assertRaises(ApiError) as ctx:
-            _api(_FakeWriteClient()).intake_commit(
-                [{"name": "Ketchup", "action": "consume"}]
-            )
-        self.assertEqual(ctx.exception.status, 400)
+    def test_edit_without_match_is_reported_as_failed(self) -> None:
+        out = _api(_FakeWriteClient()).intake_commit(
+            [{"name": "Ketchup", "action": "consume"}]
+        )
+        self.assertEqual(out["changed"], 0)
+        self.assertEqual(len(out["failed"]), 1)
+        self.assertEqual(out["failed"][0]["action"], "consume")
 
-    def test_set_date_without_date_is_rejected(self) -> None:
-        with self.assertRaises(ApiError) as ctx:
-            _api(_FakeWriteClient()).intake_commit(
-                [{"name": "Milk", "matched_product_id": "10", "action": "set_date"}]
-            )
-        self.assertEqual(ctx.exception.status, 400)
+    def test_set_date_without_date_is_reported_as_failed(self) -> None:
+        out = _api(_FakeWriteClient()).intake_commit(
+            [{"name": "Milk", "matched_product_id": "10", "action": "set_date"}]
+        )
+        self.assertEqual(out["changed"], 0)
+        self.assertEqual(len(out["failed"]), 1)
 
     def test_mixed_add_and_edit_in_one_batch(self) -> None:
         client = _FakeWriteClient()

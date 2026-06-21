@@ -3,6 +3,7 @@ import unittest
 
 from foodbrain_assistant.grocy_client import (
     GrocyClientError,
+    _short_grocy_error,
     diagnose_stock_response,
     parse_stock_response,
 )
@@ -82,6 +83,16 @@ class GrocyClientTest(unittest.TestCase):
             "row 2: positive stock row is missing product name",
             diagnostics["errors"],
         )
+
+    def test_short_grocy_error_extracts_message(self) -> None:
+        # Grocy returns its real reason in the response body; surface it.
+        self.assertEqual(
+            _short_grocy_error('{"error_message": "Product name already exists"}'),
+            "Product name already exists",
+        )
+        # Non-JSON bodies are passed through (trimmed); empty stays empty.
+        self.assertEqual(_short_grocy_error("plain text boom"), "plain text boom")
+        self.assertEqual(_short_grocy_error(""), "")
 
 
 if __name__ == "__main__":
