@@ -2,6 +2,7 @@
 
 from datetime import date
 import json
+import time
 from typing import Any, Iterable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
@@ -13,6 +14,20 @@ from .recipes import parse_grocy_recipes_response
 
 class GrocyClientError(RuntimeError):
     pass
+
+
+# Storage locations and quantity units are static Grocy master data (they change
+# ~never) yet were re-fetched on every screen and every intake/cook commit. Cache
+# them briefly, keyed by (base_url, kind), so a burst of requests hits Grocy once.
+# Deliberately NOT applied to stock or products: those must reflect writes
+# immediately (a stale product list would make intake re-create a just-added one).
+_MASTER_TTL_SECONDS = 300.0
+_MASTER_CACHE: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
+
+
+def clear_master_cache() -> None:
+    """Drop the locations/quantity-units cache (test + diagnostics hook)."""
+    _MASTER_CACHE.clear()
 
 
 class GrocyWriteDisabledError(GrocyClientError):
@@ -63,11 +78,23 @@ class GrocyClient:
 
     def get_quantity_units(self) -> list[dict[str, Any]]:
         """Quantity units as ``[{"id", "name"}, ...]`` (for resolving a unit name)."""
-        return parse_named_objects(self._get_json("api/objects/quantity_units"))
+        return self._get_master("quantity_units")
 
     def get_locations(self) -> list[dict[str, Any]]:
         """Storage locations as ``[{"id", "name"}, ...]`` (fridge/freezer/pantry…)."""
-        return parse_named_objects(self._get_json("api/objects/locations"))
+        return self._get_master("locations")
+
+    def _get_master(self, kind: str) -> list[dict[str, Any]]:
+        """Fetch a static master-data table (``locations``/``quantity_units``),
+        served from a short TTL cache keyed by (base_url, kind). Returns a fresh
+        copy each call so callers can never corrupt the cached list."""
+        key = (self.base_url, kind)
+        cached = _MASTER_CACHE.get(key)
+        if cached is not None and (time.monotonic() - cached[0]) < _MASTER_TTL_SECONDS:
+            return list(cached[1])
+        value = parse_named_objects(self._get_json(f"api/objects/{kind}"))
+        _MASTER_CACHE[key] = (time.monotonic(), value)
+        return list(value)
 
     # --- writes -----------------------------------------------------------
 

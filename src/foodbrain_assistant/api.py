@@ -33,7 +33,12 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from . import cookmemory, recipes_llm
-from .grocy_client import GrocyClient, GrocyClientError, GrocyWriteDisabledError
+from .grocy_client import (
+    GrocyClient,
+    GrocyClientError,
+    GrocyWriteDisabledError,
+    extract_transaction_id,
+)
 from .llm import LlmError, LlmNotConfigured
 from .intake import (
     IntakeError,
@@ -1376,8 +1381,6 @@ def _amount_of(raw: dict) -> float:
 
 
 def _extract_txn(response) -> Optional[str]:
-    from .grocy_client import extract_transaction_id
-
     return extract_transaction_id(response)
 
 

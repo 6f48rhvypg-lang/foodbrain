@@ -1,12 +1,83 @@
 from datetime import date
 import unittest
+from unittest import mock
 
+from foodbrain_assistant import grocy_client as gc
 from foodbrain_assistant.grocy_client import (
+    GrocyClient,
     GrocyClientError,
     _short_grocy_error,
+    clear_master_cache,
     diagnose_stock_response,
     parse_stock_response,
 )
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self._body
+
+
+class MasterDataCacheTest(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_master_cache()
+        self.addCleanup(clear_master_cache)
+
+    def _patch_urlopen(self):
+        calls: list = []
+
+        def fake_urlopen(request, timeout=None):
+            calls.append(request.full_url)
+            return _FakeResponse(b'[{"id": "1", "name": "Fridge"}]')
+
+        return mock.patch.object(gc, "urlopen", fake_urlopen), calls
+
+    def test_locations_served_from_cache_within_ttl(self) -> None:
+        patch, calls = self._patch_urlopen()
+        client = GrocyClient("http://grocy", "key")
+        with patch:
+            first = client.get_locations()
+            second = client.get_locations()
+        self.assertEqual(first, [{"id": "1", "name": "Fridge"}])
+        self.assertEqual(second, first)
+        self.assertEqual(len(calls), 1)  # transport hit once across two reads
+
+    def test_returned_list_copy_does_not_corrupt_cache(self) -> None:
+        patch, calls = self._patch_urlopen()
+        client = GrocyClient("http://grocy", "key")
+        with patch:
+            first = client.get_locations()
+            first.append({"id": 99, "name": "junk"})
+            second = client.get_locations()
+        self.assertEqual(second, [{"id": "1", "name": "Fridge"}])
+        self.assertEqual(len(calls), 1)
+
+    def test_different_base_url_bypasses_cache(self) -> None:
+        patch, calls = self._patch_urlopen()
+        with patch:
+            GrocyClient("http://grocy", "key").get_locations()
+            GrocyClient("http://other", "key").get_locations()
+        self.assertEqual(len(calls), 2)  # distinct base URLs are cached separately
+
+    def test_quantity_units_and_locations_cached_separately(self) -> None:
+        patch, calls = self._patch_urlopen()
+        client = GrocyClient("http://grocy", "key")
+        with patch:
+            client.get_locations()
+            client.get_quantity_units()
+            client.get_locations()
+            client.get_quantity_units()
+        # one fetch per kind, then served from cache
+        self.assertEqual(len(calls), 2)
 
 
 class GrocyClientTest(unittest.TestCase):
