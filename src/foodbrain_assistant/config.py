@@ -13,7 +13,6 @@ from .recipes_llm import DEFAULT_IDEA_MODEL, DEFAULT_RECIPE_MODEL
 class Settings:
     grocy_base_url: Optional[str]
     grocy_api_key: Optional[str]
-    home_assistant_webhook_url: Optional[str]
     expiry_window_days: int = 7
     top_ingredient_limit: int = 8
     top_recipe_limit: int = 5
@@ -56,9 +55,6 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
     return Settings(
         grocy_base_url=_clean_url(_setting("FOODBRAIN_GROCY_BASE_URL", file_values)),
         grocy_api_key=_blank_to_none(_setting("FOODBRAIN_GROCY_API_KEY", file_values)),
-        home_assistant_webhook_url=_blank_to_none(
-            _setting("FOODBRAIN_HOME_ASSISTANT_WEBHOOK_URL", file_values)
-        ),
         expiry_window_days=_int_setting("FOODBRAIN_EXPIRY_WINDOW_DAYS", 7, file_values),
         top_ingredient_limit=_int_setting("FOODBRAIN_TOP_INGREDIENT_LIMIT", 8, file_values),
         top_recipe_limit=_int_setting("FOODBRAIN_TOP_RECIPE_LIMIT", 5, file_values),

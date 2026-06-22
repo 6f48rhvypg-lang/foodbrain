@@ -22,7 +22,6 @@ def _settings(**overrides) -> Settings:
     base = dict(
         grocy_base_url=None,
         grocy_api_key=None,
-        home_assistant_webhook_url=None,
         expiry_window_days=7,
         top_ingredient_limit=8,
         top_recipe_limit=5,

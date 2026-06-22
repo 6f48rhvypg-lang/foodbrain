@@ -20,7 +20,6 @@ def _settings(**overrides) -> Settings:
     base = dict(
         grocy_base_url=None,
         grocy_api_key=None,
-        home_assistant_webhook_url=None,
         openrouter_api_key="test-key",
     )
     base.update(overrides)

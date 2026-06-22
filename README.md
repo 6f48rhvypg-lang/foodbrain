@@ -46,7 +46,6 @@ Current baseline:
 - Expiry-aware ingredient urgency scoring
 - Recipe matching against stock, ranked by pantry coverage and expiry usefulness
 - FlavorGraph-style ingredient pairing suggestions for soon-to-expire stock
-- Optional Home Assistant webhook publishing
 - CLI for sample and live runs
 - Unit tests for Grocy parsing, normalization, scoring, recipe parsing, matching, and pairing
 - Git repository initialized and pushed to `https://github.com/6f48rhvypg-lang/foodbrain`
@@ -224,7 +223,6 @@ Required environment variables for live Grocy access:
 
 Optional environment variables:
 
-- `FOODBRAIN_HOME_ASSISTANT_WEBHOOK_URL`
 - `FOODBRAIN_EXPIRY_WINDOW_DAYS`
 - `FOODBRAIN_TOP_INGREDIENT_LIMIT`
 - `FOODBRAIN_TOP_RECIPE_LIMIT`
@@ -366,11 +364,10 @@ panel_iframe:
     require_admin: false
 ```
 
-Restart Home Assistant; "FoodBrain" appears in the sidebar. The existing
-Home Assistant webhook stays in place for notifications only — the panel is
-the interactive surface, the webhook is the daily summary nudge. (Note: HA blocks
-mixed content, so if your HA is served over HTTPS, put the FoodBrain server behind
-the same reverse proxy / TLS so the panel URL is also HTTPS.)
+Restart Home Assistant; "FoodBrain" appears in the sidebar. The panel is the
+interactive surface. (Note: HA blocks mixed content, so if your HA is served
+over HTTPS, put the FoodBrain server behind the same reverse proxy / TLS so the
+panel URL is also HTTPS.)
 
 ## Current Development Plan
 

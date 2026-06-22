@@ -5,7 +5,6 @@ from typing import Dict, Optional
 
 from .config import Settings
 from .grocy_client import GrocyClient
-from .home_assistant import publish_webhook
 from .matching import rank_recipes
 from .models import Recipe, RunResult, StockItem
 from .pairing import PairingGraph, suggest_pairings
@@ -65,14 +64,9 @@ def run_once_with_source(
             aliases=aliases,
         )
 
-    result = RunResult(
+    return RunResult(
         urgent_ingredients=urgent_ingredients,
         source=source,
         recipe_matches=recipe_matches,
         flavor_suggestions=flavor_suggestions,
     )
-
-    if settings.home_assistant_webhook_url:
-        publish_webhook(settings.home_assistant_webhook_url, result)
-
-    return result
