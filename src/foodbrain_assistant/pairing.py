@@ -33,7 +33,7 @@ item named "Greek yogurt" still resolves to the "yogurt" pairing node.
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from .models import FlavorPartner, FlavorSuggestion, IngredientUrgency, StockItem
-from .normalization import normalize_ingredient_name
+from .normalization import normalize_ingredient_name, tokenize, tokens_match
 
 
 class PairingError(RuntimeError):
@@ -64,12 +64,12 @@ class PairingGraph:
         if normalized in self._partners:
             return self._partners[normalized]
 
-        item_tokens = _tokenize(name, aliases)
+        item_tokens = tokenize(name, aliases)
         if not item_tokens:
             return []
         for key, partners in self._partners.items():
-            key_tokens = _tokenize(key)
-            if _tokens_match(item_tokens, key_tokens):
+            key_tokens = tokenize(key)
+            if tokens_match(item_tokens, key_tokens):
                 return partners
         return []
 
@@ -102,7 +102,7 @@ def suggest_pairings(
     aliases: Optional[Dict[str, str]] = None,
 ) -> List[FlavorSuggestion]:
     stock_token_sets = [
-        _tokenize(item.name, aliases) for item in stock_items if item.amount > 0
+        tokenize(item.name, aliases) for item in stock_items if item.amount > 0
     ]
 
     suggestions: List[FlavorSuggestion] = []
@@ -172,33 +172,7 @@ def _as_score(value: Any, index: int) -> float:
 
 
 def _in_stock(partner_name: str, stock_token_sets: List[Set[str]]) -> bool:
-    partner_tokens = _tokenize(partner_name)
+    partner_tokens = tokenize(partner_name)
     if not partner_tokens:
         return False
-    return any(_tokens_match(partner_tokens, tokens) for tokens in stock_token_sets)
-
-
-# Token helpers mirror foodbrain_assistant.matching so pairing lookups resolve
-# stock names the same way recipe matching does, while keeping this module
-# self-contained.
-def _tokens_match(left: Set[str], right: Set[str]) -> bool:
-    if not left or not right:
-        return False
-    return left <= right or right <= left
-
-
-def _tokenize(name: str, aliases: Optional[Dict[str, str]] = None) -> Set[str]:
-    normalized = normalize_ingredient_name(name, aliases)
-    return {_singularize(token) for token in normalized.split() if token}
-
-
-def _singularize(word: str) -> str:
-    if len(word) <= 3:
-        return word
-    if word.endswith("ies"):
-        return word[:-3] + "y"
-    if word.endswith(("oes", "ches", "shes", "sses")):
-        return word[:-2]
-    if word.endswith("s") and not word.endswith("ss"):
-        return word[:-1]
-    return word
+    return any(tokens_match(partner_tokens, tokens) for tokens in stock_token_sets)

@@ -14,6 +14,7 @@ from math import ceil
 from typing import List, Optional
 
 from .llm import Transport, post_chat_json
+from .normalization import str_list as _str_list
 
 # Curated allowlist of OpenRouter model ids. Used to (a) validate incoming model
 # overrides — arbitrary strings are rejected — and (b) populate the SPA dropdowns
@@ -466,11 +467,3 @@ def extract_twist(
         },
     }
 
-
-# --- helpers ---------------------------------------------------------------
-
-
-def _str_list(value) -> List[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(x).strip() for x in value if str(x).strip()]

@@ -25,7 +25,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .models import Recipe, RecipeIngredient
-from .normalization import normalize_ingredient_name
+from .normalization import blank_to_none as _blank_to_none, normalize_ingredient_name
 
 
 class RecipesError(RuntimeError):
@@ -203,13 +203,6 @@ def _as_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _blank_to_none(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    cleaned = str(value).strip()
-    return cleaned or None
 
 
 # --- Grocy recipe objects -------------------------------------------------

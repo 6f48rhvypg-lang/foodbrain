@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from .normalization import blank_to_none as _blank_to_none
 from .recipes_llm import DEFAULT_IDEA_MODEL, DEFAULT_RECIPE_MODEL
 
 
@@ -127,13 +128,6 @@ def _strip_quotes(value: str) -> str:
 
 def _setting(name: str, file_values: dict[str, str]) -> Optional[str]:
     return os.getenv(name, file_values.get(name))
-
-
-def _blank_to_none(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-    cleaned = value.strip()
-    return cleaned or None
 
 
 def _clean_url(value: Optional[str]) -> Optional[str]:

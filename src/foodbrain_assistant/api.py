@@ -43,10 +43,13 @@ from .intake import (
     reconcile_items,
     understand_transcript,
 )
-from .matching import _tokenize as _recipe_tokenize
-from .matching import _tokens_match, rank_recipes
+from .matching import rank_recipes
 from .models import IngredientUrgency, Recipe, StockItem
-from .normalization import normalize_ingredient_name
+from .normalization import (
+    normalize_ingredient_name,
+    tokenize as _recipe_tokenize,
+    tokens_match as _tokens_match,
+)
 from .pairing import PairingGraph, suggest_pairings
 from .scoring import score_stock_item
 from .writeback import (
@@ -1392,6 +1395,9 @@ def _cook_kind(raw: dict) -> str:
     return "bought" if str(raw.get("kind") or "").strip().lower() == "bought" else "consume"
 
 
+# Intentionally NOT shared with the other float coercers (_num, _as_float,
+# _to_float, _float_setting): they differ on default/>0-gating/None semantics,
+# so unifying them would change behavior. This one gates on > 0.
 def _safe_float(value, default: float) -> float:
     try:
         result = float(value)

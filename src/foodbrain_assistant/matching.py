@@ -19,7 +19,7 @@ from datetime import date
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .models import Recipe, RecipeIngredient, RecipeMatch, StockItem
-from .normalization import normalize_ingredient_name
+from .normalization import tokenize, tokens_match
 from .scoring import score_stock_item
 
 
@@ -86,7 +86,7 @@ def _build_stock_index(
         urgency = score_stock_item(
             item, today=today, expiry_window_days=expiry_window_days
         )
-        index.append((_tokenize(item.name, aliases), urgency.urgency_score))
+        index.append((tokenize(item.name, aliases), urgency.urgency_score))
     return index
 
 
@@ -95,36 +95,13 @@ def _best_stock_urgency(
     stock_index: List[Tuple[Set[str], float]],
     aliases: Optional[Dict[str, str]] = None,
 ) -> Optional[float]:
-    ingredient_tokens = _tokenize(ingredient.name, aliases)
+    ingredient_tokens = tokenize(ingredient.name, aliases)
     if not ingredient_tokens:
         return None
 
     best: Optional[float] = None
     for stock_tokens, urgency_score in stock_index:
-        if _tokens_match(ingredient_tokens, stock_tokens):
+        if tokens_match(ingredient_tokens, stock_tokens):
             if best is None or urgency_score > best:
                 best = urgency_score
     return best
-
-
-def _tokens_match(ingredient_tokens: Set[str], stock_tokens: Set[str]) -> bool:
-    if not ingredient_tokens or not stock_tokens:
-        return False
-    return ingredient_tokens <= stock_tokens or stock_tokens <= ingredient_tokens
-
-
-def _tokenize(name: str, aliases: Optional[Dict[str, str]] = None) -> Set[str]:
-    normalized = normalize_ingredient_name(name, aliases)
-    return {_singularize(token) for token in normalized.split() if token}
-
-
-def _singularize(word: str) -> str:
-    if len(word) <= 3:
-        return word
-    if word.endswith("ies"):
-        return word[:-3] + "y"
-    if word.endswith(("oes", "ches", "shes", "sses")):
-        return word[:-2]
-    if word.endswith("s") and not word.endswith("ss"):
-        return word[:-1]
-    return word

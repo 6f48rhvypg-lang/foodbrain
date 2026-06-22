@@ -55,6 +55,7 @@ from .api import ApiError, FoodBrainAPI
 from .config import Settings, load_settings
 from .grocy_client import GrocyClient, GrocyClientError, parse_stock_response
 from .models import StockItem
+from .normalization import str_list as _str_list
 from .pairing import PairingError, load_pairings
 from .recipes import RecipesError, parse_recipes_response
 
@@ -366,12 +367,6 @@ def _idea(body: dict, key: str = "idea") -> dict:
     if not isinstance(idea, dict):
         raise ApiError(400, f"{key!r} must be an object")
     return idea
-
-
-def _str_list(value) -> list:
-    if not isinstance(value, list):
-        return []
-    return [str(x).strip() for x in value if str(x).strip()]
 
 
 def _opt_str(value):
