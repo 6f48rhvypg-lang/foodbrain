@@ -23,7 +23,7 @@ class Settings:
     pairing_browse_limit: int = 20
     # Voice/photo intake via an OpenRouter (OpenAI-compatible) model.
     openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "anthropic/claude-3.5-sonnet"
+    openrouter_model: str = DEFAULT_RECIPE_MODEL
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     # Defaults used when intake has to create a brand-new Grocy product.
     intake_default_location: Optional[str] = None
@@ -74,7 +74,7 @@ def load_settings(env_file: Optional[Path] = None) -> Settings:
         openrouter_model=_blank_to_none(
             _setting("FOODBRAIN_OPENROUTER_MODEL", file_values)
         )
-        or "anthropic/claude-3.5-sonnet",
+        or DEFAULT_RECIPE_MODEL,
         openrouter_base_url=_clean_url(
             _setting("FOODBRAIN_OPENROUTER_BASE_URL", file_values)
         )

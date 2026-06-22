@@ -12,10 +12,6 @@ from .pairing import PairingGraph, suggest_pairings
 from .scoring import rank_ingredients_by_urgency
 
 
-def run_once(settings: Settings, stock_items: Optional[list[StockItem]] = None) -> RunResult:
-    return run_once_with_source(settings, stock_items=stock_items, stock_source="sample")
-
-
 def run_once_with_source(
     settings: Settings,
     stock_items: Optional[list[StockItem]] = None,

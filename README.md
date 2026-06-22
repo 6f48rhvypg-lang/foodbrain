@@ -231,7 +231,7 @@ Optional environment variables:
 - `FOODBRAIN_TOP_PAIRING_LIMIT`
 - `FOODBRAIN_PAIRING_PARTNER_LIMIT`
 - `FOODBRAIN_OPENROUTER_API_KEY` (enables voice intake)
-- `FOODBRAIN_OPENROUTER_MODEL` (default `anthropic/claude-3.5-sonnet`)
+- `FOODBRAIN_OPENROUTER_MODEL` (default `google/gemini-3.1-flash-lite`)
 - `FOODBRAIN_OPENROUTER_BASE_URL` (default `https://openrouter.ai/api/v1`)
 - `FOODBRAIN_INTAKE_DEFAULT_LOCATION` / `FOODBRAIN_INTAKE_DEFAULT_UNIT` (defaults for newly created products)
 

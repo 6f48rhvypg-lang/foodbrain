@@ -1,6 +1,127 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-12
+Current date: 2026-06-22
+
+---
+
+## 🔜 NEXT (planned 2026-06-22): internal facelift — code health / snappiness / robustness
+
+**Status: planned, not started.** Full audit done (read every core file). Goal:
+leaner, more robust, snappier, no dead code — **without losing performance or
+changing any user-visible result.** Baseline to protect: `python -m pytest -q`
+= **221 passed / 1 skipped, green.** Every change keeps the suite green; new
+behavior gets a new test.
+
+**Decisions settled with the user:**
+- Scope = **cleanup + low-risk hardening** (behavior-preserving). NOT the aggressive
+  option (no api.py restructure, no thread-pool parallelizing, no cross-request
+  stock cache).
+- Legacy CLI/HA → **keep `cli.py` + `service.py` (diagnostics are useful), remove
+  the dead Home-Assistant webhook path.**
+- Token savings → **conservative only.** Honest finding: the cheap lever is already
+  pulled (prod = `gemini-3.1-flash-lite`, `temperature:0`, `json_object`); LLM calls
+  are **stateless** so catalog/inventory context is load-bearing and can't be trimmed
+  without hurting quality. Net: ~no safe prompt-token cut. (One optional structural
+  save noted in F.)
+
+### A. Dead code & broken tooling
+1. Delete dead `run_once()` wrapper — `service.py:15-16` (never called; CLI uses
+   `run_once_with_source`).
+2. Fix broken `bench/` scripts: `bench/quick_try.py:14` + `bench/run_benchmark.py:28`
+   import `_http_post` from `intake` (gone — now `http_post` in `llm.py`). Both crash
+   on import. Repoint to `from foodbrain_assistant.llm import http_post`; update call
+   sites `quick_try.py:38`, `run_benchmark.py:156`.
+
+### B. De-duplication (no test references these private names — verified safe to move)
+1. Token trio `_tokenize`/`_tokens_match`/`_singularize` is byte-identical in
+   `matching.py:110-130` and `pairing.py:184-204`. Move once into `normalization.py`
+   as `tokenize`/`tokens_match`/`singularize`; update `matching.py`, `pairing.py`,
+   and `api.py:46-47` (`from .matching import _tokenize as _recipe_tokenize, _tokens_match`).
+2. `_str_list` identical in `server.py:371` + `recipes_llm.py:473` → one `str_list`
+   in `normalization.py`, import in both.
+3. `_blank_to_none` near-identical in `config.py:132` + `recipes.py:208` → consolidate
+   the `Any`-typed version into `normalization.py`.
+4. **Leave the float coercers** (`_safe_float`/`_num`/`_as_float`/`_to_float`) — they
+   differ on default/`>0`-gating/`None` semantics; unifying = behavior risk. Add a
+   one-line comment noting the intentional divergence.
+
+### C. Snappiness (behavior-preserving)
+- Real win: static Grocy master data is re-fetched on every screen. `get_stock_items`
+  also fetches `/api/objects/locations` every call (`grocy_client.py:39-45`); every
+  intake/cook commit re-fetches locations+quantity_units (`api.py:341-345`, `665-668`).
+  **Add a module-level TTL cache (~300s, keyed by base URL) for `get_locations` +
+  `get_quantity_units` ONLY.** They change ~never.
+- **Do NOT cache `get_stock_items` or `get_products`**: stock must reflect writes
+  immediately; a stale product list would make intake re-create a just-added product
+  (Grocy 400 on duplicate name). Correctness > marginal speed on a LAN Grocy.
+- Micro: move per-call `from .grocy_client import extract_transaction_id` in
+  `_extract_txn` (`api.py:1376`) up to the top-level grocy_client import.
+
+### D. Robustness (low-risk)
+1. **One retry on transient `URLError` (timeout/conn), GET-only.** `grocy_client._send`
+   (`:255-274`) gets a `retries` param: `_get_json`→`retries=1`, `_write_json`→`retries=0`
+   (never retry a non-idempotent write — would double-book a consume). Add one retry to
+   `llm.http_post` (`:74-89`) on `URLError` too (a completion has no side effects).
+2. **cookmemory corrupt-file: stop silent data loss.** `cookmemory.load:37-50` returns
+   an empty skeleton on `JSONDecodeError`, then the next `save` overwrites the good
+   file. Before returning skeleton, rename bad file → `*.corrupt-<ts>` (the recipe
+   book/history is recoverable).
+3. **cookmemory concurrency.** All mutators do read→modify→write (`add_twist:63`,
+   `add_cooked`, `add_to_book`, `upsert_book`, `add_session`, `remove_session`,
+   `update_session_line`). Two simultaneous SPA requests can lose an update. Server is
+   one process (`ThreadingHTTPServer`) → wrap each mutator's load→mutate→save in a
+   module-level `threading.Lock`.
+
+### E. Stale model default
+- Intake default = `anthropic/claude-3.5-sonnet` (`config.py:26`, `:76-77`, `.env.example:22`)
+  but prod runs `google/gemini-3.1-flash-lite` and that Claude id isn't even in
+  `MODEL_CHOICES`. Change default → `DEFAULT_RECIPE_MODEL` (`gemini-3.1-flash-lite`) +
+  update `.env.example`. Keep intake's "any slug, not validated" behavior; only the
+  default is wrong.
+
+### F. Token savings (conservative)
+- No safe prompt-body cut exists (see decisions above). **Optional structural save:**
+  `recipe_revise` makes TWO LLM calls (`api.py:483-488`) — `extract_twist` + `revise_recipe`.
+  Could merge into one prompt returning recipe + tags (halves calls/latency for "Meine
+  Version"). **Default: leave it** (touches a prompt, brushes the "keep quality" rule);
+  only do if explicitly wanted.
+
+### G. Remove the dead Home-Assistant path (keep the CLI)
+- Keep `cli.py` + `service.py` `run_once_with_source` (CLI diagnostics:
+  `--diagnose-grocy-stock-json`, `--diagnose-grocy-recipes-json`, `--sample`).
+- Remove `home_assistant.py`; drop the `publish_webhook` import + `if
+  settings.home_assistant_webhook_url:` block (`service.py:8`, `:79-80`).
+- Remove `home_assistant_webhook_url` from `Settings` (`config.py:15`, `:58-60`,
+  `.env.example:5-6`) **and** update the 5 test files that pass it to `Settings(...)`:
+  `test_api.py:25`, `test_cook.py:23`, `test_intake.py:25`, `test_recipes_api.py:24`,
+  `test_recipes_llm.py:12`.
+
+### H. Docs sync (small, no code)
+- `architecture.md` still frames HA-webhook as the primary output and predates the
+  SPA/intake/recipe features. Refresh "Current implementation state" + data-flow to
+  match reality (SPA + Grocy write-back + recipe inspiration) and the G decision.
+
+### Out of scope (deliberate)
+Cross-request stock caching (staleness risk); api.py restructure / thread-pool
+fetching (aggressive option, not chosen); renaming `prototype/fridge-now.html` (it's
+the real prod SPA — touches deploy + `server.py` fallback); unifying float coercers.
+
+### Verification
+1. `python -m pytest -q` → 221 passed / 1 skipped + the new tests, after each workstream.
+2. New tests: GET retried once on simulated `URLError` succeeds & write NOT retried
+   (single call); locations/quantity_units served from cache within TTL (transport hit
+   once across two calls) & different base URL bypasses; corrupt cookmemory renamed to
+   `*.corrupt-*` + skeleton returned; 2 concurrent `add_cooked` both land; config
+   default = gemini id but `FOODBRAIN_OPENROUTER_MODEL` still honored.
+3. `python bench/quick_try.py` imports cleanly (proves the bench fix).
+4. Live: start server vs configured Grocy, load `/ui`, confirm stock/recipes/intake
+   work and a consume→`/api/stock` reflects **immediately** (master-data cache didn't
+   stale the stock path). Then **push main + deploy to CT 105** per standing rule.
+
+### Suggested commit slicing
+(1) A + B-fix + E  ·  (2) B de-dup into normalization  ·  (3) C cache + micro  ·
+(4) D retries+corrupt-backup+lock  ·  (5) G HA removal + test updates  ·  (6) H docs.
+Each commit keeps the suite green and is independently revertible.
 
 ---
 

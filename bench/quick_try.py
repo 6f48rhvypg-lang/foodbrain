@@ -11,7 +11,8 @@ from dataclasses import replace
 sys.path.insert(0, "src")
 
 from foodbrain_assistant.config import load_settings
-from foodbrain_assistant.intake import understand_transcript, reconcile_items, _http_post
+from foodbrain_assistant.intake import understand_transcript, reconcile_items
+from foodbrain_assistant.llm import http_post
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "google/gemini-3.1-flash-lite-preview"
 
@@ -35,7 +36,7 @@ captured = {}
 
 
 def transport(url, headers, body, timeout):
-    raw = _http_post(url, headers, body, timeout)
+    raw = http_post(url, headers, body, timeout)
     captured["raw"] = raw
     return raw
 

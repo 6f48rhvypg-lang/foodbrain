@@ -25,8 +25,8 @@ from foodbrain_assistant.intake import (
     IntakeError,
     reconcile_items,
     understand_transcript,
-    _http_post,
 )
+from foodbrain_assistant.llm import http_post
 from foodbrain_assistant.normalization import normalize_ingredient_name
 
 # Models to compare. First is the current production baseline.
@@ -153,7 +153,7 @@ def run_model(model, cases, default_catalog, base_settings):
     captured = {}
 
     def transport(url, headers, body, timeout):
-        raw = _http_post(url, headers, body, timeout)
+        raw = http_post(url, headers, body, timeout)
         captured["raw"] = raw
         return raw
 
