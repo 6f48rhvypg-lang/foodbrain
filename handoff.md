@@ -4,7 +4,52 @@ Current date: 2026-06-22
 
 ---
 
-## 🔜 NEXT (planned 2026-06-22): internal facelift — code health / snappiness / robustness
+## ✅ DONE (2026-06-22): internal facelift — code health / snappiness / robustness
+
+**Shipped + deployed to CT 105** (main `22c9b32`). Six behavior-preserving
+slices, suite **234 passed / 1 skipped** (was 221/1 — +13 new tests, no
+behavior change to existing ones). Each slice is an independently revertible
+commit:
+
+1. **A+B-fix+E** — deleted dead `service.run_once`; repointed the two `bench/`
+   scripts off the gone `intake._http_post` → `llm.http_post` (they import
+   again); intake model default `anthropic/claude-3.5-sonnet` →
+   `google/gemini-3.1-flash-lite` (config + .env.example + README; env override
+   still honored). +2 config tests.
+2. **B de-dup** — `tokenize`/`tokens_match`/`singularize` (were byte-identical
+   in matching.py + pairing.py), `str_list` (server.py + recipes_llm.py), and
+   `blank_to_none` (config.py + recipes.py) consolidated into `normalization.py`;
+   all call sites import from there. Comment added noting the float coercers
+   stay deliberately un-merged.
+3. **C cache + micro** — module-level TTL cache (~300s, keyed by base_url+kind)
+   for `get_locations`/`get_quantity_units` ONLY (returns a copy each call);
+   stock/products never cached. Hoisted the per-call `extract_transaction_id`
+   import. +4 cache tests.
+4. **D robustness** — GET retries once on transient `URLError`, writes never
+   retried (`_send(retries=)`); `llm.http_post` retries once too; corrupt
+   cookmemory file renamed `*.corrupt-<ts>` before skeleton (no silent data
+   loss); every cookmemory mutator wrapped in a module `threading.Lock`. +7
+   tests (incl. 20 concurrent `add_cooked` all land).
+5. **G** — removed the dead Home-Assistant webhook path (`home_assistant.py`,
+   the Settings field + loader, .env.example/README mentions; 5 test files
+   updated). Kept cli.py + `service.run_once_with_source` diagnostics.
+6. **H** — `architecture.md` refreshed to the SPA + Grocy write-back + recipe
+   reality (was still HA-webhook-first).
+
+**Verified:** suite green after every slice; bench imports resolve; server
+boots clean on `--sample` (health/stock/ui all serve). Deployed to CT 105
+(`git pull` + restart, health `{"ok":true,"intake_enabled":true}`); live
+`/api/stock` returns real Grocy data with location names resolved through the
+new master-data cache (176 items, "Fridge" etc.). The net-zero live
+consume→undo "writes-reflect-immediately" walk was **not** auto-run (a live
+inventory mutation was blocked by the safety classifier) — it's covered by the
+unit/HTTP suite with mutating fakes; walk it on the phone if desired (the cache
+touches only locations/units, never stock, so a consume re-fetches fresh by
+construction).
+
+---
+
+## 🗄 ORIGINAL PLAN (2026-06-22): internal facelift — code health / snappiness / robustness
 
 **Status: planned, not started.** Full audit done (read every core file). Goal:
 leaner, more robust, snappier, no dead code — **without losing performance or
