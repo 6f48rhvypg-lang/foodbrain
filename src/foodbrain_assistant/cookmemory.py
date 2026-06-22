@@ -15,9 +15,17 @@ The path is always injected (tests pass a temp file); nothing here hardcodes it.
 from datetime import datetime, timezone
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Iterable, List, Optional
 import uuid
+
+
+# Every mutator does load -> modify -> save; without serialization two concurrent
+# SPA requests could read the same state and the later save would clobber the
+# earlier one. The server is a single ThreadingHTTPServer process, so a plain
+# module-level lock makes the read-modify-write atomic across its threads.
+_LOCK = threading.Lock()
 
 
 def _now_iso() -> str:
@@ -44,10 +52,28 @@ def load(path) -> dict:
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
+        _backup_corrupt(p)
         return _skeleton()
     if not isinstance(data, dict):
+        _backup_corrupt(p)
         return _skeleton()
     return _normalize(data)
+
+
+def _backup_corrupt(p: Path) -> None:
+    """Preserve an unreadable store before the next save overwrites it.
+
+    Returning a fresh skeleton on a corrupt file means the very next mutator
+    would ``save`` over the (recoverable) book/history. Rename the bad file to
+    ``*.corrupt-<ts>`` first so it can be inspected/recovered by hand.
+    """
+    if not p.exists():
+        return
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    try:
+        os.replace(p, p.with_name(p.name + f".corrupt-{stamp}"))
+    except OSError:  # pragma: no cover - best-effort, never block the read
+        pass
 
 
 def save(path, data: dict) -> None:
@@ -62,44 +88,47 @@ def save(path, data: dict) -> None:
 
 def add_twist(path, *, dish: str, change: str, note: str = "", tags: Optional[dict] = None) -> None:
     """Record a twist and fold its taste tags into ``taste.likes``/``dislikes``."""
-    data = load(path)
-    data["twists"].append(
-        {
-            "dish": str(dish or "").strip(),
-            "change": str(change or "").strip(),
-            "note": str(note or "").strip(),
-            "ts": _now_iso(),
-        }
-    )
-    tags = tags or {}
-    data["taste"]["likes"] = _merge_unique(data["taste"]["likes"], tags.get("likes"))
-    data["taste"]["dislikes"] = _merge_unique(
-        data["taste"]["dislikes"], tags.get("dislikes")
-    )
-    save(path, data)
+    with _LOCK:
+        data = load(path)
+        data["twists"].append(
+            {
+                "dish": str(dish or "").strip(),
+                "change": str(change or "").strip(),
+                "note": str(note or "").strip(),
+                "ts": _now_iso(),
+            }
+        )
+        tags = tags or {}
+        data["taste"]["likes"] = _merge_unique(data["taste"]["likes"], tags.get("likes"))
+        data["taste"]["dislikes"] = _merge_unique(
+            data["taste"]["dislikes"], tags.get("dislikes")
+        )
+        save(path, data)
 
 
 def add_cooked(path, *, dish: str) -> None:
     """Log a cooked dish for anti-repeat (newest entries win in lookups)."""
-    data = load(path)
-    data["cooked"].append({"dish": str(dish or "").strip(), "ts": _now_iso()})
-    save(path, data)
+    with _LOCK:
+        data = load(path)
+        data["cooked"].append({"dish": str(dish or "").strip(), "ts": _now_iso()})
+        save(path, data)
 
 
 def add_to_book(path, *, title: str, guidance: Iterable[str], buy: Iterable[str] = (), twist: str = "") -> dict:
     """Append a saved recipe to the book and return the stored entry (with id)."""
-    data = load(path)
-    entry = {
-        "id": str(uuid.uuid4()),
-        "title": str(title or "").strip(),
-        "guidance": [str(g).strip() for g in (guidance or []) if str(g).strip()],
-        "buy": [str(b).strip() for b in (buy or []) if str(b).strip()],
-        "twist": str(twist or "").strip(),
-        "ts": _now_iso(),
-    }
-    data["book"].append(entry)
-    save(path, data)
-    return entry
+    with _LOCK:
+        data = load(path)
+        entry = {
+            "id": str(uuid.uuid4()),
+            "title": str(title or "").strip(),
+            "guidance": [str(g).strip() for g in (guidance or []) if str(g).strip()],
+            "buy": [str(b).strip() for b in (buy or []) if str(b).strip()],
+            "twist": str(twist or "").strip(),
+            "ts": _now_iso(),
+        }
+        data["book"].append(entry)
+        save(path, data)
+        return entry
 
 
 def upsert_book(
@@ -117,24 +146,25 @@ def upsert_book(
     entry (keeping its id) rather than pile up near-duplicates. Match is
     case-insensitive on the title; the stored entry takes the new ``title``.
     """
-    data = load(path)
-    entry = {
-        "title": str(title or "").strip(),
-        "guidance": [str(g).strip() for g in (guidance or []) if str(g).strip()],
-        "buy": [str(b).strip() for b in (buy or []) if str(b).strip()],
-        "twist": str(twist or "").strip(),
-        "ts": _now_iso(),
-    }
-    key = str(match_title or "").strip().lower()
-    for existing in data["book"]:
-        if str(existing.get("title") or "").strip().lower() == key and key:
-            existing.update(entry, id=existing.get("id") or str(uuid.uuid4()))
-            save(path, data)
-            return existing
-    entry["id"] = str(uuid.uuid4())
-    data["book"].append(entry)
-    save(path, data)
-    return entry
+    with _LOCK:
+        data = load(path)
+        entry = {
+            "title": str(title or "").strip(),
+            "guidance": [str(g).strip() for g in (guidance or []) if str(g).strip()],
+            "buy": [str(b).strip() for b in (buy or []) if str(b).strip()],
+            "twist": str(twist or "").strip(),
+            "ts": _now_iso(),
+        }
+        key = str(match_title or "").strip().lower()
+        for existing in data["book"]:
+            if str(existing.get("title") or "").strip().lower() == key and key:
+                existing.update(entry, id=existing.get("id") or str(uuid.uuid4()))
+                save(path, data)
+                return existing
+        entry["id"] = str(uuid.uuid4())
+        data["book"].append(entry)
+        save(path, data)
+        return entry
 
 
 def recent_cooked(path, *, days: int = 21) -> List[str]:
@@ -184,16 +214,17 @@ def add_session(path, *, dish: str, lines: Iterable[dict]) -> dict:
     booked ``amount``, the Grocy ``transaction_id`` (for undo), whether the
     product is now ``depleted``, and its ``kind`` (``consume``/``bought``).
     """
-    data = load(path)
-    entry = {
-        "id": str(uuid.uuid4()),
-        "dish": str(dish or "").strip(),
-        "lines": [_clean_line(line) for line in (lines or [])],
-        "ts": _now_iso(),
-    }
-    data["sessions"].append(entry)
-    save(path, data)
-    return entry
+    with _LOCK:
+        data = load(path)
+        entry = {
+            "id": str(uuid.uuid4()),
+            "dish": str(dish or "").strip(),
+            "lines": [_clean_line(line) for line in (lines or [])],
+            "ts": _now_iso(),
+        }
+        data["sessions"].append(entry)
+        save(path, data)
+        return entry
 
 
 def sessions(path) -> List[dict]:
@@ -204,35 +235,37 @@ def sessions(path) -> List[dict]:
 
 def remove_session(path, session_id: str) -> Optional[dict]:
     """Drop a stored session (used after a whole-session undo); return it, or None."""
-    data = load(path)
-    kept, removed = [], None
-    for entry in data.get("sessions", []):
-        if entry.get("id") == session_id and removed is None:
-            removed = entry
-        else:
-            kept.append(entry)
-    if removed is None:
-        return None
-    data["sessions"] = kept
-    save(path, data)
-    return removed
+    with _LOCK:
+        data = load(path)
+        kept, removed = [], None
+        for entry in data.get("sessions", []):
+            if entry.get("id") == session_id and removed is None:
+                removed = entry
+            else:
+                kept.append(entry)
+        if removed is None:
+            return None
+        data["sessions"] = kept
+        save(path, data)
+        return removed
 
 
 def update_session_line(path, session_id: str, line_index: int, **changes) -> Optional[dict]:
     """Patch a single line of a stored session; returns the updated session."""
-    data = load(path)
-    for entry in data.get("sessions", []):
-        if entry.get("id") != session_id:
-            continue
-        lines = entry.get("lines") or []
-        if not (0 <= line_index < len(lines)):
-            return None
-        for key in ("amount", "transaction_id", "depleted"):
-            if key in changes:
-                lines[line_index][key] = changes[key]
-        save(path, data)
-        return entry
-    return None
+    with _LOCK:
+        data = load(path)
+        for entry in data.get("sessions", []):
+            if entry.get("id") != session_id:
+                continue
+            lines = entry.get("lines") or []
+            if not (0 <= line_index < len(lines)):
+                return None
+            for key in ("amount", "transaction_id", "depleted"):
+                if key in changes:
+                    lines[line_index][key] = changes[key]
+            save(path, data)
+            return entry
+        return None
 
 
 # --- internals -------------------------------------------------------------

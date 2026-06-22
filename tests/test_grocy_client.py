@@ -1,6 +1,7 @@
 from datetime import date
 import unittest
 from unittest import mock
+from urllib.error import URLError
 
 from foodbrain_assistant import grocy_client as gc
 from foodbrain_assistant.grocy_client import (
@@ -78,6 +79,53 @@ class MasterDataCacheTest(unittest.TestCase):
             client.get_quantity_units()
         # one fetch per kind, then served from cache
         self.assertEqual(len(calls), 2)
+
+
+class TransientRetryTest(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_master_cache()
+        self.addCleanup(clear_master_cache)
+
+    def test_get_retried_once_then_succeeds(self) -> None:
+        attempts = []
+
+        def flaky_urlopen(request, timeout=None):
+            attempts.append(request.full_url)
+            if len(attempts) == 1:
+                raise URLError("connection reset")
+            return _FakeResponse(b'[{"id": 1, "name": "Fridge"}]')
+
+        client = GrocyClient("http://grocy", "key")
+        with mock.patch.object(gc, "urlopen", flaky_urlopen):
+            result = client.get_locations()
+        self.assertEqual(result, [{"id": "1", "name": "Fridge"}])
+        self.assertEqual(len(attempts), 2)  # failed once, retried, succeeded
+
+    def test_get_gives_up_after_one_retry(self) -> None:
+        attempts = []
+
+        def always_fails(request, timeout=None):
+            attempts.append(request.full_url)
+            raise URLError("down")
+
+        client = GrocyClient("http://grocy", "key")
+        with mock.patch.object(gc, "urlopen", always_fails):
+            with self.assertRaises(GrocyClientError):
+                client.get_locations()
+        self.assertEqual(len(attempts), 2)  # original + one retry, then give up
+
+    def test_write_is_not_retried(self) -> None:
+        attempts = []
+
+        def always_fails(request, timeout=None):
+            attempts.append(request.full_url)
+            raise URLError("down")
+
+        client = GrocyClient("http://grocy", "key", allow_writes=True)
+        with mock.patch.object(gc, "urlopen", always_fails):
+            with self.assertRaises(GrocyClientError):
+                client.consume_product("12", 1.0)
+        self.assertEqual(len(attempts), 1)  # a non-idempotent write is tried once
 
 
 class GrocyClientTest(unittest.TestCase):

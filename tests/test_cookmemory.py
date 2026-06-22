@@ -38,6 +38,35 @@ class CookMemoryTest(unittest.TestCase):
         data = cookmemory.load(self.path)
         self.assertEqual(data, cookmemory._skeleton())
 
+    def test_corrupt_file_is_backed_up_not_overwritten(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text("{not json", encoding="utf-8")
+        # The read renames the bad file so the next save can't clobber it.
+        cookmemory.load(self.path)
+        backups = list(self.path.parent.glob("*.corrupt-*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(encoding="utf-8"), "{not json")
+        self.assertFalse(self.path.exists())
+
+    def test_concurrent_add_cooked_both_land(self) -> None:
+        import threading
+
+        dishes = [f"Gericht {i}" for i in range(20)]
+        barrier = threading.Barrier(len(dishes))
+
+        def worker(dish: str) -> None:
+            barrier.wait()  # maximize overlap on the read-modify-write
+            cookmemory.add_cooked(self.path, dish=dish)
+
+        threads = [threading.Thread(target=worker, args=(d,)) for d in dishes]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        stored = {row["dish"] for row in cookmemory.load(self.path)["cooked"]}
+        self.assertEqual(stored, set(dishes))  # no update was lost
+
     def test_partial_file_is_normalized(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps({"taste": {"likes": ["Chili"]}}), encoding="utf-8")

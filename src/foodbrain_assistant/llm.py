@@ -71,7 +71,9 @@ def post_chat_json(
     return parse_json_object(content)
 
 
-def http_post(url: str, headers: Dict[str, str], body: bytes, timeout: int) -> str:
+def http_post(
+    url: str, headers: Dict[str, str], body: bytes, timeout: int, retries: int = 1
+) -> str:
     request = Request(url, data=body, headers=headers, method="POST")
     try:
         with urlopen(request, timeout=timeout) as response:
@@ -86,6 +88,10 @@ def http_post(url: str, headers: Dict[str, str], body: bytes, timeout: int) -> s
             f"OpenRouter request failed with HTTP {exc.code}: {detail}".rstrip(": ")
         ) from exc
     except URLError as exc:
+        # A completion has no side effects, so a transient transport failure
+        # (timeout / connection refused) is safe to retry once.
+        if retries > 0:
+            return http_post(url, headers, body, timeout, retries=retries - 1)
         raise LlmError(f"OpenRouter request failed: {exc.reason}") from exc
 
 

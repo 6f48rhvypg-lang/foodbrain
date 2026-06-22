@@ -258,7 +258,8 @@ class GrocyClient:
     def _get_json(self, path: str) -> Any:
         url = urljoin(self.base_url, path)
         request = Request(url, headers={"GROCY-API-KEY": self.api_key})
-        return self._send(request)
+        # GETs are idempotent, so a single retry papers over a transient blip.
+        return self._send(request, retries=1)
 
     def _write_json(self, path: str, method: str, body: Optional[dict[str, Any]]) -> Any:
         if not self.allow_writes:
@@ -277,9 +278,13 @@ class GrocyClient:
             },
             method=method,
         )
-        return self._send(request, allow_empty=True)
+        # retries=0: never retry a write — a transient error might fire AFTER
+        # Grocy already applied the change, so retrying could double-book it.
+        return self._send(request, allow_empty=True, retries=0)
 
-    def _send(self, request: Request, allow_empty: bool = False) -> Any:
+    def _send(
+        self, request: Request, allow_empty: bool = False, retries: int = 0
+    ) -> Any:
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 raw = response.read().decode("utf-8")
@@ -298,6 +303,10 @@ class GrocyClient:
                 f"Grocy request failed with HTTP {exc.code}{suffix}"
             ) from exc
         except URLError as exc:
+            # Transient transport failure (timeout / connection refused). Retry
+            # GETs once; writes pass retries=0 and surface immediately.
+            if retries > 0:
+                return self._send(request, allow_empty=allow_empty, retries=retries - 1)
             raise GrocyClientError(f"Grocy request failed: {exc.reason}") from exc
         if allow_empty and not raw.strip():
             return None
