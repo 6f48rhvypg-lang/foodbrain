@@ -386,6 +386,13 @@
     margin: 2px 0 12px; padding: 0;
   }
   .refine-toggle:hover { color: var(--ink); }
+  .refine-head { display: flex; align-items: center; justify-content: space-between; }
+  .refine-edit {
+    background: none; border: none; cursor: pointer; padding: 0;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+    margin: 2px 0 12px;
+  }
+  .refine-edit:hover { color: var(--ink); }
   .refine-body { display: none; }
   .refine-body.show { display: block; }
   .ideacard {
@@ -807,6 +814,20 @@
   .moodlabel .opt { text-transform: none; letter-spacing: 0; color: var(--ink-faint); opacity: .7; }
   .moodopts { display: flex; flex-wrap: wrap; gap: 8px; }
   .moodopts .chip { box-shadow: none; }
+  /* edit mode (.editing on #refineBody): jiggle + delete ⊗ + dashed add-chip */
+  .chipx { display: none; margin-left: 6px; opacity: .6; font-weight: 700; }
+  .editing .chipx { display: inline; }
+  .chip.addtag { display: none; border-style: dashed; color: var(--ink-faint); }
+  .editing .chip.addtag { display: inline-flex; }
+  .chip.addinput {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; width: 96px;
+    color: var(--ink); background: var(--surface); outline: none;
+  }
+  .editing .moodopts .chip:not(.addtag):not(.addinput) {
+    animation: tagjiggle .26s var(--ease) infinite alternate;
+  }
+  @keyframes tagjiggle { from { transform: rotate(-.8deg); } to { transform: rotate(.8deg); } }
+  @media (prefers-reduced-motion: reduce) { .editing .moodopts .chip { animation: none; } }
 
   /* ---------- voice intake ---------- */
   .iactions { display: inline-flex; gap: 5px; }
@@ -2188,9 +2209,40 @@ const MOOD_GROUPS = [
   { key: 'needs', label: 'Besonderes', sub: 'optional · mehrfach', multi: true, opts: [
     ['warm','Warm'], ['kalt','Kalt'], ['sättigend','Sättigend'],
     ['leicht','Leicht'], ['scharf','Scharf'], ['mild','Mild'],
+    ['proteinreich','Proteinreich'],
   ]},
 ];
 const mood = { cuisine: 'egal', style: '', needs: new Set() };
+
+/* User customization of the refine tags, persisted as overrides (not a full
+   snapshot) so future changes to the defaults still surface.
+   { added:{groupKey:[[val,label],...]}, removed:{groupKey:[val,...]} } */
+let TAGS = { added: {}, removed: {} };
+try { TAGS = Object.assign({ added:{}, removed:{} }, JSON.parse(localStorage.getItem('fb-tags') || '{}')); } catch(_){}
+function saveTags(){ try { localStorage.setItem('fb-tags', JSON.stringify(TAGS)); } catch(_){} }
+function tagSlug(s){ return String(s).trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9äöüß_-]/g,'') || 'tag'; }
+/* Effective opts for a group: defaults minus removed, plus user-added. */
+function effectiveOpts(g){
+  const rm = TAGS.removed[g.key] || [];
+  return g.opts.filter(([v])=>!rm.includes(v)).concat(TAGS.added[g.key] || []);
+}
+let editTags = false; // refine "Tags bearbeiten" mode
+
+/* One refine group → HTML. Renders a delete ⊗ on every chip plus a dashed
+   "＋ Tag" add-chip; both stay hidden until the body gets the .editing class. */
+function moodGroupHtml(g){
+  return `
+    <div class="moodq">
+      <div class="moodlabel">${g.label}${g.sub?` <span class="opt">(${g.sub})</span>`:''}</div>
+      <div class="moodopts" data-group="${g.key}" data-multi="${g.multi?1:0}">
+        ${effectiveOpts(g).map(([val,txt])=>{
+          const on = g.multi ? mood[g.key].has(val) : mood[g.key]===val;
+          return `<span class="chip${on?' active':''}" data-val="${val}">${esc(txt)}<span class="chipx" title="Entfernen">×</span></span>`;
+        }).join('')}
+        <span class="chip addtag" data-add="${g.key}">＋ Tag</span>
+      </div>
+    </div>`;
+}
 
 function moodSheetHtml(names){
   const group = g => `
@@ -2217,18 +2269,81 @@ function wireMood(){
   sheet.querySelectorAll('.moodopts').forEach(box=>{
     const key = box.dataset.group, multi = box.dataset.multi === '1';
     box.querySelectorAll('.chip').forEach(chip=>{
+      if (chip.classList.contains('addtag')){
+        chip.addEventListener('click', ()=>startAddTag(chip, key));
+        return;
+      }
+      const x = chip.querySelector('.chipx');
+      if (x) x.addEventListener('click', e=>{ e.stopPropagation(); removeTag(key, chip.dataset.val, multi); });
       chip.addEventListener('click', ()=>{
+        if (editTags) return; // in edit mode the chip body does nothing
         const val = chip.dataset.val;
         if (multi){
           mood[key].has(val) ? mood[key].delete(val) : mood[key].add(val);
           chip.classList.toggle('active');
         } else {
           mood[key] = (mood[key]===val) ? '' : val;
-          box.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c===chip && mood[key]===val));
+          box.querySelectorAll('.chip:not(.addtag)').forEach(c=>c.classList.toggle('active', c===chip && mood[key]===val));
         }
       });
     });
   });
+}
+
+/* Rebuild the refine body in place (after add/delete) and re-wire it,
+   preserving the current edit-mode state. */
+function renderRefine(){
+  const body = document.getElementById('refineBody');
+  if (!body) return;
+  body.innerHTML = MOOD_GROUPS.map(moodGroupHtml).join('');
+  body.classList.toggle('editing', editTags);
+  wireMood();
+}
+
+/* Delete a tag: a built-in default is hidden via `removed`; a custom tag is
+   dropped from `added`. Either way, clear it from the live selection. */
+function removeTag(key, val, multi){
+  const grp = MOOD_GROUPS.find(g=>g.key===key);
+  if (grp && grp.opts.some(([v])=>v===val)){
+    (TAGS.removed[key] = TAGS.removed[key] || []).push(val);
+  } else {
+    TAGS.added[key] = (TAGS.added[key] || []).filter(([v])=>v!==val);
+  }
+  if (multi) mood[key].delete(val); else if (mood[key]===val) mood[key] = '';
+  saveTags();
+  renderRefine();
+}
+
+/* Swap the "＋ Tag" chip for an inline input; commit on Enter/blur. */
+function startAddTag(chip, key){
+  const input = document.createElement('input');
+  input.className = 'chip addinput'; input.type = 'text';
+  input.placeholder = 'Tag…'; input.maxLength = 24;
+  chip.replaceWith(input);
+  input.focus();
+  let done = false;
+  const commit = ()=>{
+    if (done) return; done = true;
+    const label = input.value.trim();
+    const grp = MOOD_GROUPS.find(g=>g.key===key);
+    if (label){
+      const val = tagSlug(label);
+      if (!effectiveOpts(grp).some(([v])=>v===val)){
+        if ((TAGS.removed[key]||[]).includes(val)){
+          TAGS.removed[key] = TAGS.removed[key].filter(v=>v!==val); // un-delete a default
+        } else {
+          (TAGS.added[key] = TAGS.added[key] || []).push([val, label]);
+        }
+        saveTags();
+      }
+    }
+    renderRefine();
+  };
+  input.addEventListener('keydown', e=>{
+    if (e.key==='Enter'){ commit(); }
+    else if (e.key==='Escape'){ done = true; renderRefine(); }
+  });
+  input.addEventListener('blur', commit);
 }
 
 /* ============================================================
@@ -2261,16 +2376,6 @@ function ideaSig(preferences){
 }
 
 function inspoEntryHtml(){
-  const moodGroup = g => `
-    <div class="moodq">
-      <div class="moodlabel">${g.label}${g.sub?` <span class="opt">(${g.sub})</span>`:''}</div>
-      <div class="moodopts" data-group="${g.key}" data-multi="${g.multi?1:0}">
-        ${g.opts.map(([val,txt])=>{
-          const on = g.multi ? mood[g.key].has(val) : mood[g.key]===val;
-          return `<span class="chip${on?' active':''}" data-val="${val}">${esc(txt)}</span>`;
-        }).join('')}
-      </div>
-    </div>`;
   return `
     <h3>Ideen holen</h3>
     <div class="h3sub">koch aus dem, was da ist</div>
@@ -2278,8 +2383,11 @@ function inspoEntryHtml(){
       <div class="mopt${inspoMode==='stock'?' active':''}" data-mode="stock">🥕 Aus dem Vorrat</div>
       <div class="mopt${inspoMode==='shop'?' active':''}" data-mode="shop">🛒 Mit Einkauf</div>
     </div>
-    <button class="refine-toggle" id="refineToggle" type="button">⚙︎ Verfeinern <span class="chev">▾</span></button>
-    <div class="refine-body" id="refineBody">${MOOD_GROUPS.map(moodGroup).join('')}</div>
+    <div class="refine-head">
+      <button class="refine-toggle" id="refineToggle" type="button">⚙︎ Verfeinern <span class="chev">▾</span></button>
+      <button class="refine-edit" id="refineEdit" type="button" hidden>✏️ Tags</button>
+    </div>
+    <div class="refine-body" id="refineBody">${MOOD_GROUPS.map(moodGroupHtml).join('')}</div>
     <div class="row">
       <button class="btn ghost" id="closeSheet">Schließen</button>
       <button class="btn solid" id="getIdeasBtn">Ideen holen</button>
@@ -2289,6 +2397,7 @@ function inspoEntryHtml(){
 async function openInspiration(){
   stopRecording();
   await loadRecipeConfig();
+  editTags = false;
   openSheet(inspoEntryHtml());
   wireClose();
   wireMood();
@@ -2296,8 +2405,17 @@ async function openInspiration(){
     inspoMode = b.dataset.mode;
     sheet.querySelectorAll('.modetoggle .mopt').forEach(x=>x.classList.toggle('active', x===b));
   }));
+  const editBtn = document.getElementById('refineEdit');
   document.getElementById('refineToggle').addEventListener('click', ()=>{
-    document.getElementById('refineBody').classList.toggle('show');
+    const body = document.getElementById('refineBody');
+    const open = body.classList.toggle('show');
+    editBtn.hidden = !open;
+    if (!open && editTags){ editTags = false; body.classList.remove('editing'); editBtn.textContent = '✏️ Tags'; }
+  });
+  editBtn.addEventListener('click', ()=>{
+    editTags = !editTags;
+    document.getElementById('refineBody').classList.toggle('editing', editTags);
+    editBtn.textContent = editTags ? 'Fertig' : '✏️ Tags';
   });
   document.getElementById('getIdeasBtn').addEventListener('click', ()=>fetchIdeas(false));
 }
