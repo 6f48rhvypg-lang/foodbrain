@@ -1,0 +1,62 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Cook confirm · E — Opt-out list</title>
+<style>
+:root{--bg-0:#f1e7d8;--bg-1:#f6eee2;--bg-2:#fbf4e9;--surface:#fff;--surface-2:#faf5ec;--ink:#243528;--ink-dim:#647264;--ink-faint:#9aa494;--line:rgba(40,70,50,.12);--line-soft:rgba(40,70,50,.07);--accent:#44694e;--accent-ink:#f4fbf2;--accent-bg:#e7efe7;--amber:#ef8e4e;--amber-ink:#3a2410;--amber-bg:#fbe7d4;--shadow:0 18px 50px rgba(40,60,45,.18)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hanken Grotesk",system-ui,sans-serif;color:var(--ink);background:radial-gradient(120% 80% at 50% -10%,var(--bg-2),transparent 55%),linear-gradient(180deg,var(--bg-1),var(--bg-0));min-height:100vh;-webkit-font-smoothing:antialiased}
+.app{max-width:390px;margin:0 auto}
+.backdrop{padding:15px 22px 5px;display:flex;justify-content:space-between;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);opacity:.5}
+.sheet{background:var(--surface);border:1px solid var(--line);border-bottom:none;border-radius:24px 24px 0 0;padding:16px 18px 24px;box-shadow:var(--shadow);min-height:100vh}
+.grip{width:40px;height:4px;border-radius:4px;background:var(--line);margin:2px auto 14px}
+h3{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:22px;line-height:1.18;letter-spacing:-.01em;margin-bottom:6px}
+.sub{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:14px}
+.summary{background:var(--accent-bg);border:1px solid rgba(68,105,78,.25);border-radius:16px;padding:14px 16px;margin-bottom:14px}
+.summary .big{font-weight:700;font-size:15px;color:var(--accent);margin-bottom:9px}
+.cta{display:block;width:100%;cursor:pointer;border:none;border-radius:12px;padding:13px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:700;font-size:15px}
+.cta .ms{font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:500;opacity:.8;margin-left:7px}
+.row{display:flex;align-items:center;gap:9px;padding:12px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+.row .emoji{font-size:16px}
+.row .name{font-weight:700;font-size:15px;flex:1 1 auto;min-width:0}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px}
+.chip.green{color:var(--accent);background:var(--accent-bg)}
+.chip.amber{color:var(--amber-ink);background:var(--amber-bg)}
+.chip.grey{color:var(--ink-dim);background:var(--surface-2);border:1px solid var(--line)}
+.chev{color:var(--ink-faint);font-size:13px;width:12px;text-align:center}
+.expand{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:2px 0 10px}
+.expand .el{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:9px}
+.seg{display:flex;gap:7px}
+.seg button{flex:1;border:1.5px solid var(--line);background:var(--surface);border-radius:11px;padding:10px 4px;font:inherit;font-size:12px;font-weight:600;color:var(--ink-dim);cursor:pointer}
+.seg button.on.grey{background:#fff;border-color:var(--ink-dim);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.seg .exact{margin-top:9px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-dim);text-decoration:underline;text-underline-offset:2px}
+.foot{margin-top:18px}
+.btn.ghost{width:100%;cursor:pointer;border:1px solid var(--line);border-radius:13px;padding:13px;background:var(--surface-2);color:var(--ink);font:inherit;font-weight:600;font-size:14px}
+</style></head>
+<body><div class="app">
+<div class="backdrop"><span>was haben jetzt</span><span>×</span></div>
+<div class="sheet">
+  <div class="grip"></div>
+  <h3>Nduja-Linsen-Pfanne mit Sherrytomaten, Ziegenkäse und Baguette</h3>
+  <div class="sub">geschätzt — nur Abweichungen antippen</div>
+
+  <div class="summary">
+    <div class="big">5 Zutaten geschätzt · passt das?</div>
+    <button class="cta">Passt — verbuchen<span class="ms">1× leer · 3× Hälfte · 1× fast voll</span></button>
+  </div>
+
+  <div class="row"><span class="emoji">🥓</span><span class="name">Panetta Schinken</span><span class="chip amber">die Hälfte</span><span class="chev">⌄</span></div>
+  <div class="row"><span class="emoji">🧅</span><span class="name">Zwiebeln</span><span class="chip grey">fast voll</span><span class="chev">⌃</span></div>
+  <div class="expand">
+    <div class="el">Zwiebeln — wie viel ist noch übrig?</div>
+    <div class="seg"><button>alles weg</button><button>ein Rest</button><button>die Hälfte</button><button class="on grey">fast voll</button></div>
+    <div class="exact">≈ 5 Stück übrig · genau eingeben ›</div>
+  </div>
+  <div class="row"><span class="emoji">🌶️</span><span class="name">Nduja Paste</span><span class="chip amber">die Hälfte</span><span class="chev">⌄</span></div>
+  <div class="row"><span class="emoji">🫘</span><span class="name">Beluga Linsen</span><span class="chip amber">die Hälfte</span><span class="chev">⌄</span></div>
+  <div class="row"><span class="emoji">🥖</span><span class="name">Aufbackbaguette</span><span class="chip green">leer ✓</span><span class="chev">⌄</span></div>
+
+  <div class="foot"><button class="btn ghost">Schließen</button></div>
+</div>
+</div></body></html>

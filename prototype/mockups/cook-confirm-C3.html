@@ -1,0 +1,106 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Cook confirm · C3 — Detented % stops</title>
+<style>
+:root{--bg-0:#f1e7d8;--bg-1:#f6eee2;--bg-2:#fbf4e9;--surface:#fff;--surface-2:#faf5ec;--ink:#243528;--ink-dim:#647264;--ink-faint:#9aa494;--line:rgba(40,70,50,.12);--line-soft:rgba(40,70,50,.07);--accent:#44694e;--accent-ink:#f4fbf2;--amber:#ef8e4e;--shadow:0 18px 50px rgba(40,60,45,.18)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hanken Grotesk",system-ui,sans-serif;color:var(--ink);background:radial-gradient(120% 80% at 50% -10%,var(--bg-2),transparent 55%),linear-gradient(180deg,var(--bg-1),var(--bg-0));min-height:100vh;-webkit-font-smoothing:antialiased}
+.app{max-width:390px;margin:0 auto}
+.backdrop{padding:15px 22px 5px;display:flex;justify-content:space-between;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);opacity:.5}
+.sheet{background:var(--surface);border:1px solid var(--line);border-bottom:none;border-radius:24px 24px 0 0;padding:16px 18px 24px;box-shadow:var(--shadow);min-height:100vh}
+.grip{width:40px;height:4px;border-radius:4px;background:var(--line);margin:2px auto 14px}
+h3{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:22px;line-height:1.18;letter-spacing:-.01em;margin-bottom:6px}
+.sub{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:14px}
+.item{position:relative;padding:16px 14px 14px;margin:13px 0;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(250,245,236,.5));border:1px solid var(--line-soft);overflow:hidden}
+.item::before{content:"";position:absolute;inset:0;z-index:0;background:radial-gradient(55% 95% at 16% 22%,rgba(95,140,110,.34),transparent 60%),radial-gradient(55% 95% at 90% 78%,rgba(239,142,78,.26),transparent 60%);filter:blur(11px)}
+.item.leer::before{background:radial-gradient(75% 105% at 50% 45%,rgba(68,105,78,.32),transparent 66%)}
+.item>*{position:relative;z-index:1}
+.ihead{display:flex;align-items:center;gap:7px;margin-bottom:16px}
+.emoji{font-size:17px}.name{font-weight:700;font-size:15.5px}
+.gtrack{position:relative;height:26px;border-radius:13px;background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,.14));backdrop-filter:blur(12px) saturate(160%);-webkit-backdrop-filter:blur(12px) saturate(160%);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 2px 6px rgba(40,60,45,.20),inset 0 -1px 0 rgba(255,255,255,.55),0 4px 14px rgba(40,60,45,.10)}
+.gfill{position:absolute;left:0;top:0;bottom:0;border-radius:13px 8px 8px 13px;background:linear-gradient(180deg,#6aa07d,#3f6149);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 7px rgba(0,0,0,.16)}
+.gfill::after{content:"";position:absolute;left:6px;right:5px;top:3px;height:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.6),transparent)}
+.notch{position:absolute;inset:0;pointer-events:none}
+.notch i{position:absolute;top:50%;width:3px;height:8px;border-radius:3px;background:rgba(255,255,255,.5);transform:translate(-50%,-50%)}
+/* knob · Papier-Scheibe — matte cream disc, sage ring + center dot (app-native, not glassy) */
+.gknob{position:absolute;top:50%;width:30px;height:30px;border-radius:50%;transform:translate(-50%,-50%);z-index:3;background:radial-gradient(120% 120% at 50% 30%,#fffdf8,#f1e7d6);border:2px solid var(--accent);box-shadow:0 4px 10px rgba(40,60,45,.26),inset 0 1px 0 rgba(255,255,255,.9)}
+.gknob::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%)}
+.pills{display:flex;justify-content:space-between;gap:6px;margin-top:11px}
+.pills b{flex:1;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;color:var(--ink-faint);padding:7px 0;border-radius:10px;background:rgba(255,255,255,.5);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.5);cursor:pointer}
+.pills b.on{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 4px 11px rgba(68,105,78,.32)}
+.chip{display:inline-flex;align-items:center;gap:8px;margin-top:13px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;color:var(--ink);background:rgba(255,255,255,.62);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.68);border-radius:999px;padding:9px 14px;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 9px rgba(40,60,45,.1)}
+.chip .sm{color:var(--ink-faint);font-weight:500}
+.chip .pen{color:var(--accent)}
+.chip.done{color:var(--accent)}
+.editor{display:flex;align-items:center;gap:9px;margin-top:13px;padding:11px 12px;border-radius:15px;background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.7);box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 5px 14px rgba(40,60,45,.10)}
+.editor .el{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em}
+.editor input{width:60px;font:inherit;font-size:19px;font-weight:700;color:var(--ink);background:#fff;border:1.5px solid var(--accent);border-radius:10px;padding:7px 8px;text-align:right;outline:none;box-shadow:0 0 0 3px rgba(68,105,78,.13)}
+.uchips{display:flex;gap:5px}
+.uchips b{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;color:var(--ink-dim);padding:8px 10px;border-radius:9px;background:#fff;border:1.5px solid var(--line);cursor:pointer}
+.uchips b.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.okb{margin-left:auto;width:42px;height:40px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-size:18px;cursor:pointer}
+.foot{display:flex;gap:10px;margin-top:18px}
+.btn{cursor:pointer;border:none;border-radius:13px;padding:14px 16px;font-family:"Hanken Grotesk",sans-serif;font-weight:600;font-size:15px;flex:1}
+.btn.solid{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+</style></head>
+<body><div class="app">
+<div class="backdrop"><span>was haben jetzt</span><span>×</span></div>
+<div class="sheet">
+  <div class="grip"></div>
+  <h3>Nduja-Linsen-Pfanne mit Sherrytomaten, Ziegenkäse und Baguette</h3>
+  <div class="sub">schieber rastet in stufen · keine springenden zahlen</div>
+
+  <div class="item">
+    <div class="ihead"><span class="emoji">🥓</span><span class="name">Panetta Schinken</span></div>
+    <div class="gtrack"><div class="gfill" style="width:50%"></div>
+      <div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="gknob" style="left:50%"></div></div>
+    <div class="pills"><b>0%</b><b>25%</b><b class="on">50%</b><b>75%</b><b>100%</b></div>
+    <div class="editor"><span class="el">benutzt</span><input value="75"><div class="uchips"><b class="on">g</b><b>kg</b><b>Stück</b></div><button class="okb">✓</button></div>
+  </div>
+
+  <div class="item">
+    <div class="ihead"><span class="emoji">🧅</span><span class="name">Zwiebeln</span></div>
+    <div class="gtrack"><div class="gfill" style="width:25%"></div>
+      <div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="gknob" style="left:25%"></div></div>
+    <div class="pills"><b>0%</b><b class="on">25%</b><b>50%</b><b>75%</b><b>100%</b></div>
+    <div class="chip">benutzt <span>≈ 1,5 Stück</span> <span class="sm">· übrig 4,5</span> <span class="pen">✎</span></div>
+  </div>
+
+  <div class="item">
+    <div class="ihead"><span class="emoji">🌶️</span><span class="name">Nduja Paste</span></div>
+    <div class="gtrack"><div class="gfill" style="width:50%"></div>
+      <div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="gknob" style="left:50%"></div></div>
+    <div class="pills"><b>0%</b><b>25%</b><b class="on">50%</b><b>75%</b><b>100%</b></div>
+    <div class="chip">benutzt <span>25 g</span> <span class="sm">· übrig 25 g</span> <span class="pen">✎</span></div>
+  </div>
+
+  <div class="item">
+    <div class="ihead"><span class="emoji">🫘</span><span class="name">Beluga Linsen</span></div>
+    <div class="gtrack"><div class="gfill" style="width:50%"></div>
+      <div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="gknob" style="left:50%"></div></div>
+    <div class="pills"><b>0%</b><b>25%</b><b class="on">50%</b><b>75%</b><b>100%</b></div>
+    <div class="chip">benutzt <span>0,25 kg</span> <span class="sm">· übrig 0,25 kg</span> <span class="pen">✎</span></div>
+  </div>
+
+  <div class="item leer">
+    <div class="ihead"><span class="emoji">🥖</span><span class="name">Aufbackbaguette</span></div>
+    <div class="gtrack"><div class="gfill" style="width:100%"></div>
+      <div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="gknob" style="left:100%"></div></div>
+    <div class="pills"><b>0%</b><b>25%</b><b>50%</b><b>75%</b><b class="on">100%</b></div>
+    <div class="chip done">benutzt <span>1 Stück</span> <span class="sm">· leer ✓ aufgebraucht</span></div>
+  </div>
+
+  <div class="foot">
+    <button class="btn ghost">Schließen</button>
+    <button class="btn solid">Verbuchen</button>
+  </div>
+</div>
+</div></body></html>

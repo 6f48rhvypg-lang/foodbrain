@@ -1,0 +1,95 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Cook confirm · C — Slider</title>
+<style>
+:root{--bg-0:#f1e7d8;--bg-1:#f6eee2;--bg-2:#fbf4e9;--surface:#fff;--surface-2:#faf5ec;--ink:#243528;--ink-dim:#647264;--ink-faint:#9aa494;--line:rgba(40,70,50,.12);--line-soft:rgba(40,70,50,.07);--accent:#44694e;--accent-ink:#f4fbf2;--accent-bg:#e7efe7;--amber:#ef8e4e;--amber-ink:#3a2410;--shadow:0 18px 50px rgba(40,60,45,.18);--rail:#e9e0d1}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hanken Grotesk",system-ui,sans-serif;color:var(--ink);background:radial-gradient(120% 80% at 50% -10%,var(--bg-2),transparent 55%),linear-gradient(180deg,var(--bg-1),var(--bg-0));min-height:100vh;-webkit-font-smoothing:antialiased}
+.app{max-width:390px;margin:0 auto}
+.backdrop{padding:15px 22px 5px;display:flex;justify-content:space-between;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);opacity:.5}
+.sheet{background:var(--surface);border:1px solid var(--line);border-bottom:none;border-radius:24px 24px 0 0;padding:16px 18px 24px;box-shadow:var(--shadow);min-height:100vh}
+.grip{width:40px;height:4px;border-radius:4px;background:var(--line);margin:2px auto 14px}
+h3{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:22px;line-height:1.18;letter-spacing:-.01em;margin-bottom:6px}
+.sub{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px}
+.item{padding:15px 0;border-bottom:1px solid var(--line-soft)}
+.item:last-of-type{border-bottom:none}
+.itop{display:flex;align-items:baseline;gap:6px;margin-bottom:13px}
+.emoji{font-size:17px;margin-right:4px}
+.name{font-weight:700;font-size:15.5px}
+.tag{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;color:var(--amber-ink);background:#fbe7d4;padding:2px 9px;border-radius:999px}
+.tag.full{color:var(--accent);background:var(--accent-bg)}
+.barwrap{position:relative;height:30px;display:flex;align-items:center}
+.track{position:relative;width:100%;height:14px;border-radius:8px;background:var(--rail);overflow:hidden}
+.used{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#3f6149,#5a8268);border-radius:8px}
+.ticks{position:absolute;inset:0;pointer-events:none}
+.ticks i{position:absolute;top:50%;width:2px;height:14px;background:rgba(40,70,50,.16);transform:translate(-50%,-50%)}
+.knob{position:absolute;top:50%;width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid var(--accent);box-shadow:0 2px 7px rgba(0,0,0,.2);transform:translate(-50%,-50%)}
+.scale{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--ink-faint);margin-top:6px;letter-spacing:.02em}
+.read{margin-top:8px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-dim)}
+.read b{color:var(--ink);font-weight:600}
+.read.full{color:var(--accent);font-weight:600}
+.foot{display:flex;gap:10px;margin-top:18px}
+.btn{cursor:pointer;border:none;border-radius:13px;padding:14px 16px;font-family:"Hanken Grotesk",sans-serif;font-weight:600;font-size:15px;flex:1}
+.btn.solid{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+</style></head>
+<body><div class="app">
+<div class="backdrop"><span>was haben jetzt</span><span>×</span></div>
+<div class="sheet">
+  <div class="grip"></div>
+  <h3>Nduja-Linsen-Pfanne mit Sherrytomaten, Ziegenkäse und Baguette</h3>
+  <div class="sub">schieb auf „noch übrig" · dann verbuchen</div>
+
+  <div class="item">
+    <div class="itop"><span class="emoji">🥓</span><span class="name">Panetta Schinken</span><span class="tag">½ übrig</span></div>
+    <div class="barwrap"><div class="track"><div class="used" style="width:50%"></div>
+      <div class="ticks"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="knob" style="left:50%"></div></div></div>
+    <div class="scale"><span>alles weg</span><span>¼</span><span>½</span><span>¾</span><span>nichts benutzt</span></div>
+    <div class="read">benutzt <b>~75 g</b> · übrig <b>~75 g</b></div>
+  </div>
+
+  <div class="item">
+    <div class="itop"><span class="emoji">🧅</span><span class="name">Zwiebeln</span><span class="tag">viel übrig</span></div>
+    <div class="barwrap"><div class="track"><div class="used" style="width:17%"></div>
+      <div class="ticks"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="knob" style="left:17%"></div></div></div>
+    <div class="scale"><span>alles weg</span><span>¼</span><span>½</span><span>¾</span><span>nichts benutzt</span></div>
+    <div class="read">benutzt <b>~1 Stück</b> · übrig <b>~5 Stück</b></div>
+  </div>
+
+  <div class="item">
+    <div class="itop"><span class="emoji">🌶️</span><span class="name">Nduja Paste</span><span class="tag">½ übrig</span></div>
+    <div class="barwrap"><div class="track"><div class="used" style="width:50%"></div>
+      <div class="ticks"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="knob" style="left:50%"></div></div></div>
+    <div class="scale"><span>alles weg</span><span>¼</span><span>½</span><span>¾</span><span>nichts benutzt</span></div>
+    <div class="read">benutzt <b>~25 g</b> · übrig <b>~25 g</b></div>
+  </div>
+
+  <div class="item">
+    <div class="itop"><span class="emoji">🫘</span><span class="name">Beluga Linsen</span><span class="tag">½ übrig</span></div>
+    <div class="barwrap"><div class="track"><div class="used" style="width:50%"></div>
+      <div class="ticks"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="knob" style="left:50%"></div></div></div>
+    <div class="scale"><span>alles weg</span><span>¼</span><span>½</span><span>¾</span><span>nichts benutzt</span></div>
+    <div class="read">benutzt <b>~0,25 kg</b> · übrig <b>~0,25 kg</b></div>
+  </div>
+
+  <div class="item">
+    <div class="itop"><span class="emoji">🥖</span><span class="name">Aufbackbaguette</span><span class="tag full">leer ✓</span></div>
+    <div class="barwrap"><div class="track"><div class="used" style="width:100%"></div>
+      <div class="ticks"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="knob" style="left:100%"></div></div></div>
+    <div class="scale"><span>alles weg</span><span>¼</span><span>½</span><span>¾</span><span>nichts benutzt</span></div>
+    <div class="read full">alles aufgebraucht ✓</div>
+  </div>
+
+  <div class="foot">
+    <button class="btn ghost">Schließen</button>
+    <button class="btn solid">Verbuchen</button>
+  </div>
+</div>
+</div></body></html>

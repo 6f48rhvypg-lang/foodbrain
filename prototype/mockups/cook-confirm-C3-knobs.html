@@ -1,0 +1,81 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<title>C3 · knob styles</title>
+<style>
+:root{--bg-0:#f1e7d8;--bg-1:#f6eee2;--bg-2:#fbf4e9;--surface:#fff;--surface-2:#faf5ec;--paper:#f4ead9;--ink:#243528;--ink-dim:#647264;--ink-faint:#9aa494;--line:rgba(40,70,50,.12);--line-soft:rgba(40,70,50,.07);--accent:#44694e;--accent-ink:#f4fbf2;--amber:#ef8e4e;--shadow:0 18px 50px rgba(40,60,45,.18)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hanken Grotesk",system-ui,sans-serif;color:var(--ink);background:radial-gradient(120% 80% at 50% -10%,var(--bg-2),transparent 55%),linear-gradient(180deg,var(--bg-1),var(--bg-0));min-height:100vh;-webkit-font-smoothing:antialiased}
+.app{max-width:390px;margin:0 auto}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:24px;margin:14px;padding:18px;box-shadow:var(--shadow)}
+.grip{width:40px;height:4px;border-radius:4px;background:var(--line);margin:2px auto 14px}
+h3{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:21px;margin-bottom:4px}
+.sub{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
+
+.opt{position:relative;padding:18px 14px 16px;margin:14px 0;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(250,245,236,.5));border:1px solid var(--line-soft);overflow:hidden}
+.opt::before{content:"";position:absolute;inset:0;z-index:0;background:radial-gradient(55% 95% at 16% 22%,rgba(95,140,110,.30),transparent 60%),radial-gradient(55% 95% at 90% 78%,rgba(239,142,78,.22),transparent 60%);filter:blur(11px)}
+.opt>*{position:relative;z-index:1}
+.olbl{display:flex;align-items:baseline;gap:8px;margin-bottom:16px}
+.olbl .t{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:17px}
+.olbl .d{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--ink-faint)}
+
+/* shared C3 track (kept) */
+.gtrack{position:relative;height:26px;border-radius:13px;background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,.14));backdrop-filter:blur(12px) saturate(160%);-webkit-backdrop-filter:blur(12px) saturate(160%);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 2px 6px rgba(40,60,45,.20),inset 0 -1px 0 rgba(255,255,255,.55),0 4px 14px rgba(40,60,45,.10)}
+.gfill{position:absolute;left:0;top:0;bottom:0;width:50%;border-radius:13px 8px 8px 13px;background:linear-gradient(180deg,#6aa07d,#3f6149);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 7px rgba(0,0,0,.16)}
+.gfill::after{content:"";position:absolute;left:6px;right:5px;top:3px;height:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.6),transparent)}
+.notch{position:absolute;inset:0;pointer-events:none}
+.notch i{position:absolute;top:50%;width:3px;height:8px;border-radius:3px;background:rgba(255,255,255,.5);transform:translate(-50%,-50%)}
+.kpos{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3}
+.scale{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--ink-faint);margin-top:10px;padding:0 1px}
+
+/* === KNOB 1 · Papier-Scheibe (matte cream disc, thin sage ring) === */
+.k-paper{width:30px;height:30px;border-radius:50%;background:radial-gradient(120% 120% at 50% 30%,#fffdf8,#f1e7d6);border:2px solid var(--accent);box-shadow:0 4px 10px rgba(40,60,45,.26),inset 0 1px 0 rgba(255,255,255,.9)}
+.k-paper::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%)}
+
+/* === KNOB 2 · Siegel (solid sage stamp, cream collar) === */
+.k-stamp{width:30px;height:30px;border-radius:50%;background:linear-gradient(180deg,#4e7559,#3a5743);border:3px solid var(--surface);box-shadow:0 4px 11px rgba(40,60,45,.34),0 0 0 1px var(--line)}
+
+/* === KNOB 3 · Wert-Kachel (cream cap, mono %, app-button language) === */
+.k-cap{min-width:46px;height:30px;padding:0 9px;border-radius:10px;background:linear-gradient(180deg,#fffdf8,#f3ead9);border:1.5px solid var(--accent);box-shadow:0 4px 10px rgba(40,60,45,.24),inset 0 1px 0 rgba(255,255,255,.9);display:grid;place-items:center;font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;color:var(--accent)}
+
+/* === KNOB 4 · Faderkappe (paper fader, sage notch) === */
+.k-fader{width:20px;height:34px;border-radius:8px;background:linear-gradient(180deg,#fffdf8,#efe5d4);border:1px solid rgba(40,70,50,.22);box-shadow:0 5px 11px rgba(40,60,45,.26),inset 0 1px 0 #fff;display:grid;place-items:center}
+.k-fader b{width:2.5px;height:15px;border-radius:3px;background:var(--accent);box-shadow:0 0 0 3px rgba(68,105,78,.10)}
+</style></head>
+<body><div class="app">
+<div class="sheet">
+  <div class="grip"></div>
+  <h3>Knopf-Stil wählen</h3>
+  <div class="sub">gleicher C3-track · 4 knöpfe im app-look · je bei 50%</div>
+
+  <div class="opt">
+    <div class="olbl"><span class="t">1 · Papier-Scheibe</span><span class="d">matt, creme, sage-Ring + Punkt</span></div>
+    <div class="gtrack"><div class="gfill"></div><div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="kpos"><div class="k-paper"></div></div></div>
+    <div class="scale"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </div>
+
+  <div class="opt">
+    <div class="olbl"><span class="t">2 · Siegel</span><span class="d">solides sage mit creme-Kragen</span></div>
+    <div class="gtrack"><div class="gfill"></div><div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="kpos"><div class="k-stamp"></div></div></div>
+    <div class="scale"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </div>
+
+  <div class="opt">
+    <div class="olbl"><span class="t">3 · Wert-Kachel</span><span class="d">trägt die zahl · mono, button-look</span></div>
+    <div class="gtrack"><div class="gfill"></div><div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="kpos"><div class="k-cap">50%</div></div></div>
+    <div class="scale"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </div>
+
+  <div class="opt">
+    <div class="olbl"><span class="t">4 · Faderkappe</span><span class="d">papier-griff mit sage-Kerbe</span></div>
+    <div class="gtrack"><div class="gfill"></div><div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+      <div class="kpos"><div class="k-fader"><b></b></div></div></div>
+    <div class="scale"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </div>
+
+</div>
+</div></body></html>
