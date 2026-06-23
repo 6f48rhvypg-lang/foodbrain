@@ -1242,43 +1242,94 @@ function formatQty(amount, unit){
   return unit ? `${a} ${unit}` : `${a}`;
 }
 
-/* ---- pick a food emoji from the product name (German + English) ---- */
+/* ---- pick a food emoji from the product name (German + English) ----
+   Order matters: most specific rules first, so e.g. "Chili Bohnenpaste" reads
+   as chili (not bean), "Knoblauch" as garlic (not the "lauch" in onion), and
+   "Granatapfel" as pomegranate (not the "apfel" in apple). Uses current iOS
+   symbols incl. newer ones (🫚 ginger/turmeric, 🫛 peas, 🫐 blueberries). */
 const EMOJI_RULES = [
-  [/milch|milk|sahne|cream|joghur|yogh|yogurt|quark/, '🥛'],
+  // hot / chili (before oils, beans, sauces)
+  [/chili|chilli|sriracha|sambal|habanero|jalapeno|jalapeño|harissa|morita|\bancho\b|cayenne|tabasco|peperoni|hot ?sauce|spicy|nduja/, '🌶️'],
+  // salad dressings & creamy salad condiments (before greens/onion)
+  [/dressing|vinaigrette|salatcreme|salat ?creme|\bwhip\b|mirakel|miracel|coleslaw/, '🥗'],
+  // dairy
+  [/milch|milk|sahne|cream(?!e)|joghur|yogh|yogurt|quark|skyr/, '🥛'],
   [/käse|kaese|cheese|mozzarella|parmesan|feta/, '🧀'],
-  [/ei(er)?\b|egg/, '🥚'],
-  [/butter|marg/, '🧈'],
-  [/tomate|tomato|passata|sugo/, '🍅'],
-  [/gurke|cucumber|zucchin|courgette/, '🥒'],
-  [/karotte|möhre|moehre|carrot|rüb/, '🥕'],
-  [/zwiebel|onion|lauch|leek/, '🧅'],
-  [/knoblauch|garlic/, '🧄'],
-  [/paprika|pepper|chili|chilli|harissa/, '🌶️'],
-  [/salat|lettuce|spinat|spinach|rucola|kohl|cabbage/, '🥬'],
+  [/\beier?\b|\begg/, '🥚'],
+  [/erdnuss|peanut/, '🥜'],   // before butter, else Erdnussbutter -> 🧈
+  [/butter|margarine/, '🧈'],
+  // fish & meat
+  [/garnele|shrimp|schrimp|prawn|crevette|scampi/, '🦐'],
+  [/lachs|salmon|forelle|thun|tuna|sardelle|anchov|seelachs|fisch|fish/, '🐟'],
+  [/speck|bacon/, '🥓'],
+  [/schinken|\bham\b|salami|salsiccia|wurst|sausage|landjäger|landjaeger|prosciutto|panetta|chorizo/, '🍖'],
+  [/hähnchen|haehnchen|huhn|hühner|chicken|pute|turkey|brühe|bruehe|broth|mock ?duck/, '🍗'],
+  [/rind|beef|steak|\bhack\b|schwein|pork|veggie|seitan|tempeh|vigano|fleischersatz|sojahack/, '🥩'],
+  // dumplings / wraps / flatbread
+  [/teigtasche|dumpling|gyoza|ravioli|tortellini|maultasche|wonton/, '🥟'],
+  [/taco|tortilla|wrap|dürüm|duerum|döner|doener|pita|reispapier|fladen|naan/, '🫓'],
+  // bread
+  [/baguette|\bbrot|bröt|broet|bread|toast|sourdough|paniermehl|semmel/, '🍞'],
+  // ginger / turmeric (distinctive; before veg)
+  [/ingwer|ginger|kurkuma|turmeric/, '🫚'],
+  // vegetables
+  [/tomate|tomato|passata|sugo|ketchup/, '🍅'],
+  [/gurke|cucumber|cornichon|zucchin|courgette/, '🥒'],
+  [/knoblauch|garlic/, '🧄'],   // before onion ('lauch' in Knoblauch)
+  [/zwiebel|onion|\blauch|leek|schalotte/, '🧅'],
+  [/paprika|bell ?pepper/, '🫑'],
+  [/spinat|spinach|rucola|mangold|grünkohl|gruenkohl|rotkohl|\bkohl|cabbage|salat|lettuce|sellerie|celery/, '🥬'],
+  [/karotte|möhre|moehre|carrot|gemüse|gemuese|kaisergem/, '🥕'],
   [/kartoffel|potato/, '🥔'],
-  [/apfel|apple/, '🍎'],
+  [/pilz|mushroom|champignon|shiitake|steinpilz/, '🍄'],
+  [/popcorn/, '🍿'],
+  [/\bmais/, '🌽'],
+  // legumes
+  [/erbse|\bpea\b|\bpeas\b/, '🫛'],
+  [/linse|lentil|bohne|bean|kichererbse|chickpea/, '🫘'],
+  // fruit
   [/banane|banana/, '🍌'],
+  [/granatapfel|pomegranate/, '🍇'],   // before apple (contains 'apfel')
+  [/apfel|apple/, '🍎'],
   [/zitrone|lemon|limette|lime/, '🍋'],
   [/orange|mandarin|clementi/, '🍊'],
-  [/beere|berry|erdbeer|strawberr|himbeer|raspberr|heidelbeer|blueberr/, '🍓'],
+  [/mango/, '🥭'],
+  [/blaubeer|heidelbeer|blueberr/, '🫐'],
+  [/erdbeer|strawberr|himbeer|raspberr|brombeer|\bbeere|berry|preiselbeer|cranberr/, '🍓'],
   [/traube|grape/, '🍇'],
-  [/brot|brötchen|broetchen|bread|toast|baguette|sourdough/, '🍞'],
-  [/nudel|pasta|spaghetti|noodle/, '🍝'],
-  [/reis|rice/, '🍚'],
-  [/hähnchen|haehnchen|huhn|chicken|pute|turkey/, '🍗'],
-  [/rind|beef|steak|hack|schwein|pork|wurst|sausage|schinken|ham|speck|bacon|salami|landjäger|landjaeger/, '🥩'],
-  [/fisch|fish|lachs|salmon|thun|tuna|shrimp|garnele/, '🐟'],
-  [/senf|mustard|dijon/, '🥫'],
-  [/dose|can|konserve|bohne|bean|linse|lentil|kichererbse|chickpea/, '🥫'],
-  [/öl|oel|\boil\b|olive/, '🫒'],
-  [/wasser|water/, '💧'],
-  [/saft|juice/, '🧃'],
-  [/bier|beer|wein|wine/, '🍷'],
-  [/schoko|chocolate|keks|cookie|snack|chips|riegel|bar\b/, '🍫'],
-  [/honig|honey|marmelade|jam|konfit/, '🍯'],
-  [/mehl|flour|zucker\b|sugar|backen/, '🧁'],
-  [/pilz|mushroom|champignon/, '🍄'],
-  [/mais|corn/, '🌽'],
+  [/quitte|birne|pear/, '🍐'],
+  // nuts / coconut / seeds
+  [/kokos|coconut/, '🥥'],
+  [/haseln|walnuss|walnut|pekan|pecan|mandel|almond|cashew|pistazie|pistachio|\bnuss|\bnüss|\bnuts?\b/, '🌰'],
+  [/sesam|sesame|\bmohn|poppy|saaten|leinsamen|kürbiskern|sonnenblumenkern|samen\b|\bseeds?\b/, '🌱'],
+  // pudding / custard / caramel (before vanilla-spice; \bflan\b so "Pflanze" isn't a flan)
+  [/pudding|custard|karamell|caramel|\bflan\b/, '🍮'],
+  // rice / grains / pasta / oats
+  [/nudel|pasta|spaghetti|noodle|glasnudel/, '🍝'],
+  [/reis(?!essig)|\brice|jasmin|basmati|risotto|couscous|graupe|bulgur|quinoa|polenta/, '🍚'],
+  [/haferflocken|\boats|müsli|muesli|granola/, '🥣'],
+  // oils
+  [/öl\b|\boel\b|\boil\b|olive/, '🫒'],
+  // vinegars / asian liquids / sauces
+  [/essig|vinegar|aceto|balsamico|balsamic|mirin|marinade|sojasauce|\bsoja\b|fischsauce|worcester|hoisin|dashi|fond|\bsauce|sauce$/, '🍶'],
+  // pastes / spreads / condiments (jar)
+  [/miso|paste|\bmark\b|kapern|caper|senf|mustard|dijon|\bmayo|remoulade|aufstrich|kimchi|tahini|hummus|pesto|wasabi|relish/, '🫙'],
+  // salt & dry leaveners
+  [/salz|\bsalt\b|florsell|fleur de sel|\bmsg\b|natron|\bsoda\b|backpulver|hefeflocken/, '🧂'],
+  // herbs & spices
+  [/pfeffer|sternanis|\banise?\b|kardamom|cardamom|kümmel|kuemmel|koriander|coriander|\bzimt|cinnamon|muskat|nutmeg|nelke|clove|lorbeer|\bbay\b|kräuter|kraeuter|\bherb|basilikum|basil|oregano|thymian|thyme|rosmarin|petersilie|curryblätt|curryblaett|kafir|kaffir|bockshornklee|fenugreek|safran|saffron|vanille|vanilla/, '🌿'],
+  // sweets / chocolate
+  [/schoko|chocolate|nutella|kakao|cocoa|praline|keks|cookie|riegel/, '🍫'],
+  [/\beis\b|ice ?cream|gelato|sorbet/, '🍦'],
+  [/chips|cracker|\bsnack|brezel|pretzel/, '🍿'],
+  [/honig|honey|sirup|syrup|agave|dicksaft|marmelade|\bjam\b|konfit|gelee|jelly/, '🍯'],
+  [/mehl|flour|zucker|sugar|stärke|staerke|\bbacken|\bteig|\bhefe(?!flocken)/, '🧁'],
+  // drinks
+  [/wasser|water|kefir/, '💧'],
+  [/\bsaft|juice|smoothie|nektar/, '🧃'],
+  [/\bbier|beer|wein(?!essig)|\bwine|\bcola|limo|sekt/, '🍷'],
+  [/kaffee|coffee|espresso/, '☕'],
+  [/\btee\b|\btea\b|matcha/, '🍵'],
 ];
 function emojiFor(name){
   const n = String(name || '').toLowerCase();
@@ -1288,18 +1339,20 @@ function emojiFor(name){
 }
 
 /* ---- per-item custom symbol override -------------------------------------
-   Keyed by the Grocy product_id (it.id), which is stable even when the stock
-   drops to 0 and the product later reappears — so a symbol chosen once stays
-   with that product forever, without re-picking it after every consume. */
-const EMOJI_OVERRIDE_KEY = id => 'fb-emoji:' + id;
+   Keyed by the product NAME (lower-cased), persisted server-side so a symbol
+   chosen once stays attached to that name forever — surviving hard refreshes,
+   browser-cache wipes, and other devices (localStorage did none of that). The
+   map is loaded once per reload() into ICONS; writes are optimistic + POSTed. */
+let ICONS = {};                                   // name(lower) -> emoji, from server
+const nameKey = n => String(n || '').trim().toLowerCase();
 function getCustomEmoji(it){
-  try { return localStorage.getItem(EMOJI_OVERRIDE_KEY(it.id)) || null; } catch(_){ return null; }
+  return ICONS[nameKey(it.name)] || null;
 }
 function setCustomEmoji(it, emo){
-  try {
-    if (emo) localStorage.setItem(EMOJI_OVERRIDE_KEY(it.id), emo);
-    else     localStorage.removeItem(EMOJI_OVERRIDE_KEY(it.id));
-  } catch(_){}
+  const key = nameKey(it.name);
+  if (!key) return;
+  if (emo) ICONS[key] = emo; else delete ICONS[key];   // optimistic local update
+  apiPost('/api/set-icon', { name: it.name, emoji: emo || '' }).catch(()=>{});
 }
 /* the symbol shown on a stock card: user override first, else auto-derived */
 function thumbEmoji(it){ return getCustomEmoji(it) || emojiFor(it.name); }
@@ -2185,7 +2238,8 @@ async function openMoreSheet(it, el){
     if (!tasks.length && !emojiChanged){ closeSheet(); return; }
     try {
       if (tasks.length) await Promise.all(tasks);
-      if (emojiChanged) setCustomEmoji(it, chosenEmoji); // null clears → back to automatic
+      // Attach to the (possibly just-renamed) name so the override follows it.
+      if (emojiChanged) setCustomEmoji({ name: (newName && newName !== it.name) ? newName : it.name }, chosenEmoji);
       // update local state
       const idx = items.findIndex(x=>x.id===it.id);
       if (idx>=0){
@@ -3489,9 +3543,35 @@ async function reload(){
   }
   TODAY = data.as_of ? new Date(data.as_of) : new Date();
   items = (data.items || []).map(mapItem);
+  // Per-item emoji overrides (best-effort; never break stock if this 404s/offline).
+  try { const r = await apiGet('/api/icons'); ICONS = r.icons || {}; } catch(_){}
+  migrateLocalIcons();
   lastSynced = Date.now();
   renderSyncLabel();
   render();
+}
+
+/* One-time salvage: any emoji still cached in this browser's localStorage
+   (the old `fb-emoji:<product_id>` scheme) is mapped to its item's current name
+   and pushed to the server, then removed locally. Rescues choices made before
+   the server-backed store existed; a no-op once nothing is left to migrate. */
+function migrateLocalIcons(){
+  let keys;
+  try { keys = Object.keys(localStorage).filter(k => k.startsWith('fb-emoji:')); }
+  catch(_){ return; }
+  if (!keys.length) return;
+  const byId = new Map(items.map(it => [String(it.id), it]));
+  for (const k of keys){
+    const id = k.slice('fb-emoji:'.length);
+    let emo = null;
+    try { emo = localStorage.getItem(k); } catch(_){}
+    const it = byId.get(String(id));
+    if (it && emo && !ICONS[nameKey(it.name)]){
+      ICONS[nameKey(it.name)] = emo;
+      apiPost('/api/set-icon', { name: it.name, emoji: emo }).catch(()=>{});
+    }
+    try { localStorage.removeItem(k); } catch(_){}
+  }
 }
 
 /* ---- sync: manual button, focus refresh, slow background fallback ---- */

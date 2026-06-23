@@ -37,6 +37,8 @@ Routes::
     GET  /api/recipes/cook-history   -> past cooking sessions (Verlauf)
     GET  /api/recipes/book           -> saved "Meine Rezepte"
     GET  /api/recipes/config         -> model choices + defaults for Settings
+    GET  /api/icons                  -> per-item emoji overrides (name -> emoji)
+    POST /api/set-icon               {"name": "...", "emoji": "🥛"}  ("" clears)
 
 CORS is permissive so the SPA can be developed from a separate dev origin.
 """
@@ -110,6 +112,8 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.recipe_book())
                 elif route == "/api/recipes/config":
                     self._send(200, _recipes_config(api))
+                elif route == "/api/icons":
+                    self._send(200, api.get_icons())
                 else:
                     raise ApiError(404, f"no route for GET {route}")
             except ApiError as exc:
@@ -285,6 +289,14 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             _str_list(body.get("guidance")),
                             buy=_str_list(body.get("buy")),
                             twist=str(body.get("twist", "")),
+                        ),
+                    )
+                elif route == "/api/set-icon":
+                    self._send(
+                        200,
+                        api.set_icon(
+                            _require(body, "name"),
+                            str(body.get("emoji", "")),
                         ),
                     )
                 else:

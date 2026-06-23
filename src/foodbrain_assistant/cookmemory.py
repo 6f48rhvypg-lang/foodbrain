@@ -39,6 +39,9 @@ def _skeleton() -> dict:
         "cooked": [],
         "book": [],
         "sessions": [],
+        # name(lower) -> emoji: per-item symbol overrides, durable across the
+        # browser cache wipes that used to erase the localStorage-only choices.
+        "icons": {},
     }
 
 
@@ -227,6 +230,34 @@ def add_session(path, *, dish: str, lines: Iterable[dict]) -> dict:
         return entry
 
 
+def get_icons(path) -> dict:
+    """The name->emoji override map (key is the lower-cased product name)."""
+    data = load(path)
+    return dict(data.get("icons", {}))
+
+
+def set_icon(path, *, name: str, emoji: str) -> dict:
+    """Attach an emoji to a product name forever, or clear it (empty emoji).
+
+    Keyed by ``name.strip().lower()`` — the same trivial casefold the SPA uses —
+    so the override follows the *name*, surviving refreshes, cache wipes, and
+    other devices. An empty/None ``emoji`` removes the override (back to the
+    auto-derived symbol).
+    """
+    key = str(name or "").strip().lower()
+    emoji = str(emoji or "").strip()
+    with _LOCK:
+        data = load(path)
+        if not key:
+            return {"name": "", "emoji": emoji}
+        if emoji:
+            data["icons"][key] = emoji
+        else:
+            data["icons"].pop(key, None)
+        save(path, data)
+    return {"name": key, "emoji": emoji}
+
+
 def sessions(path) -> List[dict]:
     """Cooking sessions, newest first (like :func:`book`)."""
     data = load(path)
@@ -283,6 +314,13 @@ def _normalize(data: dict) -> dict:
         value = data.get(key)
         if isinstance(value, list):
             skel[key] = [row for row in value if isinstance(row, dict)]
+    icons = data.get("icons")
+    if isinstance(icons, dict):
+        skel["icons"] = {
+            str(k).strip().lower(): str(v).strip()
+            for k, v in icons.items()
+            if str(k).strip() and str(v).strip()
+        }
     return skel
 
 

@@ -38,6 +38,23 @@ class CookMemoryTest(unittest.TestCase):
         data = cookmemory.load(self.path)
         self.assertEqual(data, cookmemory._skeleton())
 
+    def test_icon_set_get_clear_round_trip(self) -> None:
+        self.assertEqual(cookmemory.get_icons(self.path), {})
+        cookmemory.set_icon(self.path, name="Joghurt", emoji="🥛")
+        # Keyed by lower-cased name, and durable across a fresh load.
+        self.assertEqual(cookmemory.get_icons(self.path), {"joghurt": "🥛"})
+        self.assertEqual(cookmemory.load(self.path)["icons"], {"joghurt": "🥛"})
+        # A matching name (any case) overwrites; an empty emoji clears it.
+        cookmemory.set_icon(self.path, name="  JOGHURT ", emoji="🍶")
+        self.assertEqual(cookmemory.get_icons(self.path), {"joghurt": "🍶"})
+        cookmemory.set_icon(self.path, name="joghurt", emoji="")
+        self.assertEqual(cookmemory.get_icons(self.path), {})
+
+    def test_icons_survive_other_mutations(self) -> None:
+        cookmemory.set_icon(self.path, name="Spinat", emoji="🥬")
+        cookmemory.add_cooked(self.path, dish="Curry")
+        self.assertEqual(cookmemory.get_icons(self.path), {"spinat": "🥬"})
+
     def test_corrupt_file_is_backed_up_not_overwritten(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text("{not json", encoding="utf-8")

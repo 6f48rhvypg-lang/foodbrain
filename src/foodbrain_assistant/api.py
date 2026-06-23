@@ -542,6 +542,18 @@ class FoodBrainAPI:
         """The saved-recipes book, newest first."""
         return {"recipes": cookmemory.book(self._cook_path())}
 
+    # --- per-item emoji overrides ---------------------------------------
+
+    def get_icons(self) -> dict:
+        """The durable name->emoji override map for the SPA to apply on load."""
+        return {"icons": cookmemory.get_icons(self._cook_path())}
+
+    def set_icon(self, name: str, emoji: str) -> dict:
+        """Attach (or clear, when ``emoji`` is empty) a symbol to a product name."""
+        if not str(name or "").strip():
+            raise ApiError(400, "name is required")
+        return cookmemory.set_icon(self._cook_path(), name=name, emoji=emoji)
+
     # --- cook -> consumption tracking -----------------------------------
 
     def recipe_cook_estimate(
