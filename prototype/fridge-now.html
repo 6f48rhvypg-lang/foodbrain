@@ -495,6 +495,54 @@
     color: var(--ink-faint); margin: 10px 0 2px; }
   .cresult { padding: 6px 0; font-size: 14px; color: var(--ink-dim); }
   .cresult .depleted { color: var(--accent); font-weight: 700; }
+  /* --- cook consume control: coarse "what's left" detented glass slider (C3) --- */
+  .crow .cslider { flex: 1 1 100%; margin-top: 6px; }
+  .cslider .gtrack { position: relative; height: 26px; border-radius: 13px; cursor: pointer; touch-action: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(250,245,236,.35));
+    -webkit-backdrop-filter: blur(8px) saturate(140%); backdrop-filter: blur(8px) saturate(140%);
+    border: 1px solid rgba(255,255,255,.6);
+    box-shadow: inset 0 2px 6px rgba(40,60,45,.18), inset 0 -1px 0 rgba(255,255,255,.5), 0 3px 10px rgba(40,60,45,.08); }
+  .cslider .gfill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 13px 8px 8px 13px;
+    background: linear-gradient(180deg, #6aa07d, #3f6149);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -4px 7px rgba(0,0,0,.16); }
+  .cslider .gfill::after { content: ""; position: absolute; left: 6px; right: 5px; top: 3px; height: 8px;
+    border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.6), transparent); }
+  .cslider .notch { position: absolute; inset: 0; pointer-events: none; }
+  .cslider .notch i { position: absolute; top: 50%; width: 3px; height: 8px; border-radius: 3px;
+    background: rgba(255,255,255,.5); transform: translate(-50%,-50%); }
+  /* Papier-Scheibe knob — matte cream disc, sage ring + dot (app-native, not glassy) */
+  .cslider .gknob { position: absolute; top: 50%; width: 30px; height: 30px; border-radius: 50%;
+    transform: translate(-50%,-50%); z-index: 3;
+    background: radial-gradient(120% 120% at 50% 30%, #fffdf8, #f1e7d6);
+    border: 2px solid var(--accent);
+    box-shadow: 0 4px 10px rgba(40,60,45,.26), inset 0 1px 0 rgba(255,255,255,.9); }
+  .cslider .gknob::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--accent); transform: translate(-50%,-50%); }
+  .cslider .pills { display: flex; justify-content: space-between; gap: 6px; margin-top: 10px; }
+  .cslider .cpill { flex: 1; text-align: center; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    font-weight: 600; color: var(--ink-faint); padding: 7px 0; border-radius: 10px;
+    background: var(--surface-2); border: 1px solid var(--line); cursor: pointer; }
+  .cslider .cpill.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+    box-shadow: 0 3px 9px rgba(68,105,78,.28); }
+  .cslider .cusedline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 11px; }
+  .cslider .cusededit { font: inherit; cursor: pointer; background: none; border: none; padding: 0;
+    font-size: 13px; color: var(--ink-dim); display: inline-flex; align-items: baseline; gap: 6px; }
+  .cslider .cusededit b { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .cslider .cpen { font-size: 12px; color: var(--accent); }
+  .cslider .cleft { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    font-weight: 700; color: var(--ink-dim); }
+  .cslider .cleft.empty { color: var(--accent); }
+  .cslider .cleft.over { color: var(--hot, #c0392b); }
+  .cslider .ceditor { display: flex; align-items: center; gap: 7px; flex: 1 1 100%; margin-top: 4px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 9px; }
+  .cslider .cexact { width: 64px; font: inherit; font-size: 16px; font-weight: 700; color: var(--ink);
+    background: var(--surface); border: 1.5px solid var(--accent); border-radius: 9px; padding: 6px 7px; text-align: right; }
+  .cslider .cunits { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cslider .cuchip { font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; color: var(--ink-dim);
+    padding: 6px 8px; border-radius: 8px; background: var(--surface); border: 1.5px solid var(--line); cursor: pointer; }
+  .cslider .cuchip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .cslider .cokb { margin-left: auto; width: 38px; height: 34px; border-radius: 9px; border: none;
+    background: var(--accent); color: var(--accent-ink); font-size: 16px; cursor: pointer; }
   .histsess { padding: 12px 0; border-bottom: 1px solid var(--line); }
   .histsess:last-child { border-bottom: none; }
   .histsess .ht { font-weight: 700; font-size: 15px; color: var(--ink); display: flex;
@@ -2672,20 +2720,24 @@ function cookRow(it, i){
         ? `„${esc(it.name)}" ist nicht in deinem Vorrat — nicht verbucht. Leg es in Grocy an, um es zu tracken.`
         : `nicht im Vorrat — wird übersprungen`);
   const stockHave = hasStock ? `<span>im Vorrat: ${nfmt(it.stock_amount)}${su?(' '+su):''}</span>` : '';
-  const leftSlot = hasStock ? `<span class="cleft" data-sunit="${su}"></span>` : '';
-  // A "missing" row can't be consumed (nothing tracked) — offer to create it in
-  // Grocy instead of the (disabled) amount input.
+  // Matched + tracked stock → coarse "what's left" glass slider (a fraction of the
+  // real Grocy stock, so the LLM's wrong absolute amount/unit never gets booked).
+  // Falls back to a number input for untracked/unmatched rows; "missing" rows can't
+  // be consumed (nothing tracked) so they offer to be created in Grocy instead.
+  const canSlider = matched && hasStock && !missing;
   const tail = missing
     ? `<button class="cmake" type="button">In Grocy anlegen</button>`
-    : `<label>verbraucht <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
-       <span class="cunit">${esc(it.unit||'')}</span>`;
+    : (canSlider
+        ? cookSlider(it)
+        : `<label>verbraucht <input class="camt" type="number" min="0" step="0.1" value="${Number(it.amount)||1}" ${matched?'':'disabled'} /></label>
+           <span class="cunit">${esc(it.unit||'')}</span>${hasStock?`<span class="cleft" data-sunit="${su}"></span>`:''}`);
   return `<div class="crow${matched?'':' drop'}" data-i="${i}" data-kind="consume" data-pid="${esc(it.matched_product_id||'')}"
-       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}" data-amount="${Number(it.amount)||1}" data-stock="${hasStock?it.stock_amount:''}">
+       data-name="${esc(it.name)}" data-unit="${esc(it.unit||'')}" data-sunit="${su}" data-amount="${Number(it.amount)||1}" data-stock="${hasStock?it.stock_amount:''}">
     <div class="cname"><span class="emoji">${emoji}</span>${esc(it.name)}</div>
     ${badge}
-    <div class="cmeta ${cls}"><span class="cmatch">↳ ${match}</span>${stockHave}${leftSlot}</div>
-    ${tail}
     <button class="cdrop" type="button" title="entfernen">✕</button>
+    <div class="cmeta ${cls}"><span class="cmatch">↳ ${match}</span>${stockHave}</div>
+    ${tail}
   </div>`;
 }
 
@@ -2696,20 +2748,139 @@ function nfmt(n){
   return (Math.round(v * 100) / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 });
 }
 
-/* Recompute one consume row's "bleibt" readout from its stock + current input. */
+/* --- C3 consume control: coarse "what's left" detented glass slider ----------
+   The booked amount is a fraction of the *real* Grocy stock (data-stock), so the
+   LLM's (often wrong) absolute amount/unit is never used — the estimate only seeds
+   which 25%-stop starts selected. A tap-to-edit field overrides with an exact
+   amount + unit for corrections. */
+const COOK_STOPS = [0, 0.25, 0.5, 0.75, 1];
+
+/* estimate ÷ stock, snapped to the nearest 25% stop (never 0 for a used item). */
+function seedCookUsed(estimate, stock){
+  if (!isFinite(stock) || stock <= 0) return 1;
+  let s = Math.round(Math.max(0, Math.min(1, (Number(estimate) || 0) / stock)) / 0.25) * 0.25;
+  if (s === 0 && (Number(estimate) || 0) > 0) s = 0.25;
+  return s;
+}
+
+/* Slider markup for one matched + stocked consume ingredient. */
+function cookSlider(it){
+  const stock = Number(it.stock_amount);
+  const sunit = esc(it.stock_unit || it.unit || '');
+  const used = seedCookUsed(it.amount, stock);
+  const pct = Math.round(used * 100);
+  const pills = COOK_STOPS.map(f =>
+    `<button type="button" class="cpill${f === used ? ' on' : ''}" data-f="${f}">${Math.round(f*100)}%</button>`).join('');
+  return `<div class="cslider" data-used="${used}">
+      <div class="gtrack">
+        <div class="gfill" style="width:${pct}%"></div>
+        <div class="notch"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+        <div class="gknob" style="left:${pct}%"></div>
+      </div>
+      <div class="pills">${pills}</div>
+      <div class="cusedline">
+        <button type="button" class="cusededit">benutzt <b class="cusedval">${nfmt(stock*used)}${sunit?(' '+sunit):''}</b> <span class="cpen">✎</span></button>
+        <span class="cleft" data-sunit="${sunit}"></span>
+      </div>
+    </div>`;
+}
+
+/* Consumed amount (in stock units) currently chosen for a consume row. */
+function cookUsedAmount(row){
+  if (row.classList.contains('drop')) return 0;
+  if (row.dataset.exact != null && row.dataset.exact !== '') return Number(row.dataset.exact) || 0;
+  const sl = row.querySelector('.cslider');
+  if (sl){ const stock = Number(row.dataset.stock); return isFinite(stock) ? stock * (Number(sl.dataset.used) || 0) : 0; }
+  const amt = row.querySelector('.camt');
+  return amt ? (Number(amt.value) || 0) : 0;
+}
+
+/* Set a row to a 25%-stop: updates fill, knob, pills, readout; clears any exact. */
+function setCookUsed(row, f){
+  const sl = row.querySelector('.cslider'); if (!sl) return;
+  sl.dataset.used = f; delete row.dataset.exact; delete row.dataset.exactunit;
+  const stock = Number(row.dataset.stock), sunit = row.dataset.sunit || '';
+  sl.querySelector('.gfill').style.width = (f*100) + '%';
+  sl.querySelector('.gknob').style.left = (f*100) + '%';
+  sl.querySelectorAll('.cpill').forEach(b => b.classList.toggle('on', Number(b.dataset.f) === f));
+  const vb = sl.querySelector('.cusedval');
+  if (vb) vb.textContent = nfmt(isFinite(stock) ? stock*f : 0) + (sunit ? (' ' + sunit) : '');
+  updateCookLeft(row);
+}
+
+/* Drag-to-snap + pill taps + tap-to-edit wiring for one slider row. */
+function wireCookSlider(row){
+  const sl = row.querySelector('.cslider'); if (!sl) return;
+  const track = sl.querySelector('.gtrack');
+  const applyAt = (clientX) => {
+    const r = track.getBoundingClientRect();
+    const f = Math.round(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) / 0.25) * 0.25;
+    setCookUsed(row, f);
+  };
+  let dragging = false;
+  track.addEventListener('pointerdown', e => { dragging = true; try { track.setPointerCapture(e.pointerId); } catch (_) {} applyAt(e.clientX); });
+  track.addEventListener('pointermove', e => { if (dragging) applyAt(e.clientX); });
+  track.addEventListener('pointerup', () => { dragging = false; });
+  track.addEventListener('pointercancel', () => { dragging = false; });
+  sl.querySelectorAll('.cpill').forEach(b => b.addEventListener('click', () => setCookUsed(row, Number(b.dataset.f))));
+  sl.querySelector('.cusededit').addEventListener('click', () => openCookExact(row));
+}
+
+/* Inline exact-amount + unit editor (error-handling / late correction). */
+function openCookExact(row){
+  const sl = row.querySelector('.cslider'); if (!sl) return;
+  const line = sl.querySelector('.cusedline');
+  if (line.querySelector('.ceditor')) return;
+  const sunit = row.dataset.sunit || '', stock = Number(row.dataset.stock);
+  const cur = (row.dataset.exact != null && row.dataset.exact !== '')
+    ? row.dataset.exact : nfmt(isFinite(stock) ? stock * (Number(sl.dataset.used) || 0) : 0);
+  const units = [...new Set([sunit, 'g', 'kg', 'Stück', 'ml', 'l'].filter(Boolean))];
+  const sel = row.dataset.exactunit || sunit;
+  const ed = document.createElement('div');
+  ed.className = 'ceditor';
+  ed.innerHTML = `<input class="cexact" type="text" inputmode="decimal" value="${esc(String(cur))}">
+    <div class="cunits">${units.map(u => `<button type="button" class="cuchip${u === sel ? ' on' : ''}" data-u="${esc(u)}">${esc(u)}</button>`).join('')}</div>
+    <button type="button" class="cokb" title="übernehmen">✓</button>`;
+  line.querySelector('.cusededit').style.display = 'none';
+  line.appendChild(ed);
+  ed.querySelectorAll('.cuchip').forEach(c => c.addEventListener('click', () => {
+    ed.querySelectorAll('.cuchip').forEach(x => x.classList.remove('on')); c.classList.add('on');
+  }));
+  const commit = () => {
+    const v = Number((ed.querySelector('.cexact').value || '').replace(',', '.')) || 0;
+    const unit = ed.querySelector('.cuchip.on')?.dataset.u || sunit;
+    row.dataset.exact = String(v); row.dataset.exactunit = unit;
+    if (unit === sunit && isFinite(stock) && stock > 0){
+      const f = Math.max(0, Math.min(1, v / stock));
+      sl.dataset.used = f;
+      sl.querySelector('.gfill').style.width = (f*100) + '%';
+      sl.querySelector('.gknob').style.left = (f*100) + '%';
+      sl.querySelectorAll('.cpill').forEach(b => b.classList.remove('on'));
+    }
+    const vb = sl.querySelector('.cusedval');
+    if (vb) vb.textContent = nfmt(v) + (unit ? (' ' + unit) : '');
+    ed.remove();
+    line.querySelector('.cusededit').style.display = '';
+    updateCookLeft(row);
+  };
+  ed.querySelector('.cokb').addEventListener('click', commit);
+  ed.querySelector('.cexact').addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+  ed.querySelector('.cexact').focus();
+}
+
+/* Recompute one consume row's "übrig" readout from its stock + current choice. */
 function updateCookLeft(row){
   const slot = row.querySelector('.cleft');
   if (!slot) return;
   const stock = Number(row.dataset.stock);
   if (!isFinite(stock)) { slot.textContent = ''; return; }
-  const amt = row.classList.contains('drop') ? 0 : (Number(row.querySelector('.camt')?.value) || 0);
-  const left = stock - amt;
+  const left = stock - cookUsedAmount(row);
   const su = slot.dataset.sunit ? (' ' + slot.dataset.sunit) : '';
   slot.classList.toggle('empty', left <= 0.0001 && left >= -0.0001);
   slot.classList.toggle('over', left < -0.0001);
   slot.textContent = left < -0.0001
     ? `mehr als vorhanden! (nur ${nfmt(stock)}${su})`
-    : (left <= 0.0001 ? 'bleibt: 0 — alles aufgebraucht ✓' : `bleibt: ${nfmt(left)}${su}`);
+    : (left <= 0.0001 ? 'übrig: 0 — alles aufgebraucht ✓' : `übrig: ${nfmt(left)}${su}`);
 }
 
 function renderCookReview(data){
@@ -2750,6 +2921,7 @@ function renderCookReview(data){
   sheet.querySelectorAll('.cmake').forEach(b=> b.addEventListener('click', ()=> openAddMissing(b.closest('.crow'))));
   // Live "bleibt" readout: seed each consume row, then recompute as edited.
   sheet.querySelectorAll('.crow[data-kind="consume"]').forEach(row=>{
+    wireCookSlider(row);
     updateCookLeft(row);
     const amt = row.querySelector('.camt');
     if (amt) amt.addEventListener('input', ()=> updateCookLeft(row));
@@ -2832,7 +3004,11 @@ function collectCookItems(){
         base.pack_amount = Number(row.querySelector('.cpack').value) || 1;
         base.used_amount = Number(row.querySelector('.cused').value) || 0;
       } else {
-        base.amount = Number(row.querySelector('.camt').value) || 0;
+        base.amount = cookUsedAmount(row);
+        // Slider rows book a fraction of stock → send the *stock* unit; an exact
+        // override carries its own chosen unit. Fallback input rows keep data-unit.
+        if (row.dataset.exactunit) base.unit = row.dataset.exactunit;
+        else if (row.querySelector('.cslider')) base.unit = row.dataset.sunit || base.unit;
       }
       return base;
     })
