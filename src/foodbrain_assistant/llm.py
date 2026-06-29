@@ -10,7 +10,7 @@ unit-tested without a network or an API key.
 """
 
 import json
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -31,6 +31,7 @@ def post_chat_json(
     model: str,
     system: str,
     user: str,
+    history: Optional[List[Dict[str, str]]] = None,
     transport: Optional[Transport] = None,
     timeout: int = 30,
 ) -> dict:
@@ -38,24 +39,28 @@ def post_chat_json(
     parsed JSON object the model produced.
 
     ``model`` is passed explicitly so callers can override the configured
-    default (the recipe features let the client pick a model). Raises
-    :class:`LlmNotConfigured` when no API key is set and :class:`LlmError` for
-    transport/parse failures or an error envelope from OpenRouter.
+    default (the recipe features let the client pick a model). ``history``, when
+    given, is a list of prior ``{"role": "user"|"assistant", "content": str}``
+    turns inserted between the system prompt and the final ``user`` message — it
+    lets the chat feature carry multi-turn context (assistant entries hold the
+    prior reply *text* only, never JSON). Raises :class:`LlmNotConfigured` when
+    no API key is set and :class:`LlmError` for transport/parse failures or an
+    error envelope from OpenRouter.
     """
     if not getattr(settings, "openrouter_api_key", None):
         raise LlmNotConfigured(
             "this feature needs FOODBRAIN_OPENROUTER_API_KEY to be set"
         )
 
+    messages = [{"role": "system", "content": system}]
+    messages.extend(_clean_history(history))
+    messages.append({"role": "user", "content": user})
     body = json.dumps(
         {
             "model": model,
             "temperature": 0,
             "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            "messages": messages,
         }
     ).encode("utf-8")
 
@@ -69,6 +74,19 @@ def post_chat_json(
     raw = send(url, headers, body, timeout)
     content = extract_message_content(raw)
     return parse_json_object(content)
+
+
+def _clean_history(history: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
+    """Keep only well-formed user/assistant turns with non-empty text content."""
+    cleaned: List[Dict[str, str]] = []
+    for entry in history or []:
+        if not isinstance(entry, dict):
+            continue
+        role = entry.get("role")
+        content = str(entry.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            cleaned.append({"role": role, "content": content})
+    return cleaned
 
 
 def http_post(

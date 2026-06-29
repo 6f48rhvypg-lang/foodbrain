@@ -203,6 +203,18 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             count=int(body.get("count", 8) or 8),
                         ),
                     )
+                elif route == "/api/recipes/chat":
+                    self._send(
+                        200,
+                        api.recipe_chat(
+                            {
+                                "message": _require(body, "message"),
+                                "history": body.get("history"),
+                                "preferences": _preferences(body),
+                                "idea_model": _opt_str(body.get("idea_model")),
+                            }
+                        ),
+                    )
                 elif route == "/api/recipes/recipe":
                     self._send(
                         200,

@@ -919,6 +919,21 @@
   .micbtn.rec { background: var(--hot); color: #fff; border-color: var(--hot); animation: recpulse 1.1s ease-in-out infinite; }
   @keyframes recpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(210,79,55,.5); } 50% { box-shadow: 0 0 0 7px rgba(210,79,55,0); } }
   .micnote { font-size: 11px; color: var(--ink-faint); margin: 8px 2px 0; }
+  /* --- "Frag dein Inventar" chat surface --- */
+  .chat-scroll { max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column;
+    gap: 10px; padding: 2px 2px 6px; margin-bottom: 12px; }
+  .bubble { max-width: 86%; padding: 10px 13px; border-radius: 16px; font-size: 15px;
+    line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .bubble.user { align-self: flex-end; background: var(--accent); color: #fff;
+    border-bottom-right-radius: 5px; }
+  .bubble.bot { align-self: flex-start; background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+  .chat-ideas { align-self: stretch; display: flex; flex-direction: column; gap: 8px; }
+  .chat-thinking { align-self: flex-start; color: var(--ink-faint); font-size: 13px;
+    font-style: italic; padding: 2px 4px; }
+  .chat-empty { color: var(--ink-faint); font-size: 14px; text-align: center;
+    padding: 18px 8px; line-height: 1.6; }
+  .chatwrap textarea#intakeText { min-height: 58px; }
   .iquestions { margin: 14px 0 6px; padding: 12px 14px; border-radius: 12px;
     border: 1px solid var(--warm); background: var(--warm-bg); }
   .iquestions .qk { font-family: "IBM Plex Mono", monospace; font-size: 11px;
@@ -1946,6 +1961,11 @@ function openCookHub(){
     <h3>Was sollen wir kochen?</h3>
     <div class="h3sub">aus deinem Vorrat</div>
     <div class="cookhub-opts">
+      <button class="hubopt" id="hubChat" type="button">
+        <span class="he">💬</span>
+        <span class="htxt"><b>Frag dein Inventar</b><span>Sag, worauf du Lust hast</span></span>
+        <span class="hgo">›</span>
+      </button>
       <button class="hubopt" id="hubIdeas" type="button">
         <span class="he">💡</span>
         <span class="htxt"><b>Ideen holen</b><span>Vorschläge aus dem ganzen Vorrat</span></span>
@@ -1962,6 +1982,7 @@ function openCookHub(){
         <span class="hgo">›</span>
       </button>
     </div>`);
+  document.getElementById('hubChat').addEventListener('click', openChat);
   document.getElementById('hubIdeas').addEventListener('click', openInspiration);
   document.getElementById('hubBook').addEventListener('click', openBook);
   document.getElementById('hubCombine').addEventListener('click', ()=>{ closeSheet(); enterCombine(); });
@@ -2505,6 +2526,7 @@ async function loadRecipeConfig(){
 
 let inspoMode = 'stock'; // 'stock' (cook from inventory) | 'shop' (with shopping)
 let ideaCache = null;    // { sig, data } — last generated batch, reused until refreshed
+let chatTurns = [];      // "Frag dein Inventar" transcript: [{role,text,ideas:[]}]
 
 /* Signature of the inputs that shape a batch. Reusing the cache only when this
    matches means changing mode/mood/model still regenerates, but tapping
@@ -2621,14 +2643,12 @@ async function fetchIdeas(force){
   renderIdeas(data);
 }
 
-function renderIdeas(data){
-  const ideas = data.ideas || [];
-  if (!ideas.length){
-    return inspoError('Keine Ideen gefunden — vielleicht ist der Vorrat zu leer.',
-      { message: 'Versuch es mit „Mit Einkauf“.' }, openInspiration);
-  }
-  const card = (idea, i) => `
-    <button class="ideacard" data-idx="${i}" type="button">
+// One tappable idea card. Shared by "Ideen holen" and "Frag dein Inventar" so
+// both flow into the same openRecipe() pipeline; `idx` is the data-idx the click
+// handler reads to look the idea back up.
+function ideaCardHtml(idea, idx){
+  return `
+    <button class="ideacard" data-idx="${idx}" type="button">
       <div class="it">${esc(idea.title)}</div>
       ${idea.hook?`<div class="ih">${esc(idea.hook)}</div>`:''}
       <div class="imeta">
@@ -2636,10 +2656,18 @@ function renderIdeas(data){
         ${(idea.buy&&idea.buy.length)?`<span class="buybadge">🛒 ${esc(idea.buy.join(', '))}</span>`:''}
       </div>
     </button>`;
+}
+
+function renderIdeas(data){
+  const ideas = data.ideas || [];
+  if (!ideas.length){
+    return inspoError('Keine Ideen gefunden — vielleicht ist der Vorrat zu leer.',
+      { message: 'Versuch es mit „Mit Einkauf“.' }, openInspiration);
+  }
   openSheet(`
     <h3>Ideen</h3>
     <div class="h3sub">${data.mode==='shop'?'mit Einkauf':'aus dem Vorrat'} · tipp eine an</div>
-    ${ideas.map(card).join('')}
+    ${ideas.map(ideaCardHtml).join('')}
     <div class="row">
       <button class="btn ghost" id="moreIdeas">‹ Zurück</button>
       <button class="btn solid" id="refreshIdeas">🔄 Neue Ideen</button>
@@ -2651,6 +2679,93 @@ function renderIdeas(data){
   sheet.querySelectorAll('.ideacard').forEach(c=>c.addEventListener('click', ()=>{
     openRecipe(ideas[Number(c.dataset.idx)], data.mode);
   }));
+}
+
+/* "Frag dein Inventar" — a conversational entry point. Each turn returns a short
+   reply plus up to 5 idea cards that flow into the very same openRecipe() pipeline
+   as "Ideen holen". Voice input reuses the #intakeText / #micBtn speech engine. */
+async function openChat(){
+  stopRecording();
+  await loadRecipeConfig();
+  chatTurns = [];               // fresh conversation each open
+  renderChat();
+}
+
+function chatHistoryFor(){
+  return chatTurns.map(t => ({ role: t.role, content: t.text }));
+}
+
+function renderChat(opts){
+  opts = opts || {};
+  const micHtml = SpeechRec
+    ? `<button type="button" class="micbtn" id="micBtn" title="Zum Diktieren tippen">🎙</button>` : '';
+  const turns = chatTurns.map((t, ti) => {
+    if (t.role === 'user') return `<div class="bubble user">${esc(t.text)}</div>`;
+    const reply = t.text ? `<div class="bubble bot">${esc(t.text)}</div>` : '';
+    const cards = (t.ideas && t.ideas.length)
+      ? `<div class="chat-ideas">${t.ideas.map((idea, i) =>
+          ideaCardHtml(idea, i).replace('<button class="ideacard"', `<button class="ideacard" data-turn="${ti}"`)
+        ).join('')}</div>` : '';
+    return reply + cards;
+  }).join('');
+  const empty = chatTurns.length ? '' :
+    `<div class="chat-empty">Sag mir, worauf du Lust hast oder was weg muss —<br>z. B. „etwas mit Sauerkraut und Schupfnudeln“.</div>`;
+  const thinking = opts.thinking ? `<div class="chat-thinking">denke nach…</div>` : '';
+  openSheet(`
+    <div class="chathead">
+      <h3 style="margin:0">💬 Frag dein Inventar</h3>
+    </div>
+    <div class="h3sub">ich koche mit dem, was da ist</div>
+    <div class="chatwrap">
+      <div class="chat-scroll" id="chatScroll">${empty}${turns}${thinking}</div>
+      <div class="micwrap chatinput">
+        <textarea id="intakeText" placeholder="Worauf hast du Lust?"${opts.thinking?' disabled':''}></textarea>
+        ${micHtml}
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="chatBack">‹ Zurück</button>
+      <button class="btn ghost" id="chatReset">🗑 Neu</button>
+      <button class="btn solid" id="chatSend"${opts.thinking?' disabled':''}>Senden</button>
+    </div>`);
+  const scroll = document.getElementById('chatScroll');
+  if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  const micBtn = document.getElementById('micBtn');
+  if (micBtn) micBtn.addEventListener('click', toggleRecording);
+  document.getElementById('chatBack').addEventListener('click', ()=>{ stopRecording(); openCookHub(); });
+  document.getElementById('chatReset').addEventListener('click', ()=>{ stopRecording(); chatTurns = []; renderChat(); });
+  const sendBtn = document.getElementById('chatSend');
+  if (sendBtn) sendBtn.addEventListener('click', sendChat);
+  // Tappable idea cards open the existing recipe view; shop-mode when the model
+  // proposed something to buy, otherwise cook-from-stock.
+  sheet.querySelectorAll('.chat-ideas .ideacard').forEach(c=>c.addEventListener('click', ()=>{
+    const turn = chatTurns[Number(c.dataset.turn)];
+    const idea = turn && turn.ideas[Number(c.dataset.idx)];
+    if (idea) openRecipe(idea, (idea.buy && idea.buy.length) ? 'shop' : 'stock');
+  }));
+}
+
+async function sendChat(){
+  const ta = document.getElementById('intakeText');
+  const message = (ta && ta.value || '').trim();
+  if (!message) { if (ta) ta.focus(); return; }
+  stopRecording();
+  const history = chatHistoryFor();          // prior turns, before this message
+  chatTurns.push({ role: 'user', text: message, ideas: [] });
+  renderChat({ thinking: true });
+  let data;
+  try {
+    data = await apiPost('/api/recipes/chat', {
+      message, history,
+      idea_model: SETTINGS.idea_model || undefined,
+      preferences: { cuisine: mood.cuisine, style: mood.style, needs: [...mood.needs] },
+    });
+  } catch (err){
+    chatTurns.push({ role: 'assistant', text: 'Da ist etwas schiefgegangen: ' + (err && err.message || 'unbekannter Fehler'), ideas: [] });
+    return renderChat();
+  }
+  chatTurns.push({ role: 'assistant', text: data.reply || '', ideas: data.ideas || [] });
+  renderChat();
 }
 
 async function openRecipe(idea, mode){

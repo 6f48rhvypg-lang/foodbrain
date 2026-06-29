@@ -118,6 +118,7 @@ class FoodBrainAPI:
     recipe_reviser: Optional[Callable[..., dict]] = None
     twist_extractor: Optional[Callable[..., dict]] = None
     consumption_estimator: Optional[Callable[..., dict]] = None
+    chat_generator: Optional[Callable[..., dict]] = None
     cook_store_path: Optional[object] = None  # str | Path
 
     # --- reads -----------------------------------------------------------
@@ -423,6 +424,40 @@ class FoodBrainAPI:
         except (LlmError, LlmNotConfigured) as exc:
             raise self._llm_error(exc) from exc
         return {"mode": mode, "seeds": seeds, "ideas": result.get("ideas", [])}
+
+    def recipe_chat(self, payload: Optional[dict] = None) -> dict:
+        """Conversational recipe turn: reasons over the whole inventory.
+
+        Body: ``{message, history:[{role,content}], preferences?, idea_model?}``.
+        Returns ``{reply, ideas}`` where each idea shares the ``recipe_ideas``
+        card shape, so the SPA reuses the same idea-card → recipe flow.
+        """
+        self._require_intake()
+        payload = payload or {}
+        message = str(payload.get("message") or "").strip()
+        if not message:
+            raise ApiError(400, "message is required")
+        history = _clean_chat_history(payload.get("history"))
+        preferences = payload.get("preferences")
+        preferences = preferences if isinstance(preferences, dict) else {}
+        model = self._resolve_model(payload.get("idea_model"), self.settings.idea_model)
+        store = self._cook_path()
+        gen = self.chat_generator or recipes_llm.chat_inventory
+        try:
+            result = gen(
+                message=message,
+                history=history,
+                inventory_lines=self._inventory_lines(),
+                taste=cookmemory.taste_summary(store),
+                recent_cooked=cookmemory.recent_cooked(store),
+                preferences=preferences,
+                count=5,
+                model=model,
+                settings=self.settings,
+            )
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+        return {"reply": result.get("reply", ""), "ideas": result.get("ideas", [])}
 
     def recipe_detail(
         self, idea: dict, mode: str = "stock", recipe_model: Optional[str] = None
@@ -991,6 +1026,23 @@ class FoodBrainAPI:
             (seeds if band in ("hot", "warm") else inventory).append(urgency.item.name)
         return seeds, inventory
 
+    def _inventory_lines(self) -> List[str]:
+        """The whole stock as compact annotated lines for the chat prompt.
+
+        Each line carries name, amount/unit, location, and (when known) the
+        relative expiry — e.g. ``"Sauerkraut — 500 g (Kühlschrank, läuft in 2
+        Tagen ab)"`` — sorted urgent-first so the model leads with what to save.
+        """
+        today = self.today_provider()
+        window = self.settings.expiry_window_days
+        scored = [
+            score_stock_item(item, today=today, expiry_window_days=window)
+            for item in self.stock_provider()
+            if item.amount > 0
+        ]
+        scored.sort(key=lambda u: (-u.urgency_score, u.item.name.lower()))
+        return [_inventory_line(u) for u in scored]
+
     def _cook_path(self):
         if self.cook_store_path is not None:
             return self.cook_store_path
@@ -1011,6 +1063,7 @@ class FoodBrainAPI:
             or self.recipe_generator
             or self.twist_extractor
             or self.consumption_estimator
+            or self.chat_generator
         ):
             return  # injected generators don't need a real key (tests)
         if not getattr(self.settings, "intake_enabled", False):
@@ -1295,6 +1348,45 @@ def _describe_item(item: StockItem) -> str:
     if item.unit:
         return f"{amount} {item.unit} {item.name}"
     return f"{amount} {item.name}"
+
+
+def _inventory_line(urgency: IngredientUrgency) -> str:
+    """One annotated stock line for the chat prompt: name — amount (place, expiry)."""
+    item = urgency.item
+    amount = f"{item.amount:g}{(' ' + item.unit) if item.unit else ''}".strip()
+    qualifiers = []
+    if item.location:
+        qualifiers.append(str(item.location))
+    qualifiers.append(_expiry_phrase(urgency.days_until_expiry))
+    head = f"{item.name} — {amount}" if amount else item.name
+    return f"{head} ({', '.join(q for q in qualifiers if q)})"
+
+
+def _expiry_phrase(days: Optional[int]) -> str:
+    if days is None:
+        return "ohne Ablaufdatum"
+    if days < 0:
+        return f"seit {abs(days)} Tagen überfällig"
+    if days == 0:
+        return "läuft heute ab"
+    if days == 1:
+        return "läuft morgen ab"
+    return f"läuft in {days} Tagen ab"
+
+
+def _clean_chat_history(history) -> List[dict]:
+    """Sanitize incoming chat history into well-formed user/assistant turns."""
+    cleaned: List[dict] = []
+    if not isinstance(history, list):
+        return cleaned
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        role = entry.get("role")
+        content = str(entry.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            cleaned.append({"role": role, "content": content})
+    return cleaned
 
 
 # --- "Ask-AI" German prompt builder ------------------------------------------

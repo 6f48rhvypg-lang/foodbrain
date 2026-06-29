@@ -158,6 +158,97 @@ def _clean_idea(row, mode: str) -> Optional[dict]:
     }
 
 
+# --- 1b. chat with inventory ----------------------------------------------
+
+_CHAT_SYSTEM = (
+    "Du bist ein Koch im Gespräch mit dem Nutzer über das, was er im Haus hat. "
+    "Du bekommst den GESAMTEN Vorrat ('inventory') mit Menge, Ort und — wo "
+    "bekannt — wann etwas abläuft (dringendes zuerst).\n\n"
+    "Antworte kurz und konkret auf die Frage oder den Wunsch des Nutzers (1–3 "
+    "Sätze im Feld 'reply'). Schlage danach BIS ZU 5 passende Gericht-Ideen vor. "
+    "Regeln:\n"
+    "- Nutze überwiegend Vorhandenes; bevorzuge sanft, was bald abläuft.\n"
+    "- Fehlt für eine Idee etwas Wesentliches, nenne es klar im Feld 'buy' "
+    "(1–3 Zutaten, die NICHT im Vorrat sind). Sonst 'buy' leer lassen.\n"
+    "- Im Feld 'uses' nennst du die wichtigste vorhandene Zutat der Idee.\n"
+    "- Berücksichtige den bisherigen Gesprächsverlauf: wenn der Nutzer "
+    "nachschärft ('mach es vegetarisch', 'leichter'), forme die Vorschläge "
+    "entsprechend um.\n"
+    "- 'taste' (mag/mag nicht/Notizen) und 'preferences' sind sanfte Hinweise, "
+    "keine harten Filter. Wiederhole nicht, was kürzlich gekocht wurde.\n"
+    "- Deutsche Titel, Haken-Sätze und Antwort. Antworte mit NUR diesem JSON:\n"
+    '{"reply": str, "ideas": [{"title": str, "hook": str, "uses": str, "buy": [str]}]}'
+)
+
+
+def chat_inventory(
+    *,
+    message: str,
+    history: List[dict],
+    inventory_lines: List[str],
+    taste: dict,
+    recent_cooked: List[str],
+    preferences: dict,
+    count: int,
+    model: str,
+    settings,
+    transport: Optional[Transport] = None,
+) -> dict:
+    """Conversational recipe turn: a short reply + up to ``count`` idea cards.
+
+    ``history`` is the prior turns as ``{"role","content"}`` dicts (assistant
+    entries hold reply text only); ``inventory_lines`` are pre-annotated stock
+    lines (name, amount, location, urgency). The cards share the shape of
+    :func:`generate_ideas` so the client reuses the same recipe flow. 'shop'-style
+    ``buy`` is always allowed here — the user can ask to add ingredients.
+    """
+    count = max(1, min(int(count or 5), 5))
+    user = _chat_user_message(
+        message=message,
+        inventory_lines=inventory_lines or [],
+        taste=taste or {},
+        recent_cooked=recent_cooked or [],
+        preferences=preferences or {},
+        count=count,
+    )
+    data = post_chat_json(
+        settings=settings,
+        model=model,
+        system=_CHAT_SYSTEM,
+        user=user,
+        history=history or [],
+        transport=transport,
+    )
+    ideas = []
+    for row in data.get("ideas", []) if isinstance(data.get("ideas"), list) else []:
+        idea = _clean_idea(row, "shop")
+        if idea is not None:
+            ideas.append(idea)
+    return {"reply": str(data.get("reply") or "").strip(), "ideas": ideas[:count]}
+
+
+def _chat_user_message(
+    *, message, inventory_lines, taste, recent_cooked, preferences, count
+) -> str:
+    lines = [
+        f"Frage/Wunsch des Nutzers: {str(message or '').strip()}",
+        f"Maximale Anzahl Ideen: {count}.",
+        "Vorrat (inventory, dringendes zuerst):",
+    ]
+    lines.extend(f"- {line}" for line in inventory_lines) if inventory_lines else lines.append("- —")
+    lines.append("Mag: " + (", ".join(taste.get("likes", [])) or "—"))
+    lines.append("Mag nicht: " + (", ".join(taste.get("dislikes", [])) or "—"))
+    notes = str(taste.get("notes") or "").strip()
+    if notes:
+        lines.append("Notizen: " + notes)
+    if recent_cooked:
+        lines.append("Kürzlich gekocht (nicht wiederholen): " + ", ".join(recent_cooked))
+    pref_line = _preferences_line(preferences)
+    if pref_line:
+        lines.append("Wünsche: " + pref_line)
+    return "\n".join(lines)
+
+
 # --- 2. recipe (phase guidance) -------------------------------------------
 
 _RECIPE_SYSTEM = (

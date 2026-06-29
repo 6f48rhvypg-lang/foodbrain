@@ -86,6 +86,52 @@ class GenerateIdeasTest(unittest.TestCase):
         self.assertEqual([i["title"] for i in out["ideas"]], ["Gut"])
 
 
+class ChatInventoryTest(unittest.TestCase):
+    def test_returns_reply_and_clamped_cards_with_history_and_inventory(self) -> None:
+        transport, captured = _reply(
+            {"reply": "Klar, da geht einiges!",
+             "ideas": [{"title": f"Idee {i}", "uses": "Sauerkraut", "buy": ["Speck"]} for i in range(7)]}
+        )
+        out = recipes_llm.chat_inventory(
+            message="etwas mit Sauerkraut und Schupfnudeln",
+            history=[
+                {"role": "user", "content": "was geht?"},
+                {"role": "assistant", "content": "viel!"},
+            ],
+            inventory_lines=["Sauerkraut — 500 g (Kühlschrank, läuft in 2 Tagen ab)"],
+            taste={"likes": ["deftig"], "dislikes": [], "notes": ""},
+            recent_cooked=["Lasagne"],
+            preferences={},
+            count=5,
+            model="google/gemini-3.1-pro",
+            settings=_settings(),
+            transport=transport,
+        )
+        self.assertEqual(out["reply"], "Klar, da geht einiges!")
+        self.assertEqual(len(out["ideas"]), 5)  # clamped to count
+        # history threads through to the request, between system and final user.
+        roles = [m["role"] for m in captured["body"]["messages"]]
+        self.assertEqual(roles, ["system", "user", "assistant", "user"])
+        # annotated inventory + the live message reach the final user turn.
+        user_msg = captured["body"]["messages"][-1]["content"]
+        self.assertIn("Sauerkraut — 500 g", user_msg)
+        self.assertIn("Schupfnudeln", user_msg)
+        self.assertIn("Lasagne", user_msg)
+
+    def test_buy_is_allowed_and_blank_titles_dropped(self) -> None:
+        transport, _ = _reply(
+            {"reply": "ok", "ideas": [{"hook": "kein titel"},
+                                      {"title": "Eintopf", "buy": ["Wurst", "Brühe"]}]}
+        )
+        out = recipes_llm.chat_inventory(
+            message="abendessen?", history=[], inventory_lines=[], taste={},
+            recent_cooked=[], preferences={}, count=5,
+            model="google/gemini-3.1-pro", settings=_settings(), transport=transport,
+        )
+        self.assertEqual([i["title"] for i in out["ideas"]], ["Eintopf"])
+        self.assertEqual(out["ideas"][0]["buy"], ["Wurst", "Brühe"])
+
+
 class GenerateRecipeTest(unittest.TestCase):
     def test_returns_phase_guidance(self) -> None:
         transport, _ = _reply(

@@ -107,6 +107,41 @@ class RecipeApiTest(unittest.TestCase):
             self._api(recipe_generator=lambda **k: {}).recipe_detail({}, mode="stock")
         self.assertEqual(ctx.exception.status, 400)
 
+    def test_chat_passes_annotated_inventory_and_history(self) -> None:
+        cookmemory.add_cooked(self.store, dish="Lasagne")
+        seen = {}
+
+        def gen(**kwargs):
+            seen.update(kwargs)
+            return {"reply": "klar!", "ideas": [{"title": "Bowl", "uses": "Joghurt", "buy": []}]}
+
+        out = self._api(chat_generator=gen).recipe_chat(
+            {"message": "was geht?", "history": [{"role": "user", "content": "hi"}]}
+        )
+        self.assertEqual(out["reply"], "klar!")
+        self.assertEqual(out["ideas"][0]["title"], "Bowl")
+        # whole inventory reaches the generator as annotated lines, urgent-first.
+        lines = seen["inventory_lines"]
+        self.assertTrue(lines[0].startswith("Joghurt"))  # hot item leads
+        self.assertIn("1 Becher", lines[0])
+        self.assertIn("überfällig", lines[0])
+        self.assertTrue(any("ohne Ablaufdatum" in line for line in lines))  # staple
+        # history threads through; recent-cooked avoidance is supplied.
+        self.assertEqual(seen["history"], [{"role": "user", "content": "hi"}])
+        self.assertIn("Lasagne", seen["recent_cooked"])
+
+    def test_chat_requires_message(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api(chat_generator=lambda **k: {}).recipe_chat({"message": "  "})
+        self.assertEqual(ctx.exception.status, 400)
+
+    def test_chat_rejects_unknown_model(self) -> None:
+        with self.assertRaises(ApiError) as ctx:
+            self._api(chat_generator=lambda **k: {}).recipe_chat(
+                {"message": "x", "idea_model": "evil/model"}
+            )
+        self.assertEqual(ctx.exception.status, 400)
+
     def test_twist_persists_and_merges_taste(self) -> None:
         def gen(**kwargs):
             return {"change": "mehr Chili", "note": "", "tags": {"likes": ["Chili"], "dislikes": []}}
