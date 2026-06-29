@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Loader 1 · Remy's Stroll</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* LOADER 1 — Remy's Stroll:
+     the iconic Ratatouille beat — an upright chef-mouse walks left→right
+     on its hind legs, holding a tomato aloft in both paws. Seamless loop. */
+  :root{
+    --shadow-lg: 0 1px 2px rgba(35,55,40,.06), 0 30px 60px -28px rgba(35,55,40,.5);
+    --fur:#b9af9f; --fur-dk:#a4998857; --belly:#ddd5c6;
+    --pink:#e3a79b; --pink-dk:#cf8f83;
+  }
+  .wrap{ min-height:100vh; display:grid; place-items:center; padding:24px 16px 40px; }
+  .sheet-demo{
+    width:min(440px,100%); background:var(--surface);
+    border:1px solid var(--line); border-radius:24px;
+    padding:20px 18px 22px; box-shadow:var(--shadow-lg);
+  }
+  .grip{ width:40px; height:4px; border-radius:4px; background:var(--line); margin:0 auto 16px; }
+  .sheet-demo h3{ font-family:"Fraunces",serif; font-weight:600; font-size:24px; letter-spacing:-.01em; margin-bottom:4px; color:var(--ink); }
+  .h3sub{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); letter-spacing:.12em; text-transform:uppercase; margin-bottom:16px; }
+
+  /* ---- loader stage ---- */
+  .stage{
+    position:relative; height:152px; border-radius:16px; overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% -30%, color-mix(in srgb,var(--amber) 9%,transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb,var(--surface-2) 60%,var(--surface)), var(--surface-2));
+    border:1px solid var(--line-soft);
+  }
+  /* wooden shelf the mouse strolls along */
+  .floor{ position:absolute; left:0; right:0; bottom:30px; height:2px;
+    background:linear-gradient(90deg,transparent,var(--line),transparent); }
+  .floor::after{ content:""; position:absolute; left:0; right:0; top:2px; height:14px;
+    background:linear-gradient(180deg, color-mix(in srgb,var(--staple) 12%,transparent), transparent); }
+
+  .mouse{ position:absolute; bottom:20px; left:-128px; width:88px; height:auto;
+    animation: walk 5.4s linear infinite; will-change:left; }
+
+  /* gait + secondary motion (each part pivots about its own bbox via fill-box) */
+  .bob{ animation: bob .52s ease-in-out infinite; transform-box:fill-box; transform-origin:50% 100%; }
+  .leg-b,.leg-f{ transform-box:fill-box; transform-origin:50% 6%; animation: step .52s ease-in-out infinite; }
+  .leg-f{ animation-delay:-.26s; }
+  .armsveg{ transform-box:fill-box; transform-origin:50% 100%; animation: hold 2.1s ease-in-out infinite; }
+  .tail{ transform-box:fill-box; transform-origin:88% 88%; animation: tailsway 1.3s ease-in-out infinite; }
+  .ear{ transform-box:fill-box; transform-origin:60% 92%; animation: earwig 1.7s ease-in-out infinite; }
+
+  @keyframes walk{ from{ left:-128px } to{ left:calc(100% + 34px) } }
+  @keyframes bob{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-3.5px) } }
+  @keyframes step{ 0%,100%{ transform:rotate(17deg) } 50%{ transform:rotate(-17deg) } }
+  @keyframes hold{ 0%,100%{ transform:rotate(-2.6deg) } 50%{ transform:rotate(2.6deg) } }
+  @keyframes tailsway{ 0%,100%{ transform:rotate(-7deg) } 50%{ transform:rotate(8deg) } }
+  @keyframes earwig{ 0%,100%{ transform:rotate(-4deg) } 50%{ transform:rotate(5deg) } }
+
+  .caption{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-faint);
+    letter-spacing:.12em; text-align:center; padding:16px 2px 2px; }
+  .caption .d::after{ content:"…"; animation: dots 1.5s steps(4,end) infinite; }
+  @keyframes dots{ 0%{content:""} 25%{content:"·"} 50%{content:"··"} 75%,100%{content:"···"} }
+
+  .vlabel{ width:min(440px,100%); margin:14px auto 0; text-align:center;
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink-faint); }
+  .vlabel b{ color:var(--ink-dim); font-weight:600; }
+
+  @media (prefers-reduced-motion: reduce){
+    .mouse{ left:calc(50% - 44px); animation:none; }
+    .bob,.leg-b,.leg-f,.armsveg,.tail,.ear{ animation:none; }
+    .leg-b{ transform:rotate(12deg) } .leg-f{ transform:rotate(-12deg) }
+    .caption .d::after{ content:"…"; animation:none; }
+  }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="sheet-demo">
+    <div class="grip"></div>
+    <h3>Ratatouille aus dem Ofen</h3>
+    <div class="h3sub">wird zubereitet…</div>
+
+    <div class="stage">
+      <div class="floor"></div>
+
+      <!-- reusable upright chef-mouse · faces right · viewBox 160×200 -->
+      <svg class="mouse" viewBox="0 0 160 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- tail -->
+        <g class="tail">
+          <path d="M64,148 C40,160 28,134 42,122 C51,114 60,124 53,131"
+                stroke="var(--pink-dk)" stroke-width="5.5" stroke-linecap="round"/>
+        </g>
+
+        <!-- back leg -->
+        <g class="leg-b">
+          <rect x="60" y="150" width="11" height="30" rx="5.5" fill="var(--fur)"/>
+          <ellipse cx="63" cy="183" rx="9" ry="5.5" fill="var(--pink)"/>
+        </g>
+
+        <g class="bob">
+          <!-- body -->
+          <path d="M62,152 C55,128 58,99 71,87 C77,81 85,81 91,87 C104,99 107,128 100,152 C90,160 72,160 62,152 Z"
+                fill="var(--fur)"/>
+          <path d="M70,150 C66,132 67,110 76,101 C82,96 88,100 90,110 C93,128 90,146 86,151 C81,155 74,155 70,150 Z"
+                fill="var(--belly)" opacity=".7"/>
+          <!-- apron -->
+          <path d="M70,104 C70,100 90,100 90,104 L93,140 C93,149 67,149 67,140 Z" fill="var(--accent)"/>
+          <path d="M68,106 C76,110 84,110 92,106" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+
+          <!-- back ear (peeks out right of the toque) -->
+          <circle cx="96" cy="58" r="9" fill="var(--fur-dk)"/>
+          <!-- head -->
+          <circle cx="80" cy="71" r="23" fill="var(--fur)"/>
+          <!-- snout -->
+          <path d="M97,67 C113,64 121,73 118,80 C115,85 102,84 96,79 Z" fill="var(--fur)"/>
+          <circle cx="117" cy="76" r="3.4" fill="var(--ink)"/>
+          <!-- eye -->
+          <circle cx="92" cy="67" r="3" fill="var(--ink)"/>
+          <circle cx="93.3" cy="65.8" r="1" fill="#fff"/>
+          <!-- cheek -->
+          <circle cx="101" cy="76" r="5" fill="var(--pink)" opacity=".4"/>
+          <!-- front ear -->
+          <g class="ear">
+            <circle cx="69" cy="47" r="15" fill="var(--fur)"/>
+            <circle cx="69" cy="49" r="8.5" fill="var(--pink)"/>
+          </g>
+          <!-- chef toque -->
+          <rect x="59" y="40" width="42" height="13" rx="6.5" fill="var(--surface)" stroke="var(--line)" stroke-width="1"/>
+          <circle cx="65" cy="30" r="11" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <circle cx="80" cy="24" r="13" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <circle cx="94" cy="30" r="10" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <rect x="59" y="40" width="42" height="7" rx="3.5" fill="var(--surface)"/>
+        </g>
+
+        <!-- front leg (over body) -->
+        <g class="leg-f">
+          <rect x="89" y="150" width="11" height="30" rx="5.5" fill="var(--fur)"/>
+          <ellipse cx="97" cy="183" rx="9" ry="5.5" fill="var(--pink)"/>
+        </g>
+
+        <!-- both paws hug a big tomato against the chest -->
+        <g class="armsveg">
+          <path d="M71,95 C64,103 67,112 76,115" stroke="var(--fur)" stroke-width="8.5" stroke-linecap="round"/>
+          <path d="M95,92 C103,100 101,111 91,115" stroke="var(--fur)" stroke-width="8.5" stroke-linecap="round"/>
+          <!-- tomato -->
+          <circle cx="83" cy="108" r="15.5" fill="var(--hot)"/>
+          <circle cx="83" cy="108" r="15.5" fill="url(#tomShine)"/>
+          <!-- calyx -->
+          <path d="M83,94 l3,-5 M83,94 l-4,-4 M83,94 l6,-2 M83,94 l-7,-1" stroke="var(--cool)" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="83" cy="93" r="2.4" fill="var(--cool)"/>
+          <!-- gripping paws -->
+          <ellipse cx="73" cy="113" rx="6" ry="5" fill="var(--pink)"/>
+          <ellipse cx="93" cy="113" rx="6" ry="5" fill="var(--pink)"/>
+        </g>
+
+        <defs>
+          <radialGradient id="tomShine" cx="34%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="#fff" stop-opacity=".55"/>
+            <stop offset="45%" stop-color="#fff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="caption">schreibe das Rezept<span class="d"></span></div>
+  </div>
+  <div class="vlabel"><b>Loader 1</b> · Remy&rsquo;s Stroll</div>
+</div>
+</body></html>

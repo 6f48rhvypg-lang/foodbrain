@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Loader 5 · Kitchen Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* LOADER 5 — Kitchen Runner:
+     the chef-mouse sprints in place with a baguette over its shoulder and a
+     sack of veg, while a parallax kitchen (wall · shelf · floor) streaks past. */
+  :root{
+    --shadow-lg: 0 1px 2px rgba(35,55,40,.06), 0 30px 60px -28px rgba(35,55,40,.5);
+    --fur:#b9af9f; --fur-dk:#a4998857; --belly:#ddd5c6;
+    --pink:#e3a79b; --pink-dk:#cf8f83;
+    --wood:#c79a63; --wood-dk:#a87f4d; --bread:#d9b066; --sack:#cbb48c;
+  }
+  .wrap{ min-height:100vh; display:grid; place-items:center; padding:24px 16px 40px; }
+  .sheet-demo{ width:min(440px,100%); background:var(--surface); border:1px solid var(--line);
+    border-radius:24px; padding:20px 18px 22px; box-shadow:var(--shadow-lg); }
+  .grip{ width:40px; height:4px; border-radius:4px; background:var(--line); margin:0 auto 16px; }
+  .sheet-demo h3{ font-family:"Fraunces",serif; font-weight:600; font-size:24px; letter-spacing:-.01em; margin-bottom:4px; color:var(--ink); }
+  .h3sub{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); letter-spacing:.12em; text-transform:uppercase; margin-bottom:16px; }
+
+  .stage{ position:relative; height:152px; border-radius:16px; overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% -30%, color-mix(in srgb,var(--amber) 10%,transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb,var(--surface-2) 55%,var(--surface)), var(--surface-2));
+    border:1px solid var(--line-soft); }
+
+  /* ---- parallax layers ---- */
+  .far{ position:absolute; inset:0;
+    background: repeating-linear-gradient(90deg, transparent 0 44px, color-mix(in srgb,var(--ink) 4%,transparent) 44px 46px);
+    animation: drift 24s linear infinite; }
+  .shelfboard{ position:absolute; left:0; right:0; top:44px; height:5px; border-radius:2px; background:var(--wood-dk); opacity:.45; }
+  .shelf{ position:absolute; left:0; right:0; top:18px; height:30px; overflow:hidden; }
+  .track{ position:absolute; left:0; bottom:0; display:flex; gap:46px; width:max-content; align-items:flex-end;
+    animation: slideMid 12s linear infinite; opacity:.5; }
+  .floor{ position:absolute; left:0; right:0; bottom:0; height:30px;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 30px, rgba(40,55,40,.10) 30px 32px),
+      linear-gradient(180deg, var(--wood), var(--wood-dk));
+    animation: slideFast 1.6s linear infinite; }
+
+  @keyframes drift{ to{ background-position-x:-46px } }
+  @keyframes slideMid{ to{ transform:translateX(-50%) } }
+  @keyframes slideFast{ to{ background-position-x:-64px, 0 } }
+
+  .puff{ position:absolute; bottom:34px; width:13px; height:9px; border-radius:50%;
+    background:color-mix(in srgb,var(--ink) 12%,transparent); }
+  .puff.p1{ left:42%; animation: puff 1.05s linear infinite; }
+  .puff.p2{ left:44%; animation: puff 1.05s linear infinite -.5s; transform:scale(.7); }
+  @keyframes puff{ 0%{ opacity:.5; transform:translateX(0) scale(.6) } 100%{ opacity:0; transform:translateX(-60px) scale(1.2) } }
+
+  .mouse{ position:absolute; bottom:18px; left:50%; margin-left:-46px; width:92px; height:auto; }
+  .runbob{ transform-box:fill-box; transform-origin:50% 100%; animation: runbob .34s ease-in-out infinite; }
+  .leg-b,.leg-f{ transform-box:fill-box; transform-origin:50% 6%; animation: run .34s ease-in-out infinite; }
+  .leg-f{ animation-delay:-.17s; }
+  .tail{ transform-box:fill-box; transform-origin:92% 60%; animation: stream .34s ease-in-out infinite; }
+  .bag{ transform-box:fill-box; transform-origin:60% 90%; animation: jog .34s ease-in-out infinite; }
+
+  @keyframes runbob{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-4px) } }
+  @keyframes run{ 0%,100%{ transform:rotate(26deg) } 50%{ transform:rotate(-26deg) } }
+  @keyframes stream{ 0%,100%{ transform:rotate(-6deg) } 50%{ transform:rotate(6deg) } }
+  @keyframes jog{ 0%,100%{ transform:rotate(-3deg) } 50%{ transform:rotate(3deg) } }
+
+  .caption{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-faint);
+    letter-spacing:.12em; text-align:center; padding:16px 2px 2px; }
+  .caption .d::after{ content:"…"; animation: dots 1.5s steps(4,end) infinite; }
+  @keyframes dots{ 0%{content:""} 25%{content:"·"} 50%{content:"··"} 75%,100%{content:"···"} }
+  .vlabel{ width:min(440px,100%); margin:14px auto 0; text-align:center; font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); }
+  .vlabel b{ color:var(--ink-dim); font-weight:600; }
+
+  @media (prefers-reduced-motion: reduce){
+    .far,.track,.floor,.puff,.runbob,.leg-b,.leg-f,.tail,.bag{ animation:none; }
+    .leg-b{ transform:rotate(18deg) } .leg-f{ transform:rotate(-18deg) }
+    .caption .d::after{ content:"…"; animation:none; }
+  }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="sheet-demo">
+    <div class="grip"></div>
+    <h3>Schnell zum Rezept</h3>
+    <div class="h3sub">aus dem Vorrat</div>
+
+    <div class="stage">
+      <div class="far"></div>
+      <div class="shelfboard"></div>
+      <div class="shelf"><div class="track">
+        <!-- one set of faint kitchen props, duplicated for a seamless loop -->
+        <svg width="26" height="30" viewBox="0 0 26 30"><rect x="6" y="9" width="14" height="20" rx="4" fill="var(--ink-faint)"/><rect x="7" y="4" width="12" height="6" rx="2" fill="var(--ink-dim)"/></svg>
+        <svg width="34" height="30" viewBox="0 0 34 30"><circle cx="13" cy="19" r="10" fill="none" stroke="var(--ink-faint)" stroke-width="3"/><rect x="22" y="17" width="12" height="4" rx="2" fill="var(--ink-faint)"/></svg>
+        <svg width="20" height="30" viewBox="0 0 20 30"><rect x="6" y="10" width="9" height="19" rx="4" fill="var(--ink-faint)"/><rect x="8" y="2" width="5" height="9" rx="2" fill="var(--ink-dim)"/></svg>
+        <svg width="30" height="30" viewBox="0 0 30 30"><path d="M3,16 Q15,32 27,16 Z" fill="var(--ink-faint)"/></svg>
+        <svg width="26" height="30" viewBox="0 0 26 30"><rect x="6" y="9" width="14" height="20" rx="4" fill="var(--ink-faint)"/><rect x="7" y="4" width="12" height="6" rx="2" fill="var(--ink-dim)"/></svg>
+        <svg width="34" height="30" viewBox="0 0 34 30"><circle cx="13" cy="19" r="10" fill="none" stroke="var(--ink-faint)" stroke-width="3"/><rect x="22" y="17" width="12" height="4" rx="2" fill="var(--ink-faint)"/></svg>
+        <svg width="20" height="30" viewBox="0 0 20 30"><rect x="6" y="10" width="9" height="19" rx="4" fill="var(--ink-faint)"/><rect x="8" y="2" width="5" height="9" rx="2" fill="var(--ink-dim)"/></svg>
+        <svg width="30" height="30" viewBox="0 0 30 30"><path d="M3,16 Q15,32 27,16 Z" fill="var(--ink-faint)"/></svg>
+      </div></div>
+      <div class="floor"></div>
+      <span class="puff p1"></span><span class="puff p2"></span>
+
+      <!-- running chef-mouse · leaning forward · viewBox 170×200 -->
+      <svg class="mouse" viewBox="0 0 170 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g transform="rotate(9 84 184)">
+          <!-- streaming tail -->
+          <g class="tail"><path d="M60,148 C34,150 18,140 12,150 C9,156 16,160 22,156" stroke="var(--pink-dk)" stroke-width="5.5" stroke-linecap="round"/></g>
+          <!-- legs (running) -->
+          <g class="leg-b"><rect x="62" y="150" width="11" height="30" rx="5.5" fill="var(--fur)"/><ellipse cx="66" cy="183" rx="9" ry="5.5" fill="var(--pink)"/></g>
+          <g class="runbob">
+            <path d="M62,152 C55,128 58,99 71,87 C77,81 85,81 91,87 C104,99 107,128 100,152 C90,160 72,160 62,152 Z" fill="var(--fur)"/>
+            <path d="M70,150 C66,132 67,110 76,101 C82,96 88,100 90,110 C93,128 90,146 86,151 C81,155 74,155 70,150 Z" fill="var(--belly)" opacity=".7"/>
+            <path d="M70,104 C70,100 90,100 90,104 L92,138 C92,147 68,147 68,138 Z" fill="var(--accent)"/>
+            <circle cx="96" cy="58" r="9" fill="var(--fur-dk)"/>
+            <circle cx="80" cy="71" r="23" fill="var(--fur)"/>
+            <path d="M97,67 C113,64 121,73 118,80 C115,85 102,84 96,79 Z" fill="var(--fur)"/>
+            <circle cx="117" cy="76" r="3.4" fill="var(--ink)"/>
+            <circle cx="92" cy="67" r="3" fill="var(--ink)"/><circle cx="93.3" cy="65.8" r="1" fill="#fff"/>
+            <circle cx="101" cy="76" r="5" fill="var(--pink)" opacity=".4"/>
+            <circle cx="69" cy="47" r="15" fill="var(--fur)"/><circle cx="69" cy="49" r="8.5" fill="var(--pink)"/>
+            <rect x="59" y="40" width="42" height="13" rx="6.5" fill="var(--surface)" stroke="var(--line)" stroke-width="1"/>
+            <circle cx="65" cy="30" r="11" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+            <circle cx="80" cy="24" r="13" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+            <circle cx="94" cy="30" r="10" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+            <rect x="59" y="40" width="42" height="7" rx="3.5" fill="var(--surface)"/>
+
+            <!-- front paw: a little sack of veg, pumping -->
+            <path d="M74,98 C66,108 64,116 70,120" stroke="var(--fur)" stroke-width="8.5" stroke-linecap="round"/>
+            <path d="M60,118 C58,132 78,132 76,118 L72,114 C70,112 66,112 64,114 Z" fill="var(--sack)"/>
+            <circle cx="64" cy="116" r="4" fill="var(--hot)"/>
+            <path d="M70,116 l2,-6 m1,7 l3,-5" stroke="var(--cool)" stroke-width="2" stroke-linecap="round"/>
+
+            <!-- back arm raised: baguette over the shoulder -->
+            <g class="bag">
+              <path d="M92,92 C100,84 106,76 110,68" stroke="var(--fur)" stroke-width="8.5" stroke-linecap="round"/>
+              <rect x="96" y="34" width="13" height="46" rx="6.5" transform="rotate(34 102 57)" fill="var(--bread)"/>
+              <path d="M118,44 l-5,5 M123,52 l-5,5 M113,37 l-5,5" stroke="var(--wood-dk)" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
+              <ellipse cx="98" cy="70" rx="5.5" ry="5" fill="var(--pink)"/>
+            </g>
+          </g>
+          <g class="leg-f"><rect x="88" y="150" width="11" height="30" rx="5.5" fill="var(--fur)"/><ellipse cx="96" cy="183" rx="9" ry="5.5" fill="var(--pink)"/></g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="caption">koche mir was aus<span class="d"></span></div>
+  </div>
+  <div class="vlabel"><b>Loader 5</b> · Kitchen Runner</div>
+</div>
+</body></html>

@@ -1081,6 +1081,38 @@
     color: var(--ink-faint); letter-spacing: .12em; padding: 18px 2px;
   }
 
+  /* ---------- recipe-wait animation: Remy strolls with a tomato ---------- */
+  .cookloader { --fur:#b9af9f; --fur-dk:#a4998857; --belly:#ddd5c6; --pink:#e3a79b; --pink-dk:#cf8f83; }
+  .cl-stage {
+    position: relative; height: 126px; border-radius: 16px; overflow: hidden; margin: 4px 0 2px;
+    background:
+      radial-gradient(120% 90% at 50% -30%, color-mix(in srgb, var(--amber) 9%, transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 60%, var(--surface)), var(--surface-2));
+    border: 1px solid var(--line-soft);
+  }
+  .cl-floor { position: absolute; left: 0; right: 0; bottom: 22px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--line), transparent); }
+  .cl-mouse { position: absolute; bottom: 14px; left: -118px; width: 74px; height: auto;
+    animation: clwalk 5.4s linear infinite; }
+  .cl-bob { animation: clbob .52s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+  .cl-legb, .cl-legf { transform-box: fill-box; transform-origin: 50% 6%; animation: clstep .52s ease-in-out infinite; }
+  .cl-legf { animation-delay: -.26s; }
+  .cl-arms { transform-box: fill-box; transform-origin: 50% 100%; animation: clhold 2.1s ease-in-out infinite; }
+  .cl-tail { transform-box: fill-box; transform-origin: 88% 88%; animation: cltail 1.3s ease-in-out infinite; }
+  .cl-ear  { transform-box: fill-box; transform-origin: 60% 92%; animation: clear 1.7s ease-in-out infinite; }
+  @keyframes clwalk { from { left: -118px; } to { left: calc(100% + 28px); } }
+  @keyframes clbob  { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3.5px); } }
+  @keyframes clstep { 0%,100% { transform: rotate(17deg); } 50% { transform: rotate(-17deg); } }
+  @keyframes clhold { 0%,100% { transform: rotate(-2.6deg); } 50% { transform: rotate(2.6deg); } }
+  @keyframes cltail { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(8deg); } }
+  @keyframes clear  { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(5deg); } }
+  .cookloader .loading { text-align: center; padding: 12px 2px 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    .cl-mouse { left: calc(50% - 37px); animation: none; }
+    .cl-bob, .cl-legb, .cl-legf, .cl-arms, .cl-tail, .cl-ear { animation: none; }
+    .cl-legb { transform: rotate(12deg); } .cl-legf { transform: rotate(-12deg); }
+  }
+
   .hint {
     text-align: center; margin-top: 32px;
     font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
@@ -2526,6 +2558,49 @@ async function openInspiration(){
   document.getElementById('getIdeasBtn').addEventListener('click', ()=>fetchIdeas(false));
 }
 
+// Playful recipe-wait animation: a chef-mouse strolls across carrying a tomato,
+// with the status line as caption. Returns markup to drop into the sheet.
+function cookLoader(text){
+  return `<div class="cookloader">
+    <div class="cl-stage"><div class="cl-floor"></div>
+      <svg class="cl-mouse" viewBox="0 0 160 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="cl-tail"><path d="M64,148 C40,160 28,134 42,122 C51,114 60,124 53,131" stroke="var(--pink-dk)" stroke-width="5.5" stroke-linecap="round"/></g>
+        <g class="cl-legb"><rect x="60" y="150" width="11" height="30" rx="5.5" fill="var(--fur)"/><ellipse cx="63" cy="183" rx="9" ry="5.5" fill="var(--pink)"/></g>
+        <g class="cl-bob">
+          <path d="M62,152 C55,128 58,99 71,87 C77,81 85,81 91,87 C104,99 107,128 100,152 C90,160 72,160 62,152 Z" fill="var(--fur)"/>
+          <path d="M70,150 C66,132 67,110 76,101 C82,96 88,100 90,110 C93,128 90,146 86,151 C81,155 74,155 70,150 Z" fill="var(--belly)" opacity=".7"/>
+          <path d="M70,104 C70,100 90,100 90,104 L93,140 C93,149 67,149 67,140 Z" fill="var(--accent)"/>
+          <path d="M68,106 C76,110 84,110 92,106" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+          <circle cx="96" cy="58" r="9" fill="var(--fur-dk)"/>
+          <circle cx="80" cy="71" r="23" fill="var(--fur)"/>
+          <path d="M97,67 C113,64 121,73 118,80 C115,85 102,84 96,79 Z" fill="var(--fur)"/>
+          <circle cx="117" cy="76" r="3.4" fill="var(--ink)"/>
+          <circle cx="92" cy="67" r="3" fill="var(--ink)"/><circle cx="93.3" cy="65.8" r="1" fill="#fff"/>
+          <circle cx="101" cy="76" r="5" fill="var(--pink)" opacity=".4"/>
+          <g class="cl-ear"><circle cx="69" cy="47" r="15" fill="var(--fur)"/><circle cx="69" cy="49" r="8.5" fill="var(--pink)"/></g>
+          <rect x="59" y="40" width="42" height="13" rx="6.5" fill="var(--surface)" stroke="var(--line)" stroke-width="1"/>
+          <circle cx="65" cy="30" r="11" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <circle cx="80" cy="24" r="13" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <circle cx="94" cy="30" r="10" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <rect x="59" y="40" width="42" height="7" rx="3.5" fill="var(--surface)"/>
+        </g>
+        <g class="cl-legf"><rect x="89" y="150" width="11" height="30" rx="5.5" fill="var(--fur)"/><ellipse cx="97" cy="183" rx="9" ry="5.5" fill="var(--pink)"/></g>
+        <g class="cl-arms">
+          <path d="M71,95 C64,103 67,112 76,115" stroke="var(--fur)" stroke-width="8.5" stroke-linecap="round"/>
+          <path d="M95,92 C103,100 101,111 91,115" stroke="var(--fur)" stroke-width="8.5" stroke-linecap="round"/>
+          <circle cx="83" cy="108" r="15.5" fill="var(--hot)"/>
+          <circle cx="83" cy="108" r="15.5" fill="url(#clTomShine)"/>
+          <path d="M83,94 l3,-5 M83,94 l-4,-4 M83,94 l6,-2 M83,94 l-7,-1" stroke="var(--cool)" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="83" cy="93" r="2.4" fill="var(--cool)"/>
+          <ellipse cx="73" cy="113" rx="6" ry="5" fill="var(--pink)"/><ellipse cx="93" cy="113" rx="6" ry="5" fill="var(--pink)"/>
+        </g>
+        <defs><radialGradient id="clTomShine" cx="34%" cy="30%" r="70%"><stop offset="0%" stop-color="#fff" stop-opacity=".55"/><stop offset="45%" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+      </svg>
+    </div>
+    <div class="loading">${text}</div>
+  </div>`;
+}
+
 async function fetchIdeas(force){
   const preferences = { cuisine: mood.cuisine, style: mood.style, needs: [...mood.needs] };
   const sig = ideaSig(preferences);
@@ -2533,7 +2608,7 @@ async function fetchIdeas(force){
   if (!force && ideaCache && ideaCache.sig === sig){ renderIdeas(ideaCache.data); return; }
   openSheet(`<h3>Ideen holen</h3>
     <div class="h3sub">${inspoMode==='shop'?'mit Einkauf':'aus dem Vorrat'}</div>
-    <div class="loading">koche mir was aus…</div>`);
+    ${cookLoader('koche mir was aus…')}`);
   let data;
   try {
     data = await apiPost('/api/recipes/ideas', {
@@ -2581,7 +2656,7 @@ function renderIdeas(data){
 async function openRecipe(idea, mode){
   openSheet(`<h3>${esc(idea.title)}</h3>
     <div class="h3sub">wird zubereitet…</div>
-    <div class="loading">schreibe das Rezept…</div>`);
+    ${cookLoader('schreibe das Rezept…')}`);
   let rec;
   try {
     rec = await apiPost('/api/recipes/recipe', {

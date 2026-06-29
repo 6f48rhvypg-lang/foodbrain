@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Loader 2 · Tightrope</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* LOADER 2 — Tightrope:
+     the chef-mouse tip-toes a taut string, balancing a carrot pole with a
+     tomato and an aubergine dangling from each end. Careful teeter + sway. */
+  :root{
+    --shadow-lg: 0 1px 2px rgba(35,55,40,.06), 0 30px 60px -28px rgba(35,55,40,.5);
+    --fur:#b9af9f; --fur-dk:#a4998857; --belly:#ddd5c6;
+    --pink:#e3a79b; --pink-dk:#cf8f83; --eggplant:#6a4a72;
+  }
+  .wrap{ min-height:100vh; display:grid; place-items:center; padding:24px 16px 40px; }
+  .sheet-demo{ width:min(440px,100%); background:var(--surface); border:1px solid var(--line);
+    border-radius:24px; padding:20px 18px 22px; box-shadow:var(--shadow-lg); }
+  .grip{ width:40px; height:4px; border-radius:4px; background:var(--line); margin:0 auto 16px; }
+  .sheet-demo h3{ font-family:"Fraunces",serif; font-weight:600; font-size:24px; letter-spacing:-.01em; margin-bottom:4px; color:var(--ink); }
+  .h3sub{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); letter-spacing:.12em; text-transform:uppercase; margin-bottom:16px; }
+
+  .stage{ position:relative; height:152px; border-radius:16px; overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% -30%, color-mix(in srgb,var(--amber) 9%,transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb,var(--surface-2) 60%,var(--surface)), var(--surface-2));
+    border:1px solid var(--line-soft); }
+  /* the taut string + its anchors */
+  .rope{ position:absolute; left:10px; right:10px; top:96px; height:2px; border-radius:2px;
+    background:linear-gradient(90deg, var(--staple), color-mix(in srgb,var(--ink-dim) 60%,transparent), var(--staple)); }
+  .peg{ position:absolute; top:90px; width:6px; height:16px; border-radius:3px; background:var(--staple); opacity:.8; }
+  .peg.l{ left:8px } .peg.r{ right:8px }
+
+  .mouse{ position:absolute; bottom:50px; left:-118px; width:84px; height:auto;
+    animation: cross 7.2s linear infinite; will-change:left; }
+  .teeter{ transform-box:fill-box; transform-origin:50% 96%; animation: teeter 2.4s ease-in-out infinite; }
+  .leg-b,.leg-f{ transform-box:fill-box; transform-origin:50% 6%; animation: tiptoe 1.2s ease-in-out infinite; }
+  .leg-f{ animation-delay:-.6s; }
+  .pole{ transform-box:fill-box; transform-origin:50% 50%; animation: poletilt 2.4s ease-in-out infinite; }
+  .danigl{ transform-box:fill-box; transform-origin:50% 4%; }
+  .dangl-l{ animation: swingA 2s ease-in-out infinite; }
+  .dangl-r{ animation: swingB 2.4s ease-in-out infinite; }
+  .tail{ transform-box:fill-box; transform-origin:88% 88%; animation: tailsway 1.6s ease-in-out infinite; }
+
+  @keyframes cross{ from{ left:-118px } to{ left:calc(100% + 30px) } }
+  @keyframes teeter{ 0%,100%{ transform:rotate(-2.4deg) } 50%{ transform:rotate(2.4deg) } }
+  @keyframes poletilt{ 0%,100%{ transform:rotate(2.2deg) } 50%{ transform:rotate(-2.2deg) } }
+  @keyframes tiptoe{ 0%,100%{ transform:rotate(7deg) } 50%{ transform:rotate(-7deg) } }
+  @keyframes swingA{ 0%,100%{ transform:rotate(-10deg) } 50%{ transform:rotate(7deg) } }
+  @keyframes swingB{ 0%,100%{ transform:rotate(8deg) } 50%{ transform:rotate(-9deg) } }
+  @keyframes tailsway{ 0%,100%{ transform:rotate(-9deg) } 50%{ transform:rotate(9deg) } }
+
+  .caption{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-faint);
+    letter-spacing:.12em; text-align:center; padding:16px 2px 2px; }
+  .caption .d::after{ content:"…"; animation: dots 1.5s steps(4,end) infinite; }
+  @keyframes dots{ 0%{content:""} 25%{content:"·"} 50%{content:"··"} 75%,100%{content:"···"} }
+  .vlabel{ width:min(440px,100%); margin:14px auto 0; text-align:center; font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); }
+  .vlabel b{ color:var(--ink-dim); font-weight:600; }
+
+  @media (prefers-reduced-motion: reduce){
+    .mouse{ left:calc(50% - 42px); animation:none; }
+    .teeter,.leg-b,.leg-f,.pole,.dangl-l,.dangl-r,.tail{ animation:none; }
+    .caption .d::after{ content:"…"; animation:none; }
+  }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="sheet-demo">
+    <div class="grip"></div>
+    <h3>Ideen für heute</h3>
+    <div class="h3sub">aus dem Vorrat</div>
+
+    <div class="stage">
+      <span class="peg l"></span><span class="peg r"></span>
+      <div class="rope"></div>
+
+      <!-- chef-mouse balancing on the rope · viewBox 160×200 -->
+      <svg class="mouse" viewBox="0 0 160 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="teeter">
+          <!-- tail -->
+          <g class="tail"><path d="M64,150 C40,162 28,136 42,124 C51,116 60,126 53,133" stroke="var(--pink-dk)" stroke-width="5.5" stroke-linecap="round"/></g>
+          <!-- legs (tip-toe) -->
+          <g class="leg-b"><rect x="62" y="150" width="10" height="32" rx="5" fill="var(--fur)"/><ellipse cx="66" cy="184" rx="8" ry="4.5" fill="var(--pink)"/></g>
+          <g class="leg-f"><rect x="88" y="150" width="10" height="32" rx="5" fill="var(--fur)"/><ellipse cx="92" cy="184" rx="8" ry="4.5" fill="var(--pink)"/></g>
+          <!-- body -->
+          <path d="M62,152 C55,128 58,99 71,87 C77,81 85,81 91,87 C104,99 107,128 100,152 C90,160 72,160 62,152 Z" fill="var(--fur)"/>
+          <path d="M70,150 C66,132 67,110 76,101 C82,96 88,100 90,110 C93,128 90,146 86,151 C81,155 74,155 70,150 Z" fill="var(--belly)" opacity=".7"/>
+          <path d="M70,104 C70,100 90,100 90,104 L92,138 C92,147 68,147 68,138 Z" fill="var(--accent)"/>
+          <!-- head -->
+          <circle cx="96" cy="58" r="9" fill="var(--fur-dk)"/>
+          <circle cx="80" cy="71" r="23" fill="var(--fur)"/>
+          <path d="M97,67 C113,64 121,73 118,80 C115,85 102,84 96,79 Z" fill="var(--fur)"/>
+          <circle cx="117" cy="76" r="3.4" fill="var(--ink)"/>
+          <circle cx="92" cy="67" r="3" fill="var(--ink)"/><circle cx="93.3" cy="65.8" r="1" fill="#fff"/>
+          <circle cx="101" cy="76" r="5" fill="var(--pink)" opacity=".4"/>
+          <circle cx="69" cy="47" r="15" fill="var(--fur)"/><circle cx="69" cy="49" r="8.5" fill="var(--pink)"/>
+          <rect x="59" y="40" width="42" height="13" rx="6.5" fill="var(--surface)" stroke="var(--line)" stroke-width="1"/>
+          <circle cx="65" cy="30" r="11" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <circle cx="80" cy="24" r="13" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <circle cx="94" cy="30" r="10" fill="var(--surface)" stroke="var(--line-soft)" stroke-width="1"/>
+          <rect x="59" y="40" width="42" height="7" rx="3.5" fill="var(--surface)"/>
+
+          <!-- balancing arms reach out to the pole -->
+          <path d="M70,100 C52,100 40,102 30,104" stroke="var(--fur)" stroke-width="7.5" stroke-linecap="round"/>
+          <path d="M92,100 C110,100 122,102 132,104" stroke="var(--fur)" stroke-width="7.5" stroke-linecap="round"/>
+
+          <!-- carrot balancing pole + dangling produce -->
+          <g class="pole">
+            <path d="M22,104 L140,104" stroke="var(--warm)" stroke-width="6" stroke-linecap="round"/>
+            <path d="M138,104 l9,-2 M138,104 l8,3" stroke="var(--cool)" stroke-width="2.4" stroke-linecap="round"/>
+            <!-- left dangler: tomato -->
+            <g class="danigl dangl-l">
+              <path d="M30,104 L30,122" stroke="var(--ink-faint)" stroke-width="1.4"/>
+              <circle cx="30" cy="130" r="9" fill="var(--hot)"/>
+              <path d="M30,122 l2,-3 M30,122 l-3,-2" stroke="var(--cool)" stroke-width="1.8" stroke-linecap="round"/>
+            </g>
+            <!-- right dangler: aubergine -->
+            <g class="danigl dangl-r">
+              <path d="M132,104 L132,120" stroke="var(--ink-faint)" stroke-width="1.4"/>
+              <ellipse cx="132" cy="131" rx="7.5" ry="11" fill="var(--eggplant)"/>
+              <path d="M132,121 l2,-4 M132,121 l-3,-3" stroke="var(--cool)" stroke-width="2" stroke-linecap="round"/>
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <div class="caption">koche mir was aus<span class="d"></span></div>
+  </div>
+  <div class="vlabel"><b>Loader 2</b> · Tightrope</div>
+</div>
+</body></html>
