@@ -1158,7 +1158,7 @@ class FoodBrainAPI:
         if not entries:
             raise ApiError(502, f"{name or product_id!r} has no stock entries to date")
         set_due_date(
-            client, entries[0].stock_entry_id, best_before, product_id=product_id
+            client, _next_due_entry(entries).stock_entry_id, best_before, product_id=product_id
         )
         counts["changed"] += 1
         return {
@@ -1471,6 +1471,19 @@ def _optional_iso_date(value) -> Optional[date]:
     if value in (None, ""):
         return None
     return _parse_iso_date(str(value))
+
+
+def _next_due_entry(entries):
+    """The stock entry whose best-before the aggregated stock view displays.
+
+    Grocy's ``/entries`` endpoint returns opened stock first (its consume
+    order), NOT earliest-first, so ``entries[0]`` can be a later-dated opened
+    entry while the stock tile shows an earlier unopened one. The tile's date
+    is the *minimum* best_before across entries, so a re-date must target that
+    entry or the visible date never moves. Dateless entries sort last; if none
+    has a date, fall back to the first entry.
+    """
+    return min(entries, key=lambda e: e.best_before_date or date.max)
 
 
 def _amount_of(raw: dict) -> float:

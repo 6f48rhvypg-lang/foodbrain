@@ -2095,7 +2095,14 @@ async function applyDueDate(it, isoDate){
   try {
     const { entries } = await apiGet('/api/product-entries?product_id=' + encodeURIComponent(it.id));
     if (!entries || !entries.length) throw new ApiError(404, `${it.name} hat keine Bestandseinträge zum Datieren`);
-    const entry = entries[0]; // earliest entry as returned by Grocy
+    // Grocy returns entries opened-first (its consume order), NOT earliest-first,
+    // so entries[0] can be a later-dated opened entry while the tile shows an
+    // earlier unopened one. The tile's date is the minimum best_before across
+    // entries — edit that entry, or the visible date won't move. Dateless
+    // entries sort last; ISO date strings compare lexicographically.
+    const entry = [...entries].sort((a, b) =>
+      (a.best_before_date || '9999-12-31').localeCompare(b.best_before_date || '9999-12-31')
+    )[0];
     const res = await apiPost('/api/set-due-date', {
       stock_entry_id: entry.stock_entry_id,
       best_before_date: isoDate,

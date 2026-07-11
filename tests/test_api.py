@@ -286,6 +286,32 @@ class ProductEntriesTest(unittest.TestCase):
         self.assertEqual(result["entries"][0]["best_before_date"], "2026-06-10")
 
 
+class NextDueEntryTest(unittest.TestCase):
+    """Grocy returns entries opened-first, not earliest-first; the re-date flow
+    must target the entry whose date the stock tile shows (the earliest)."""
+
+    def test_picks_earliest_not_first(self) -> None:
+        from foodbrain_assistant.api import _next_due_entry
+
+        # Mirrors live ginger: an opened later-dated entry is returned first,
+        # while the tile shows the earlier unopened one.
+        entries = [
+            StockEntry("78", "17", 100, date(2026, 7, 18), opened=True),
+            StockEntry("124", "17", 1, date(2026, 7, 3)),
+            StockEntry("316", "17", 100, date(2026, 7, 18)),
+        ]
+        self.assertEqual(_next_due_entry(entries).stock_entry_id, "124")
+
+    def test_dateless_entries_sort_last(self) -> None:
+        from foodbrain_assistant.api import _next_due_entry
+
+        entries = [
+            StockEntry("a", "1", 1, None),
+            StockEntry("b", "1", 1, date(2026, 8, 1)),
+        ]
+        self.assertEqual(_next_due_entry(entries).stock_entry_id, "b")
+
+
 class HttpSmokeTest(unittest.TestCase):
     """A real socket round-trip over the http.server handler."""
 
