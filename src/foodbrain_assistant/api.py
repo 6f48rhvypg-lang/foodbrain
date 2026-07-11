@@ -28,11 +28,13 @@ write operations fail closed with a 403-style :class:`ApiError`.
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
+import hashlib
+import json
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from . import cookmemory, recipes_llm
+from . import cookmemory, recipes_llm, shopping_llm, shoppingstore
 from .grocy_client import (
     GrocyClient,
     GrocyClientError,
@@ -120,6 +122,12 @@ class FoodBrainAPI:
     consumption_estimator: Optional[Callable[..., dict]] = None
     chat_generator: Optional[Callable[..., dict]] = None
     cook_store_path: Optional[object] = None  # str | Path
+    # Shopping list diet-focus suggestions (injectable; None runs the real
+    # shopping_llm.suggest_diet_items). shopping_store_path locates the durable
+    # overlay/habits store (shopping.json); when None it's derived from
+    # settings.data_dir, mirroring cook_store_path.
+    diet_suggester: Optional[Callable[..., dict]] = None
+    shopping_store_path: Optional[object] = None  # str | Path
 
     # --- reads -----------------------------------------------------------
 
@@ -232,11 +240,15 @@ class FoodBrainAPI:
     # --- writes (proxies onto writeback.py rails) ------------------------
 
     def consume(self, product_id: str, amount: float = 1.0) -> dict:
-        return self._write(lambda client: consume(client, product_id, amount))
+        return self._write(
+            lambda client: consume(client, product_id, amount),
+            after=self._maybe_record_depletion,
+        )
 
     def toss(self, product_id: str, amount: float = 1.0, *, confirm: bool = False) -> dict:
         return self._write(
-            lambda client: toss(client, product_id, amount, confirm=confirm)
+            lambda client: toss(client, product_id, amount, confirm=confirm),
+            after=self._maybe_record_depletion,
         )
 
     def set_due_date(
@@ -289,6 +301,378 @@ class FoodBrainAPI:
         except GrocyClientError as exc:
             raise ApiError(502, str(exc)) from exc
         return {"action": "undo", "transaction_id": transaction_id, "ok": True}
+
+    # --- shopping list -----------------------------------------------------
+    #
+    # Grocy's shopping_list object is the source of truth for the items
+    # themselves (shared, survives, other Grocy clients stay in sync);
+    # shoppingstore.py is a thin metadata overlay (why an item is on the
+    # list) plus the learned buying habits that drive the suggestion feed.
+
+    def shopping_list(self) -> dict:
+        """The shared list (Grocy items + overlay reasons) plus a reasoned
+        suggestion feed, and ``rev`` so a poller only re-renders on change.
+
+        ``mode:"auto"`` staples that aren't on the list yet are added to
+        Grocy right here (best-effort, deduped against what's already there)
+        — this is the only place auto-add happens, so it fires whenever a
+        device has the list open and polls.
+        """
+        client = self._reader()
+        try:
+            rows = client.get_shopping_list()
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+
+        catalog = {str(p["id"]): p["name"] for p in self._catalog()}
+        existing_names = {self._shopping_item_name(row, catalog).strip().lower() for row in rows}
+        suggestions = self._shopping_suggestions(existing_names)
+
+        added_any = False
+        if self.write_client_factory is not None:
+            for suggestion in suggestions:
+                if suggestion.get("mode") != "auto":
+                    continue
+                if self._shopping_try_add(
+                    client,
+                    name=suggestion["name"],
+                    product_id=suggestion.get("product_id"),
+                    amount=suggestion.get("suggested_amount") or 1.0,
+                    reason=suggestion["reason"],
+                    source=suggestion["signal"],
+                    existing_rows=rows,
+                ):
+                    added_any = True
+            if added_any:
+                try:
+                    rows = client.get_shopping_list()
+                except GrocyClientError as exc:
+                    raise ApiError(502, str(exc)) from exc
+                added_names = {self._shopping_item_name(r, catalog).strip().lower() for r in rows}
+                suggestions = [s for s in suggestions if s["name"].strip().lower() not in added_names]
+
+        path = self._shopping_path()
+        valid_ids = [str(row.get("id")) for row in rows if row.get("id") is not None]
+        overlay = shoppingstore.prune_overlay(path, valid_ids)
+        items = [self._shopping_row(row, overlay, catalog) for row in rows]
+        return {
+            "items": items,
+            "suggestions": suggestions,
+            "rev": _shopping_rev(rows, overlay),
+        }
+
+    def shopping_add(
+        self,
+        *,
+        name: str = "",
+        product_id: Optional[str] = None,
+        amount: float = 1.0,
+        unit: Optional[str] = None,
+        source: str = "manual",
+        reason: str = "",
+    ) -> dict:
+        """Add an item to the shared list — a tracked product or free text."""
+        name = str(name or "").strip()
+        product_id = str(product_id).strip() if product_id else None
+        if not name and not product_id:
+            raise ApiError(400, "name or product_id is required")
+        client = self._writer()
+        if not product_id and name:
+            product_id = _ProductIndex(client.get_products(), self.aliases).resolve(name) or None
+        qu_id = None
+        if unit:
+            qu_id = _NameResolver(client.get_quantity_units(), None).resolve(unit) or None
+        try:
+            item_id = client.add_shopping_item(
+                product_id=product_id,
+                note=None if product_id else (name or None),
+                amount=amount,
+                qu_id=qu_id,
+            )
+        except GrocyWriteDisabledError as exc:
+            raise ApiError(403, str(exc)) from exc
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+        entry = shoppingstore.set_overlay(self._shopping_path(), item_id, source=source, reason=reason)
+        return {
+            "id": item_id,
+            "product_id": product_id,
+            "name": name,
+            "amount": amount,
+            "ok": True,
+            **entry,
+        }
+
+    def shopping_update(
+        self, item_id: str, *, done: Optional[bool] = None, amount: Optional[float] = None
+    ) -> dict:
+        """Toggle done / correct the amount on an existing list row."""
+        item_id = str(item_id or "").strip()
+        if not item_id:
+            raise ApiError(400, "item_id is required")
+        changes: dict = {}
+        if done is not None:
+            changes["done"] = "1" if done else "0"
+        if amount is not None:
+            changes["amount"] = amount
+        if not changes:
+            raise ApiError(400, "nothing to update")
+        client = self._writer()
+        try:
+            client.update_shopping_item(item_id, changes)
+        except GrocyWriteDisabledError as exc:
+            raise ApiError(403, str(exc)) from exc
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+        return {"id": item_id, "ok": True, **changes}
+
+    def shopping_remove(self, item_id: str) -> dict:
+        item_id = str(item_id or "").strip()
+        if not item_id:
+            raise ApiError(400, "item_id is required")
+        client = self._writer()
+        try:
+            client.remove_shopping_item(item_id)
+        except GrocyWriteDisabledError as exc:
+            raise ApiError(403, str(exc)) from exc
+        except GrocyClientError as exc:
+            raise ApiError(502, str(exc)) from exc
+        shoppingstore.remove_overlay(self._shopping_path(), item_id)
+        return {"id": item_id, "ok": True}
+
+    def shopping_staple(
+        self, name: str, *, product_id: Optional[str] = None, mode: Optional[str] = None
+    ) -> dict:
+        """Set the user's suggestion control for a product: auto/suggest/off/None."""
+        name = str(name or "").strip()
+        if not name:
+            raise ApiError(400, "name is required")
+        try:
+            habit = shoppingstore.set_mode(
+                self._shopping_path(), name=name, product_id=product_id or "", mode=mode
+            )
+        except ValueError as exc:
+            raise ApiError(400, str(exc)) from exc
+        return {"name": name, "mode": habit["mode"], "ok": True}
+
+    def shopping_commit_bought(self, items: List[dict]) -> dict:
+        """Book checked-off items into Grocy stock and remove them from the list.
+
+        Reuses the intake add path (create-or-reuse product, add pack) and
+        records a ``buy`` event per item so the suggestion engine learns the
+        household's rhythm. Per-item resilience mirrors ``intake_commit``.
+        """
+        if not items:
+            raise ApiError(400, "no items to commit")
+        client = self._writer()
+        resolvers = (
+            _NameResolver(client.get_quantity_units(), self.settings.intake_default_unit),
+            _NameResolver(client.get_locations(), self.settings.intake_default_location),
+        )
+        product_index = _ProductIndex(client.get_products(), self.aliases)
+        added: List[dict] = []
+        failed: List[dict] = []
+        for raw in items:
+            name = str(raw.get("name") or "").strip()
+            try:
+                added.append(self._shopping_commit_one(client, raw, resolvers, product_index))
+            except GrocyWriteDisabledError as exc:
+                raise ApiError(403, str(exc)) from exc
+            except (GrocyClientError, ApiError) as exc:
+                message = exc.message if isinstance(exc, ApiError) else str(exc)
+                failed.append({"name": name or "?", "error": message})
+        return {"added": added, "failed": failed, "ok": not failed}
+
+    def shopping_diet(self, focus: str) -> dict:
+        """LLM-suggested items serving a diet focus (mehr Gemüse, proteinreich, ...).
+
+        On-demand only — never called automatically. Every suggestion carries
+        a plain-language ``reason`` (enforced by :mod:`shopping_llm`); the
+        client adds whichever it wants via :meth:`shopping_add`.
+        """
+        self._require_intake()
+        focus = str(focus or "").strip()
+        if not focus:
+            raise ApiError(400, "focus is required")
+        model = self._resolve_model(None, self.settings.recipe_model)
+        suggester = self.diet_suggester or shopping_llm.suggest_diet_items
+        try:
+            return suggester(
+                focus=focus,
+                inventory_lines=self._inventory_lines(),
+                taste=cookmemory.taste_summary(self._cook_path()),
+                model=model,
+                settings=self.settings,
+            )
+        except (LlmError, LlmNotConfigured) as exc:
+            raise self._llm_error(exc) from exc
+
+    def _shopping_commit_one(self, client, raw: dict, resolvers, product_index) -> dict:
+        units, locations = resolvers
+        name = str(raw.get("name") or "").strip()
+        if not name:
+            raise ApiError(400, "a bought item needs a name")
+        amount = _safe_float(raw.get("amount"), 1.0)
+        location_id = locations.resolve(raw.get("location"))
+        product_id = _pid(raw)
+        if not product_id:
+            existing = product_index.resolve(name)
+            if existing:
+                product_id = existing
+            else:
+                product_id = client.create_product(
+                    name, qu_id_stock=units.resolve(raw.get("unit")), location_id=location_id
+                )
+                product_index.add(name, product_id)
+        client.add_stock(product_id, amount, location_id=location_id)
+        shoppingstore.record_buy(
+            self._shopping_path(), name=name, product_id=product_id, amount=amount
+        )
+        item_id = str(raw.get("item_id") or "").strip()
+        if item_id:
+            try:
+                client.remove_shopping_item(item_id)
+            except GrocyClientError:
+                pass
+            shoppingstore.remove_overlay(self._shopping_path(), item_id)
+        return {"name": name, "product_id": product_id, "amount": amount, "ok": True}
+
+    _SHOPPING_SIGNAL_RANK = {"depleted": 0, "low_qty": 1, "interval": 2}
+
+    def _shopping_suggestions(self, existing_names: set) -> List[dict]:
+        """Per learned-habit staple not already on the list: a ranked, reasoned row."""
+        habits = shoppingstore.habits(self._shopping_path())
+        if not habits:
+            return []
+        stock = self.stock_provider()
+        by_pid = {item.product_id: item for item in stock}
+        by_name = {item.name.strip().lower(): item for item in stock if item.name}
+        now = datetime.now(timezone.utc).timestamp()
+
+        suggestions: List[dict] = []
+        for name_key, habit in habits.items():
+            if name_key in existing_names:
+                continue
+            mode = habit.get("mode")
+            if mode == "off":
+                continue
+            stats = shoppingstore.habit_stats(habit)
+            if not (stats["is_staple"] or mode in ("auto", "suggest")):
+                continue
+            item = by_pid.get(habit.get("product_id") or "") or by_name.get(name_key)
+            current_amount = item.amount if item else 0.0
+            unit = item.unit if item else None
+            signal, reason = _shopping_signal(habit, stats, current_amount, unit, now)
+            if signal is None:
+                continue
+            suggestions.append(
+                {
+                    "name": item.name if item else name_key.title(),
+                    "product_id": item.product_id if item else (habit.get("product_id") or None),
+                    "suggested_amount": stats["typical_amount"] or 1.0,
+                    "unit": unit,
+                    "signal": signal,
+                    "reason": reason,
+                    "current_amount": current_amount,
+                    "typical_amount": stats["typical_amount"],
+                    "mode": mode,
+                }
+            )
+        suggestions.sort(
+            key=lambda s: (self._SHOPPING_SIGNAL_RANK.get(s["signal"], 9), s["name"].lower())
+        )
+        return suggestions
+
+    def _shopping_try_add(
+        self,
+        client,
+        *,
+        name: str,
+        product_id: Optional[str],
+        amount: float,
+        reason: str,
+        source: str,
+        existing_rows: Optional[List[dict]] = None,
+    ) -> bool:
+        """Best-effort add to Grocy's list + overlay, skipped if already present."""
+        try:
+            rows = existing_rows if existing_rows is not None else client.get_shopping_list()
+        except GrocyClientError:
+            return False
+        pid = str(product_id or "")
+        key = name.strip().lower()
+        for row in rows:
+            if pid and str(row.get("product_id") or "") == pid:
+                return False
+            if not pid and str(row.get("note") or "").strip().lower() == key:
+                return False
+        try:
+            item_id = client.add_shopping_item(
+                product_id=product_id or None, note=None if product_id else name, amount=amount
+            )
+        except GrocyClientError:
+            return False
+        shoppingstore.set_overlay(self._shopping_path(), item_id, source=source, reason=reason)
+        return True
+
+    def _shopping_item_name(self, row: dict, catalog: dict) -> str:
+        product_id = str(row.get("product_id") or "")
+        return catalog.get(product_id) or str(row.get("note") or "")
+
+    def _shopping_row(self, row: dict, overlay: dict, catalog: dict) -> dict:
+        item_id = str(row.get("id") or "")
+        product_id = str(row.get("product_id") or "") or None
+        ov = overlay.get(item_id, {})
+        return {
+            "id": item_id,
+            "product_id": product_id,
+            "name": self._shopping_item_name(row, catalog) or "?",
+            "amount": _safe_float(row.get("amount"), 1.0),
+            "qu_id": str(row.get("qu_id") or "") or None,
+            "done": _truthy(row.get("done")),
+            "source": ov.get("source", "manual"),
+            "reason": ov.get("reason", ""),
+            "added_ts": ov.get("added_ts"),
+        }
+
+    def _maybe_record_depletion(self, client, outcome: WriteOutcome) -> None:
+        """After a consume/toss lands, log a removal-to-zero for the habit
+        it belongs to, and auto-add it back to the list if it's an ``auto`` staple."""
+        if outcome.amount <= 0 or not outcome.product_id:
+            return
+        try:
+            if _live_stock_amount(client, outcome.product_id) > 0:
+                return
+        except GrocyClientError:
+            return
+        name = self._product_name(outcome.product_id)
+        if not name:
+            return
+        habit = shoppingstore.record_removal(
+            self._shopping_path(), name=name, product_id=outcome.product_id
+        )
+        stats = shoppingstore.habit_stats(habit)
+        if habit.get("mode") == "auto" and stats["is_staple"]:
+            self._shopping_try_add(
+                client,
+                name=name,
+                product_id=outcome.product_id,
+                amount=stats["typical_amount"] or 1.0,
+                reason="aufgebraucht",
+                source="depleted",
+            )
+
+    def _product_name(self, product_id: str) -> str:
+        for product in self._catalog():
+            if str(product.get("id")) == str(product_id):
+                return str(product.get("name") or "")
+        return ""
+
+    def _shopping_path(self):
+        if self.shopping_store_path is not None:
+            return self.shopping_store_path
+        data_dir = getattr(self.settings, "data_dir", "data") or "data"
+        return Path(data_dir) / "shopping.json"
 
     # --- voice intake ----------------------------------------------------
 
@@ -1064,6 +1448,7 @@ class FoodBrainAPI:
             or self.twist_extractor
             or self.consumption_estimator
             or self.chat_generator
+            or self.diet_suggester
         ):
             return  # injected generators don't need a real key (tests)
         if not getattr(self.settings, "intake_enabled", False):
@@ -1241,7 +1626,12 @@ class FoodBrainAPI:
             for match in matches
         ]
 
-    def _write(self, action: Callable[[GrocyClient], WriteOutcome]) -> dict:
+    def _write(
+        self,
+        action: Callable[[GrocyClient], WriteOutcome],
+        *,
+        after: Optional[Callable[[GrocyClient, WriteOutcome], None]] = None,
+    ) -> dict:
         client = self._writer()
         try:
             outcome = action(client)
@@ -1251,6 +1641,8 @@ class FoodBrainAPI:
             raise ApiError(403, str(exc)) from exc
         except GrocyClientError as exc:
             raise ApiError(502, str(exc)) from exc
+        if after is not None:
+            after(client, outcome)
         return _serialize_outcome(outcome)
 
     def _writer(self) -> GrocyClient:
@@ -1499,6 +1891,58 @@ def _amount_of(raw: dict) -> float:
 
 def _extract_txn(response) -> Optional[str]:
     return extract_transaction_id(response)
+
+
+def _truthy(value) -> bool:
+    """Grocy booleans travel as ``"0"``/``"1"`` (sometimes real bools) — normalize."""
+    return str(value).strip().lower() in ("1", "true")
+
+
+# Low-quantity threshold: below this fraction of the learned typical amount,
+# the item is flagged even though it isn't at zero yet.
+_LOW_QTY_FRACTION = 0.34
+
+
+def _shopping_signal(
+    habit: dict, stats: dict, current_amount: float, unit: Optional[str], now: float
+) -> tuple:
+    """The single best-ranked reason to suggest a habit's product, or (None, "")."""
+    removals = habit.get("removals") or []
+    if current_amount <= 0 and removals:
+        last_removed = _parse_habit_ts(removals[-1].get("ts"))
+        if last_removed is not None:
+            days = max(0, round((now - last_removed) / 86400))
+            reason = "gerade aufgebraucht" if days <= 1 else f"vor {days} Tagen aufgebraucht"
+        else:
+            reason = "aufgebraucht"
+        return "depleted", reason
+
+    typical = stats.get("typical_amount")
+    if typical and current_amount > 0 and current_amount < typical * _LOW_QTY_FRACTION:
+        unit_part = f" {unit}" if unit else ""
+        return "low_qty", f"nur noch {current_amount:g}{unit_part} übrig"
+
+    interval = stats.get("median_interval_days")
+    last_buy = stats.get("last_buy_ts")
+    if interval and last_buy is not None and (now - last_buy) / 86400 >= interval:
+        return "interval", f"kaufst du ~alle {round(interval)} Tage"
+
+    return None, ""
+
+
+def _parse_habit_ts(value) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _shopping_rev(rows: List[dict], overlay: dict) -> str:
+    """Short content hash of the Grocy rows + overlay, so a poller only re-renders on change."""
+    payload = json.dumps({"rows": rows, "overlay": overlay}, sort_keys=True, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
 
 
 _EDIT_ACTIONS = {"consume", "toss", "set_date"}

@@ -39,6 +39,16 @@ Routes::
     GET  /api/recipes/config         -> model choices + defaults for Settings
     GET  /api/icons                  -> per-item emoji overrides (name -> emoji)
     POST /api/set-icon               {"name": "...", "emoji": "🥛"}  ("" clears)
+    GET  /api/shopping/list           -> shared list (Grocy items + overlay reasons)
+                                          + reasoned suggestions + "rev" for polling
+    POST /api/shopping/add            {"name"?, "product_id"?, "amount"?, "unit"?,
+                                       "source"?, "reason"?}
+    POST /api/shopping/update         {"item_id", "done"?, "amount"?}
+    POST /api/shopping/remove         {"item_id"}
+    POST /api/shopping/staple         {"name", "product_id"?, "mode"}  (auto/suggest/off/null)
+    POST /api/shopping/commit-bought  {"items": [{"item_id"?, "name", "product_id"?,
+                                       "amount"?, "unit"?, "location"?}]}
+    POST /api/shopping/diet           {"focus"}  -> LLM diet-focus suggestions
 
 CORS is permissive so the SPA can be developed from a separate dev origin.
 """
@@ -114,6 +124,8 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, _recipes_config(api))
                 elif route == "/api/icons":
                     self._send(200, api.get_icons())
+                elif route == "/api/shopping/list":
+                    self._send(200, api.shopping_list())
                 else:
                     raise ApiError(404, f"no route for GET {route}")
             except ApiError as exc:
@@ -311,6 +323,42 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             str(body.get("emoji", "")),
                         ),
                     )
+                elif route == "/api/shopping/add":
+                    self._send(
+                        200,
+                        api.shopping_add(
+                            name=str(body.get("name", "")),
+                            product_id=_opt_str(body.get("product_id")),
+                            amount=_amount(body),
+                            unit=_opt_str(body.get("unit")),
+                            source=str(body.get("source", "manual")),
+                            reason=str(body.get("reason", "")),
+                        ),
+                    )
+                elif route == "/api/shopping/update":
+                    self._send(
+                        200,
+                        api.shopping_update(
+                            _require(body, "item_id"),
+                            done=(bool(body["done"]) if "done" in body else None),
+                            amount=(_opt_float(body.get("amount"))),
+                        ),
+                    )
+                elif route == "/api/shopping/remove":
+                    self._send(200, api.shopping_remove(_require(body, "item_id")))
+                elif route == "/api/shopping/staple":
+                    self._send(
+                        200,
+                        api.shopping_staple(
+                            _require(body, "name"),
+                            product_id=_opt_str(body.get("product_id")),
+                            mode=_opt_str(body.get("mode")),
+                        ),
+                    )
+                elif route == "/api/shopping/commit-bought":
+                    self._send(200, api.shopping_commit_bought(_items(body)))
+                elif route == "/api/shopping/diet":
+                    self._send(200, api.shopping_diet(_require(body, "focus")))
                 else:
                     raise ApiError(404, f"no route for POST {route}")
             except ApiError as exc:

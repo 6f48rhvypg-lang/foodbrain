@@ -1,6 +1,154 @@
 # FoodBrain Handoff
 
-Current date: 2026-06-22
+Current date: 2026-07-11
+
+---
+
+## ✅ DONE (2026-07-11): Grocery shopping list backend — shared, inventory-integrated, learns habits
+
+**Backend (components A–H) shipped this session — NOT committed/deployed yet, see next steps.**
+**Look & feel is still the deliberate NEXT phase**: no SPA wiring in this pass (the plan
+explicitly deferred UI to a later session). Full original plan file:
+`C:\Users\eiwen\.claude\plans\i-want-to-develop-curious-manatee.md`. The original plan text is
+kept below this summary for reference.
+
+**What shipped, against the build order below exactly:**
+- **A** `grocy_client.py`: `get_shopping_list`, `add_shopping_item`, `update_shopping_item`
+  (PUT), `remove_shopping_item` (DELETE) — thin wrappers over Grocy's
+  `/api/objects/shopping_list`.
+- **B** `shoppingstore.py` (clone of `cookmemory.py`'s durability contract: atomic
+  `*.tmp`+`os.replace`, module `_LOCK`, corrupt-file backup) — `overlay` (why an item is on
+  the list, pruned on read) + `habits` (buys/removals capped at 30, `mode`
+  auto/suggest/off/None) + pure `habit_stats()` (median typical amount, median interval,
+  `is_staple`). `tests/test_shoppingstore.py`, 21 tests.
+- **C** Suggestion engine — `FoodBrainAPI._shopping_suggestions` joins live stock with
+  habits; one signal per staple (`depleted` > `low_qty` > `interval`, each with a
+  plain-language German `reason`), `off` dropped, `auto`/`suggest`/staple-by-history eligible.
+- **D** Depletion hook — `consume`/`toss` now call `_maybe_record_depletion` after a
+  successful write (via a new `after=` callback on `_write`): logs the removal, and if the
+  product is an `auto` staple, adds it straight back onto the Grocy list (deduped against
+  what's already there).
+- **E** `shopping_llm.py` (mirrors `recipes_llm.py`) — `suggest_diet_items(focus, ...)`;
+  every item requires a non-empty `reason` or it's dropped. `tests/test_shopping_llm.py`.
+- **F** Buy→stock commit — `shopping_commit_bought` reuses the intake create/reuse-product
+  path, adds the pack to stock, records a `buy` habit event, removes the row from Grocy +
+  overlay.
+- **G** HTTP surface (`server.py`): `GET /api/shopping/list`, `POST
+  /api/shopping/add|update|remove|staple|commit-bought|diet`.
+- **H** Live sync — `/api/shopping/list` returns `rev` = a short sha1 of the Grocy rows +
+  overlay, so a poller only re-renders on change; `auto`-staple auto-add happens right in this
+  same read path (fires whenever a device has the list open and polls it).
+
+**Files:** NEW `shoppingstore.py`, `shopping_llm.py`, `tests/test_shoppingstore.py`,
+`tests/test_shopping_llm.py`, `tests/test_shopping_api.py` (39 tests: unit + a real-socket HTTP
+smoke test). MODIFIED `grocy_client.py`, `api.py`, `server.py`. `prototype/fridge-now.html`
+untouched (UI is next phase) — `build_api()` needed **no changes**: `shopping_store_path` /
+`diet_suggester` default the same way `cook_store_path` already does.
+
+**Verified:** full suite **306 passed / 1 skipped** (was 271/1 baseline this session, 234/1
+before that — every new behavior has a new test, nothing existing changed). Server boots clean
+on `--sample`; live-hit `GET /api/shopping/list` against the **real household Grocy** (dev-box
+`.env` points at CT 104) returned `200 {"items": [], "suggestions": [], "rev": "..."}` with **no
+writes** (no habits recorded yet locally, so the auto-add path never fired) — this proves
+`get_shopping_list()`'s request shape against Grocy's real `/api/objects/shopping_list`.
+Buy→stock, add/remove/staple, and the suggestion signals themselves were only exercised against
+fakes so far — **do a deliberate live walk before trusting them against real inventory**: add a
+manual item, mark a staple `auto`, consume it to zero, confirm it reappears on the list; check a
+bought item off and confirm it lands in `/api/stock` with a `buy` event recorded.
+
+**Next steps for a fresh session:** (1) commit + push + deploy to CT 105 per
+`[[deploy-on-main-to-ct105]]`; (2) the live walk above; (3) THEN start the look-and-feel phase —
+plug into cook-hub `hubopt` (fridge-now.html:1963), the `⋯` menu, or a bottom dock
+(prototype/mockups/combo-3-bottom-dock.html), reusing the sheet + idea-card + snackbar idioms and
+showing each suggestion's `reason` inline.
+
+---
+
+## 🗄 ORIGINAL PLAN (2026-07-11): Grocery shopping list — shared, inventory-integrated, learns habits
+
+**Goal:** a shared "Einkaufsliste" both users edit simultaneously, tightly integrated with
+Grocy inventory, that learns shopping habits and suggests items with **user-controlled,
+transparent reasons**.
+
+**Decisions locked in (the non-obvious bits):**
+- **Item storage = Hybrid overlay.** Grocy's native `shopping_list` object is the source of
+  truth for the items (shared, survives, other Grocy clients stay in sync). NOTE it is
+  currently **100% unused** by FoodBrain — `/api/objects/shopping_list` +
+  `/api/stock/shoppinglist/*` are free to use. FoodBrain adds a thin metadata overlay keyed
+  by Grocy item id.
+- **Depletion = learned, predictive + reactive, transparent.**
+  - Trigger = **removal-to-zero**, NOT Grocy's spoiled/consumed flag. Both delete gestures
+    remove the whole item to 0: `✓ Verbraucht`→`/api/consume` (fridge-now.html:2011) and
+    swipe `🗑 Wegwerfen`→`/api/toss` (fridge-now.html:1846). The user presses the delete
+    gesture even when they *consumed* something, so `spoiled` is unreliable — depend only on
+    "item hit 0".
+  - **Every suggestion carries a plain-language `reason`** (hard requirement): "nur noch 2
+    übrig" (low qty vs learned typical), "kaufst du ~alle 9 Tage" (interval), "gestern
+    aufgebraucht" (depleted). Predictive layer keys off current quantity vs a **learned
+    typical level**, not just a calendar interval.
+- **Diet focus = LLM-driven** (mehr Gemüse / proteinreich / Vorrat auffüllen), reusing the
+  flash-lite pipeline + taste profile; on-demand only (cost).
+- **Identity = anonymous shared list**, kept live with polling (no accounts).
+
+**Data model:**
+- Grocy `shopping_list`: `id`, `product_id` (nullable → free-text via `note`), `note`,
+  `amount`, `qu_id`, `done`, default `shopping_list_id=1`.
+- New `data/shopping.json` via new module `shoppingstore.py` — **clone cookmemory.py exactly**
+  (atomic `*.tmp`+`os.replace`, module `_LOCK`, `_normalize`, injected path). Two sections:
+  - `overlay`: `{grocy_item_id: {source, reason, added_ts}}`,
+    `source ∈ {manual,depleted,low_qty,interval,diet,recipe,frequent}`; prune on read when the
+    Grocy item is gone.
+  - `habits`: `{name.lower: {product_id, buys:[{amount,ts}…capped], removals:[{ts}…capped],
+    mode}}`, `mode ∈ {auto,suggest,off,null}` = the **user control** (pin/auto/suggest/off),
+    keyed lower-case like the existing `icons` map. Derived: `typical_amount` (median),
+    `median_interval_days`, `last_buy_ts`, `is_staple` (buys≥N or pinned).
+
+**Components (build order):**
+- **A. Grocy client** (grocy_client.py; follow the `allow_writes` gate + `retries=0`-on-write
+  conventions): `get_shopping_list()`, `add_shopping_item(...)`,
+  `update_shopping_item(id,{done,amount,note})` (PUT), `remove_shopping_item(id)`
+  (`_write_json(path,"DELETE",None)` — DELETE already works via `_write_json`). Reuse existing
+  `add_stock` for the buy→stock loop.
+- **B. shoppingstore.py** + `tests/test_shoppingstore.py` (mirror test_cookmemory.py).
+- **C. Suggestion engine** (method on FoodBrainAPI, api.py): join live stock
+  (`stock_provider()`) with habits → ranked, reasoned feed. Per staple not on the list:
+  at/near 0 + recent removal→`depleted`; low vs typical→`low_qty` "nur noch {n} übrig";
+  days-since-last-buy ≥ median→`interval`. Each suggestion
+  `{name,product_id?,suggested_amount,signal,reason,current_amount,typical_amount}`. Rank
+  depleted>low_qty>interval; drop `off`; `auto` staples auto-added (with undo). This adds a
+  **quantity** axis (scoring.py is expiry-only today).
+- **D. Depletion hook** in `api.consume`/`api.toss` (api.py:234/237): after a removal to 0,
+  `shoppingstore.record_removal(...)`; auto-add if `auto` staple. No change to how the user
+  deletes.
+- **E. shopping_llm.py** (mirror recipes_llm.py): `_DIET_SYSTEM` + builder + `post_chat_json`
+  + `_clean_*`. Input = inventory summary (reuse `_inventory_lines()` style, api.py:1029) +
+  focus + taste (`cookmemory.taste_summary`). Gate on LLM configured (like `intake_enabled`).
+- **F. Buy→stock loop** = "commit bought": book `done` items into Grocy stock **reusing the
+  intake add path** (`_commit_add`/`_ProductIndex`/`_NameResolver`, api.py:1077/1542/1567),
+  record `buy` events (feeds learning), remove from the list.
+- **G. HTTP surface** (server.py if/elif ladders + docstring route table, server.py:79/122):
+  `GET /api/shopping/list` (items+suggestions+`rev`),
+  `POST /api/shopping/add|update|remove|commit-bought|staple`, `POST /api/shopping/diet`.
+- **H. Live sync** = polling, no new infra. `/api/shopping/list` returns `rev` = hash(Grocy
+  list + overlay); client polls every few sec while the list is open + on `visibilitychange`,
+  re-renders only on `rev` change. Store writes serialized by `_LOCK`; done-toggle is
+  last-write-wins (safe for a checklist).
+
+**Files:** NEW `src/foodbrain_assistant/shoppingstore.py`, `.../shopping_llm.py`,
+`tests/test_shoppingstore.py`, `tests/test_shopping_api.py`. MODIFY `grocy_client.py`,
+`api.py`, `server.py`, `prototype/fridge-now.html` (UI = **next phase**).
+
+**Look & feel (NOT designed yet):** plug-in points — cook-hub `hubopt` (fridge-now.html:1963),
+the `⋯` menu, or a bottom dock (prototype/mockups/combo-3-bottom-dock.html); reuse the sheet +
+idea-card + snackbar idioms and CSS variables; show each suggestion's `reason` inline.
+
+**Verification:** unit (shoppingstore atomic/lock/normalize/habit-math; suggestion engine
+per-signal + reason string + ranking + mode filtering; grocy list methods with stubbed
+transport; diet LLM normalization stubbed). E2E on CT 105 (Grocy CT 104): add manual +
+free-text; consume an item to 0 → reasoned depletion suggestion; low qty → "nur noch N übrig";
+check items done → commit-bought → Grocy stock up + `buy` logged; diet focus → reasoned items;
+two devices sync within the poll interval. Deploy rule (`[[deploy-on-main-to-ct105]]`):
+merge→main→push→`pct exec 105 -- git -C /opt/foodbrain pull`→`systemctl restart foodbrain`.
 
 ---
 

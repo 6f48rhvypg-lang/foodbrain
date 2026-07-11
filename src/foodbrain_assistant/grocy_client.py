@@ -255,6 +255,47 @@ class GrocyClient:
             None,
         )
 
+    # --- shopping list ------------------------------------------------
+
+    def get_shopping_list(self) -> list[dict[str, Any]]:
+        """Raw Grocy shopping_list rows (shared across every Grocy client)."""
+        payload = self._get_json("api/objects/shopping_list")
+        return payload if isinstance(payload, list) else []
+
+    def add_shopping_item(
+        self,
+        *,
+        product_id: Optional[str] = None,
+        note: Optional[str] = None,
+        amount: float = 1.0,
+        qu_id: Optional[str] = None,
+        shopping_list_id: str = "1",
+    ) -> str:
+        """Add a row to Grocy's shopping list and return its new id.
+
+        ``product_id`` links the row to a tracked product; a free-text item
+        (nothing on the list yet, e.g. "Blumen") instead sets ``note``.
+        """
+        body: dict[str, Any] = {"amount": amount, "shopping_list_id": shopping_list_id}
+        if product_id:
+            body["product_id"] = product_id
+        if note:
+            body["note"] = note
+        if qu_id:
+            body["qu_id"] = qu_id
+        response = self._write_json("api/objects/shopping_list", "POST", body)
+        created_id = response.get("created_object_id") if isinstance(response, dict) else None
+        if not created_id:
+            raise GrocyClientError("Grocy did not return a created shopping list item id")
+        return str(created_id)
+
+    def update_shopping_item(self, item_id: str, changes: dict[str, Any]) -> Any:
+        """Partial update of a shopping-list row, e.g. ``{"done": "1"}``."""
+        return self._write_json(f"api/objects/shopping_list/{item_id}", "PUT", changes)
+
+    def remove_shopping_item(self, item_id: str) -> Any:
+        return self._write_json(f"api/objects/shopping_list/{item_id}", "DELETE", None)
+
     def _get_json(self, path: str) -> Any:
         url = urljoin(self.base_url, path)
         request = Request(url, headers={"GROCY-API-KEY": self.api_key})
