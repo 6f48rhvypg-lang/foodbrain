@@ -4,10 +4,159 @@ Current date: 2026-07-11
 
 ---
 
+## 🎨 NEXT SESSION: shopping-list frontend design — full brief
+
+**Start here.** The backend below is done, deployed, and live-verified for reads. This session's
+job is **only** the look & feel: design + wire the Einkaufsliste into
+`prototype/fridge-now.html`. Nothing on the backend needs to change to do this — every field the
+UI needs already exists in the API responses below. If the design calls for a field that isn't
+here, that's a real gap — flag it before inventing client-side workarounds.
+
+### The API contract (exact shapes, copy-paste ready)
+
+**`GET /api/shopping/list`** → poll this while the list is open.
+```json
+{
+  "items": [
+    {
+      "id": "10",                 // Grocy shopping_list row id (string)
+      "product_id": "1",          // string or null (free-text row has no product)
+      "name": "Milch",            // resolved product name, or the free-text note
+      "amount": 1.0,
+      "qu_id": "2",                // string or null
+      "done": false,               // checked-off state
+      "source": "manual",          // manual | depleted | low_qty | interval | diet | recipe | frequent
+      "reason": "",                // "" for source=manual; a plain-language sentence otherwise
+      "added_ts": "2026-07-11T10:00:00+00:00"  // or null
+    }
+  ],
+  "suggestions": [
+    {
+      "name": "Senf",
+      "product_id": "9",           // or null (never bought through FoodBrain yet)
+      "suggested_amount": 1.0,     // learned typical amount, or 1.0 if unknown
+      "unit": "Stück",             // or null
+      "signal": "depleted",        // depleted | low_qty | interval  (ranked in that order)
+      "reason": "vor 2 Tagen aufgebraucht",   // ALWAYS non-empty — render it, don't invent your own
+      "current_amount": 0.0,
+      "typical_amount": 1.0,       // or null (not enough buy history for a median yet)
+      "mode": null                 // auto | suggest | off | null — the user's pin state for this product
+    }
+  ],
+  "rev": "57a3bb4040bb"            // short hash; only re-render when this changes
+}
+```
+Note: a suggestion with `mode:"auto"` is a rare sight in this response — those get silently
+added to `items` (as a real Grocy row, `source` = the signal name) the moment this endpoint is
+called, so by the time you see the response they've usually already moved from `suggestions` to
+`items`. Don't build UI assuming `mode:"auto"` rows linger in `suggestions`.
+
+**`POST /api/shopping/add`** `{name?, product_id?, amount?, unit?, source?, reason?}` (name OR
+product_id required) → `{id, product_id, name, amount, ok, source, reason, added_ts}`. Default
+`source` is `"manual"` if omitted.
+
+**`POST /api/shopping/update`** `{item_id, done?, amount?}` (at least one of done/amount) →
+`{id, ok, done?, amount?}` (echoes whichever you sent).
+
+**`POST /api/shopping/remove`** `{item_id}` → `{id, ok}`.
+
+**`POST /api/shopping/staple`** `{name, product_id?, mode}` where `mode` is one of
+`"auto"|"suggest"|"off"|null` (send JSON `null` to clear back to unset) → `{name, mode, ok}`.
+This is how the UI lets the user pin a staple's suggestion behavior — e.g. a long-press or a
+row-level "⋯" menu on any item, tracked (has a `product_id`) or not. 400 on an invalid mode
+string.
+
+**`POST /api/shopping/commit-bought`** `{items: [{item_id?, name, product_id?, amount?, unit?,
+location?}]}` → `{added: [{name, product_id, amount, ok}], failed: [{name, error}], ok}`. This is
+the "I bought everything checked off" action: books each item into Grocy stock (creating the
+product if it's new), records a buy for the learning engine, and removes it from the Grocy list
++ overlay. `item_id` is optional per-row (include it so the row gets removed from the list; omit
+it for a manual "I also bought X, not on the list" add). Per-item failures don't block the rest
+— show `failed` inline like the cook-commit flow does (`fridge-now.html:3241`
+`"Nicht verbucht: ..."` pattern).
+
+**`POST /api/shopping/diet`** `{focus}` (free-text focus string, e.g. "proteinreich", "mehr
+Gemüse", "Vorrat auffüllen") → `{focus, items: [{name, amount, unit, reason}]}` (amount/unit may
+be null). **503** if no OpenRouter key configured (same gate as recipe inspiration — check
+`GET /api/health`'s `intake_enabled` first, exactly like the existing 🍳 cook-hub does). These
+are suggestions only — nothing is added to the list automatically; wire each returned item
+through `shopping_add(name, amount, unit, source:"diet", reason)`.
+
+### Data vocabulary (for building filters/badges/icons)
+
+- `source` / `signal` values and their meaning: `manual` (user typed it), `depleted` (hit zero,
+  recently removed), `low_qty` (well below the learned typical amount), `interval` (overdue vs.
+  the learned buying rhythm), `diet` (from an LLM diet-focus suggestion the user accepted),
+  `recipe`/`frequent` (reserved, not currently emitted by anything — safe to design for but
+  don't expect them from real data yet).
+- `mode` values: `auto` (silently kept stocked, no confirmation), `suggest` (shows up in
+  `suggestions` but never auto-added), `off` (never suggested again), `null`/unset (default —
+  eligible once enough buy history exists, i.e. `is_staple`).
+- Every `reason` string is already German and user-facing — **render it verbatim**, don't
+  re-derive wording client-side from `signal`.
+
+### Reusable UI idioms already in `prototype/fridge-now.html` (don't reinvent)
+
+- **Sheet/scrim overlay**: `openSheet(html)` / `closeSheet()` (`fridge-now.html:2201-2202`) — the
+  one modal primitive everything uses (cook hub, reviews, book, history, chat).
+- **Hub-style option list**: `.hubopt` buttons (CSS `:274`, markup pattern `openCookHub`
+  `:1959-1989`) — icon + bold title + subtitle + `›` chevron, tap → action. Good fit for a
+  shopping "what do you want to do" entry sheet (add manual / diet suggestions / staples) the
+  same way the 🍳 hub offers chat/ideas/combine/book.
+- **Editable review rows**: date-quick-pick chips are `.chip` elements (`:1196-1199`). Cook
+  review rows (`editRow` `:3722`, `renderReview` `:3753`) are the closest existing analog to
+  "list of items with an editable amount + a per-row action" — worth reading before designing
+  the checked-off/commit-bought review screen.
+- **Inline errors inside a sheet**: `.sheet-error` class, used consistently for both empty states
+  ("Noch nichts gekocht.") and request failures (`inspoError()` helper, `:3397`).
+- **Snackbar + undo**: `showSnack(html, transactionId)` (`:2038`) — reuses the existing undo rail
+  (`POST /api/undo`) for any Grocy write that returns a `transaction_id`; note
+  `commit-bought`/`shopping/add` responses do **not** carry a single top-level `transaction_id`
+  (commit-bought is multi-item), so a "rückgängig" affordance there needs a different approach
+  than the existing single-item undo — flag this as an open question if the design wants undo on
+  a bulk buy commit.
+- **Entry-point precedent**: the header (`:1147-1168`) has `eyebrow` (title + sync + `⋯`) and
+  `cmdbar` (sort/search/add/edit); `cookHero` (`:1170-1172`) is a full-width hero CTA below the
+  header; the `⋯` menu (`themePop`, `:1215-1223`) has `.topt` rows like "📖 Meine Rezepte" and
+  "⚙️ Einstellungen" — a plausible fourth `.topt` for "🛒 Einkaufsliste", or its own hero button
+  next to `cookHero`, or the bottom-dock mockup already sketched at
+  `prototype/mockups/combo-3-bottom-dock.html`. **This placement decision needs the user** — ask
+  before committing to one; don't just pick the first option that fits.
+
+### Open product questions to resolve with the user before/while designing
+
+1. **Where does the Einkaufsliste live in the nav?** (hero button vs. `⋯` menu vs. bottom dock —
+   see mockup above.)
+2. **How does the user set `mode` (`auto`/`suggest`/`off`) from the UI?** Long-press, a per-row
+   `⋯`, a dedicated "Vorräte verwalten" settings screen? There's no existing precedent for this
+   interaction in the app.
+3. **How prominent should `suggestions` be vs. the plain `items` list?** They're returned
+   together in one response by design (so a poller only needs one call), but visually they're
+   different: one is "on the list", the other is "maybe add this, here's why."
+4. **Commit-bought UX**: single "Fertig eingekauft" action over every `done:true` row, or
+   per-row "gekauft ✓" like the cook-review flow? The API supports either (send one item or many
+   in one `commit-bought` call).
+5. **Diet-focus entry**: free-text like the recipe chat, or a curated chip list (mehr Gemüse /
+   proteinreich / Vorrat auffüllen — the three examples from the original plan)?
+
+### Known verification gap — do this alongside building the UI
+
+The write paths (`add`, `update`, `remove`, `staple`, `commit-bought`, the depletion-triggered
+auto-add) are only tested against fakes so far — building the real UI is the natural point to
+walk them live against the household Grocy (CT 104): add a manual item, mark a staple `auto`,
+consume it to zero and confirm it reappears, check an item off and commit it, confirm
+`/api/stock` picks it up and a `buy` habit event landed. See `[[handoff-shopping-list]]` memory
+and the DONE section right below for what's already been verified vs. not.
+
+Full original architecture/decisions: `C:\Users\eiwen\.claude\plans\i-want-to-develop-curious-manatee.md`
+and the ORIGINAL PLAN section further down this file.
+
+---
+
 ## ✅ DONE (2026-07-11): Grocery shopping list backend — shared, inventory-integrated, learns habits
 
-**Backend (components A–H) shipped this session — NOT committed/deployed yet, see next steps.**
-**Look & feel is still the deliberate NEXT phase**: no SPA wiring in this pass (the plan
+**Backend (components A–H) shipped, committed, pushed, and deployed to CT 105** (commit
+`24ef36d`). **Look & feel is still the deliberate NEXT phase**: no SPA wiring in this pass (the plan
 explicitly deferred UI to a later session). Full original plan file:
 `C:\Users\eiwen\.claude\plans\i-want-to-develop-curious-manatee.md`. The original plan text is
 kept below this summary for reference.
