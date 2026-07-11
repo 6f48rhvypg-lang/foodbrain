@@ -4,13 +4,95 @@ Current date: 2026-07-11
 
 ---
 
-## 🎨 NEXT SESSION: shopping-list frontend design — full brief
+## 🎨 NEXT SESSION: shopping-list mockup wave — build these files
 
-**Start here.** The backend below is done, deployed, and live-verified for reads. This session's
-job is **only** the look & feel: design + wire the Einkaufsliste into
-`prototype/fridge-now.html`. Nothing on the backend needs to change to do this — every field the
-UI needs already exists in the API responses below. If the design calls for a field that isn't
-here, that's a real gap — flag it before inventing client-side workarounds.
+**Start here.** The 5 open product questions from the previous brief are now **resolved** (see
+below) — this session's job is to **build the mockup files**, not to design from scratch or ask
+the user anything new. Follow `prototype/mockups/`'s established convention (the same one used for
+the home-screen redesign, nav-consolidation combos, and the recipe-loader animations): standalone
+HTML, no build/server, Google Fonts CDN + `_base.css` (shared tokens) + a page `<style>` block
+headed by a `/* KONZEPT X — name */` comment + a visible `.concept-tag` + a fixture `<script>`.
+Naming `shopping-<n>-<slug>.html`, each paired with a same-basename `.png` (gallery index excepted,
+per `loading-index.html`'s precedent of having none). No backend changes, no wiring into the real
+`prototype/fridge-now.html` in this pass — that's a later session, once the user picks a variant
+from the gallery (exactly like `v1-v5 → "search-first compact" → built into fridge-now.html`,
+commit `1a59c07`).
+
+### Resolved decisions (do not re-ask the user — design/build around these)
+
+1. **Nav entry point**: a second full-width hero button stacked directly under the existing
+   `🍳 Was sollen wir kochen?` (`cookHero`) — same visual weight/idiom, e.g. `🛒 Einkaufsliste`
+   with a live count subtitle. Not the `⋯` menu, not a bottom dock.
+2. **List layout**: two stacked sections on one screen — "Auf der Liste" (confirmed, checkable
+   items) on top, "Vorschläge" (suggestions with a reason, one-tap add) below.
+3. **Commit-bought UX**: no batch review sheet. Each row has its own instant "✓ gekauft" action —
+   tapping it immediately books that single item to stock.
+4. **Mode-setting UX** (pin a staple's auto/suggest/off behavior): a dedicated "Vorräte
+   verwalten" settings screen, reached via the existing `⋯` overflow menu, with a 3-way control
+   per staple.
+5. **Diet-focus entry**: **not** a one-off ask-every-time action. A persistent setting (preset
+   chips + free text) that lives in the same settings screen, set once and editable any time —
+   the regular shopping-list poll should keep reflecting it until changed.
+   **Flagged backend gap** (real work, not a mockup concern): today's `POST /api/shopping/diet`
+   (`api.py:486-508`) is on-demand only — nothing persists, nothing folds into
+   `GET /api/shopping/list`'s poll. Making this "sticky" needs a new `diet_focus` key in
+   `shoppingstore._skeleton()` (`shoppingstore.py:44`), a persistence endpoint, and folding cached
+   diet suggestions into `_shopping_suggestions()` (`api.py:542-584`) with a sane refetch cadence.
+   Doesn't block the mockups (fixture data only) — must happen before the settings screen is wired
+   for real.
+
+### Files to build
+
+- **`prototype/mockups/_shopping-items.js`** — new fixture (sibling to `_items.js`, not shared —
+  different shape): `ITEMS` (mirrors `items[]` from `GET /api/shopping/list`, covering `source` ∈
+  manual/depleted/interval/recipe — note `recipe`/`frequent` are illustrative only, not currently
+  emitted by the backend), `SUGGESTIONS` (mirrors `suggestions[]`, covering `signal` ∈
+  low_qty/interval/depleted/diet/frequent), `STAPLES` (name, emoji, `mode`, buy count, interval —
+  for the settings screen), `DIET_FOCUS` (chips + freetext + `updated_ts`), and a
+  `SIGNAL_META`/`TONE` lookup mapping each source/signal to a label + an *existing*
+  `--hot/--warm/--cool/--staple/--accent` token (no new colors). Auto-renders into whichever of
+  `#shoplist`/`#suggestlist`/`#staplelist`/`#dietchips` exists on the page.
+- **`prototype/mockups/shopping-0-home-entry.html`** — home screen with the new hero stacked under
+  `cookHero` (reusing `.cookhero`'s gradient class with a different existing token pairing). State
+  two baked-in recommendations on the mockup itself: stack a second full-width hero rather than
+  splitting `cookHero` in half (preserves visual weight); tapping it goes straight to the list
+  screen, no intermediate hub sheet (shopping only has 2 destinations — list and settings — unlike
+  the cook hub's 4).
+- **Three list-screen variants** (one axis of variation — visual treatment of rows/badges and
+  section separation; IA is locked, so 3 is enough, not a combinatorial set):
+  - `shopping-1-badge-strip.html` — closest to today's look: `.shelf`/`.shelf-head` headers,
+    `.item`-card rows, source/signal as a colored pill badge, instant "✓ gekauft" as a solid pill,
+    suggestion "+" locally moves the card into the confirmed list.
+  - `shopping-2-reason-panel.html` — stronger section separation: flat thin-line checklist for
+    "Auf der Liste", "Vorschläge" inside one tinted `surface-2` panel, reason promoted to a full
+    sentence instead of a badge.
+  - `shopping-3-compact-list.html` — dense single-line rows, hairline dividers, source via a left
+    accent-bar color + emoji only, reason as monospace caption, large trailing "✓ gekauft"
+    tap-target.
+  - All three include: an inert "+ Artikel hinzufügen" trigger (reusing `.iadd`/`openSheet` shape)
+    with name + amount/unit `.chip` quick-picks; an empty-suggestions state via the `.sheet-error`
+    idiom, toggleable on-page so both states are visible without extra files.
+- **`prototype/mockups/shopping-4-settings-vorraete.html`** — "Vorräte verwalten" as a full screen
+  (not a sheet — two independently-scrollable, open-ended blocks don't fit `openSheet`'s bounded
+  pattern). Show the illustrative new `.topt` row for `#themePop`, a staple list (3-way segmented
+  control per row matching `POST /api/shopping/staple`'s `auto`/`suggest`/`off`), and a diet-focus
+  section (preset `.chip` grid + free-text `<textarea>` + `updated_ts` caption, applies instantly,
+  no save button).
+- **`prototype/mockups/shopping-index.html`** — gallery on the `loading-index.html` template
+  (iframe tiles, `.grid`/`.tile`/`.pick`/`.pickflag` reused as-is), one tile per file with a short
+  German description. No `.png` for the index itself.
+
+### Screenshot generation
+
+Write a short throwaway Playwright headless-chromium script (permission pattern pre-approved in
+`.claude/settings.local.json`), viewport matched to the existing `.png`s' pixel dimensions,
+screenshot the 5 non-index files, then discard the script — matching the established pattern (no
+screenshot script checked in despite 5 prior mockup waves).
+
+Nothing on the backend needs to change to build these mockups — every field the UI needs already
+exists in the API responses below (fixture data mirrors them exactly). If a real (non-fixture)
+design need surfaces that isn't covered here, that's a real gap — flag it before inventing
+client-side workarounds.
 
 ### The API contract (exact shapes, copy-paste ready)
 
@@ -62,8 +144,8 @@ product_id required) → `{id, product_id, name, amount, ok, source, reason, add
 
 **`POST /api/shopping/staple`** `{name, product_id?, mode}` where `mode` is one of
 `"auto"|"suggest"|"off"|null` (send JSON `null` to clear back to unset) → `{name, mode, ok}`.
-This is how the UI lets the user pin a staple's suggestion behavior — e.g. a long-press or a
-row-level "⋯" menu on any item, tracked (has a `product_id`) or not. 400 on an invalid mode
+This is how the "Vorräte verwalten" settings screen (see resolved decisions above) lets the user
+pin a staple's suggestion behavior, tracked (has a `product_id`) or not. 400 on an invalid mode
 string.
 
 **`POST /api/shopping/commit-bought`** `{items: [{item_id?, name, product_id?, amount?, unit?,
@@ -100,9 +182,9 @@ through `shopping_add(name, amount, unit, source:"diet", reason)`.
 - **Sheet/scrim overlay**: `openSheet(html)` / `closeSheet()` (`fridge-now.html:2201-2202`) — the
   one modal primitive everything uses (cook hub, reviews, book, history, chat).
 - **Hub-style option list**: `.hubopt` buttons (CSS `:274`, markup pattern `openCookHub`
-  `:1959-1989`) — icon + bold title + subtitle + `›` chevron, tap → action. Good fit for a
-  shopping "what do you want to do" entry sheet (add manual / diet suggestions / staples) the
-  same way the 🍳 hub offers chat/ideas/combine/book.
+  `:1959-1989`) — icon + bold title + subtitle + `›` chevron, tap → action. Resolved: the
+  Einkaufsliste hero goes straight to the list screen (no hub sheet, only 2 real destinations) —
+  but `.hubopt` is still a good template for a manual-add flow inside the list screen itself.
 - **Editable review rows**: date-quick-pick chips are `.chip` elements (`:1196-1199`). Cook
   review rows (`editRow` `:3722`, `renderReview` `:3753`) are the closest existing analog to
   "list of items with an editable amount + a per-row action" — worth reading before designing
@@ -118,26 +200,10 @@ through `shopping_add(name, amount, unit, source:"diet", reason)`.
 - **Entry-point precedent**: the header (`:1147-1168`) has `eyebrow` (title + sync + `⋯`) and
   `cmdbar` (sort/search/add/edit); `cookHero` (`:1170-1172`) is a full-width hero CTA below the
   header; the `⋯` menu (`themePop`, `:1215-1223`) has `.topt` rows like "📖 Meine Rezepte" and
-  "⚙️ Einstellungen" — a plausible fourth `.topt` for "🛒 Einkaufsliste", or its own hero button
-  next to `cookHero`, or the bottom-dock mockup already sketched at
-  `prototype/mockups/combo-3-bottom-dock.html`. **This placement decision needs the user** — ask
-  before committing to one; don't just pick the first option that fits.
-
-### Open product questions to resolve with the user before/while designing
-
-1. **Where does the Einkaufsliste live in the nav?** (hero button vs. `⋯` menu vs. bottom dock —
-   see mockup above.)
-2. **How does the user set `mode` (`auto`/`suggest`/`off`) from the UI?** Long-press, a per-row
-   `⋯`, a dedicated "Vorräte verwalten" settings screen? There's no existing precedent for this
-   interaction in the app.
-3. **How prominent should `suggestions` be vs. the plain `items` list?** They're returned
-   together in one response by design (so a poller only needs one call), but visually they're
-   different: one is "on the list", the other is "maybe add this, here's why."
-4. **Commit-bought UX**: single "Fertig eingekauft" action over every `done:true` row, or
-   per-row "gekauft ✓" like the cook-review flow? The API supports either (send one item or many
-   in one `commit-bought` call).
-5. **Diet-focus entry**: free-text like the recipe chat, or a curated chip list (mehr Gemüse /
-   proteinreich / Vorrat auffüllen — the three examples from the original plan)?
+  "⚙️ Einstellungen". **Resolved**: Einkaufsliste gets its own hero button next to `cookHero` (not
+  a `.topt` row, not the bottom-dock concept from `prototype/mockups/combo-3-bottom-dock.html`);
+  "Vorräte verwalten" (the mode-setting screen) gets the `.topt` row instead — see the resolved
+  decisions and file list above.
 
 ### Known verification gap — do this alongside building the UI
 
