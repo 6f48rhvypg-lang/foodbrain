@@ -223,6 +223,35 @@ class ShoppingApiTest(unittest.TestCase):
         with self.assertRaises(ApiError):
             self._api(client).shopping_update("1")
 
+    def test_update_name_rewrites_note_and_unlinks_product(self) -> None:
+        client = FakeGrocy(shopping_list=[{"id": "1", "product_id": "5", "note": None, "amount": 1, "done": "0"}])
+        self._api(client).shopping_update("1", name="Zitronen")
+        row = client.shopping_rows["1"]
+        self.assertEqual(row["note"], "Zitronen")
+        self.assertIsNone(row["product_id"])
+
+    def test_update_product_id_relinks_and_clears_note(self) -> None:
+        client = FakeGrocy(shopping_list=[{"id": "1", "product_id": None, "note": "Kuhmilch", "amount": 1, "done": "0"}])
+        self._api(client).shopping_update("1", product_id="5")
+        row = client.shopping_rows["1"]
+        self.assertEqual(row["product_id"], "5")
+        self.assertIsNone(row["note"])
+
+    def test_update_name_rejects_blank(self) -> None:
+        client = FakeGrocy(shopping_list=[{"id": "1", "product_id": None, "note": "A", "amount": 1, "done": "0"}])
+        with self.assertRaises(ApiError):
+            self._api(client).shopping_update("1", name="   ")
+
+    # --- product catalog (for the add-item typeahead) ---
+
+    def test_products_returns_id_and_name(self) -> None:
+        client = FakeGrocy(products=[{"id": "1", "name": "Milch"}, {"id": "2", "name": "Zucchini"}])
+        out = self._api(client).shopping_products()
+        self.assertEqual(
+            sorted(out["products"], key=lambda p: p["name"]),
+            [{"id": "1", "name": "Milch"}, {"id": "2", "name": "Zucchini"}],
+        )
+
     def test_remove_drops_grocy_row_and_overlay(self) -> None:
         client = FakeGrocy(shopping_list=[{"id": "1", "product_id": None, "note": "A", "amount": 1, "done": "0"}])
         shoppingstore.set_overlay(self.store, "1", source="manual")
@@ -530,6 +559,11 @@ class ShoppingHttpSmokeTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
         self.assertEqual(self.client.stock["1"], 1.0)
+
+    def test_products_endpoint(self) -> None:
+        status, body = self._get("/api/shopping/products")
+        self.assertEqual(status, 200)
+        self.assertTrue(any(p["name"] == "Milch" for p in body["products"]))
 
     def test_staples_endpoint(self) -> None:
         self._post("/api/shopping/staple", {"name": "Kaffee", "mode": "auto"})

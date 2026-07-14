@@ -309,6 +309,13 @@ class FoodBrainAPI:
     # shoppingstore.py is a thin metadata overlay (why an item is on the
     # list) plus the learned buying habits that drive the suggestion feed.
 
+    def shopping_products(self) -> dict:
+        """The tracked-product catalog (id + name only) for the add-item typeahead —
+        picking a suggestion instead of free-typing is what stops a typo or a
+        household-specific synonym (``Kuhmilch`` vs ``Milch``) from becoming its
+        own orphan product."""
+        return {"products": [{"id": str(p["id"]), "name": p["name"]} for p in self._catalog()]}
+
     def shopping_list(self) -> dict:
         """The shared list (Grocy items + overlay reasons) plus a reasoned
         suggestion feed, and ``rev`` so a poller only re-renders on change.
@@ -404,9 +411,21 @@ class FoodBrainAPI:
         }
 
     def shopping_update(
-        self, item_id: str, *, done: Optional[bool] = None, amount: Optional[float] = None
+        self,
+        item_id: str,
+        *,
+        done: Optional[bool] = None,
+        amount: Optional[float] = None,
+        name: Optional[str] = None,
+        product_id: Optional[str] = None,
     ) -> dict:
-        """Toggle done / correct the amount on an existing list row."""
+        """Toggle done / correct the amount / fix a row's name or product match.
+
+        ``product_id`` re-links the row to a specific tracked product (typeahead
+        pick — clears any free-text note). ``name`` alone rewrites the free-text
+        note (typo fix) and un-links any product match — the two are mutually
+        exclusive edit intents from the client.
+        """
         item_id = str(item_id or "").strip()
         if not item_id:
             raise ApiError(400, "item_id is required")
@@ -415,6 +434,15 @@ class FoodBrainAPI:
             changes["done"] = "1" if done else "0"
         if amount is not None:
             changes["amount"] = amount
+        if product_id:
+            changes["product_id"] = str(product_id)
+            changes["note"] = None
+        elif name is not None:
+            name = name.strip()
+            if not name:
+                raise ApiError(400, "name cannot be empty")
+            changes["note"] = name
+            changes["product_id"] = None
         if not changes:
             raise ApiError(400, "nothing to update")
         client = self._writer()

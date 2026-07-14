@@ -41,9 +41,13 @@ Routes::
     POST /api/set-icon               {"name": "...", "emoji": "🥛"}  ("" clears)
     GET  /api/shopping/list           -> shared list (Grocy items + overlay reasons)
                                           + reasoned suggestions + "rev" for polling
+    GET  /api/shopping/products       -> tracked-product catalog (id + name) for
+                                          the add-item typeahead
     POST /api/shopping/add            {"name"?, "product_id"?, "amount"?, "unit"?,
                                        "source"?, "reason"?}
-    POST /api/shopping/update         {"item_id", "done"?, "amount"?}
+    POST /api/shopping/update         {"item_id", "done"?, "amount"?, "name"?,
+                                       "product_id"?}  (name/product_id fix a typo
+                                       or a wrong match on an existing row)
     POST /api/shopping/remove         {"item_id"}
     POST /api/shopping/staple         {"name", "product_id"?, "mode"}  (auto/suggest/off/null)
     GET  /api/shopping/staples        -> every learned habit (unfiltered) for the
@@ -130,6 +134,8 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.get_icons())
                 elif route == "/api/shopping/list":
                     self._send(200, api.shopping_list())
+                elif route == "/api/shopping/products":
+                    self._send(200, api.shopping_products())
                 elif route == "/api/shopping/staples":
                     self._send(200, api.shopping_staples())
                 elif route == "/api/shopping/diet-focus":
@@ -350,6 +356,8 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                             _require(body, "item_id"),
                             done=(bool(body["done"]) if "done" in body else None),
                             amount=(_opt_float(body.get("amount"))),
+                            name=_opt_str(body.get("name")),
+                            product_id=_opt_str(body.get("product_id")),
                         ),
                     )
                 elif route == "/api/shopping/remove":

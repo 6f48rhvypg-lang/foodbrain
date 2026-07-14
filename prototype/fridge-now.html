@@ -1158,6 +1158,25 @@
     border-radius: 999px; padding: 7px 13px; transition: all .2s var(--ease); white-space: nowrap;
   }
   .schip.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .tawrap { position: relative; }
+  .ta-list {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow-lg, var(--shadow)); max-height: 220px; overflow-y: auto;
+  }
+  .ta-list.show { display: block; }
+  .ta-item {
+    padding: 10px 13px; cursor: pointer; font-family: "Hanken Grotesk", sans-serif; font-size: 14px;
+    color: var(--ink); border-bottom: 1px solid var(--line-soft);
+  }
+  .ta-item:last-child { border-bottom: none; }
+  .ta-item:hover { background: var(--surface-2); }
+  .sname.editable { cursor: pointer; }
+  .sname.editable:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+  .sedit-input {
+    width: 100%; font-family: "Fraunces", serif; font-weight: 600; font-size: 16px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 8px;
+  }
 
   /* ---------- Vorräte verwalten: staples + diet focus (settings sheet) ---------- */
   .strow {
@@ -2120,7 +2139,7 @@ function shopItemRowHTML(it){
       data-product-id="${esc(it.product_id || '')}" data-amount="${esc(it.amount)}" style="--c:${SHOP_TONE[meta.tone]}">
     <button class="sdone${it.done ? ' checked' : ''}" type="button" data-act="shop-done" aria-label="im Einkaufswagen"></button>
     <div class="sbody">
-      <div class="sname">${esc(it.name)}</div>
+      <div class="sname editable" data-act="shop-edit" title="tippen zum Korrigieren">${esc(it.name)}</div>
       <div class="smeta"><span class="samt">${shopAmountLabel(it.amount)}</span>${it.source !== 'manual' ? shopBadge(it.source) : ''}</div>
       ${it.reason ? `<div class="sreason">${esc(it.reason)}</div>` : ''}
     </div>
@@ -2143,6 +2162,86 @@ function shopSuggestionRowHTML(s){
 
 let shopPollTimer = null;
 let shopLastRev = null;
+let shopLastData = null;
+let shopAddPanelOpen = false;
+let shopCatalog = null;
+
+async function shopEnsureCatalog(){
+  if (shopCatalog) return shopCatalog;
+  try {
+    const data = await apiGet('/api/shopping/products');
+    shopCatalog = data.products || [];
+  } catch (_) { shopCatalog = []; }
+  return shopCatalog;
+}
+
+/* Typeahead: picking a suggestion (Enter or click) beats free-typing — it's
+   how a typo or a household synonym ("Kuhmilch") stops becoming its own
+   orphan product. onPick(name, productId|null) fires only on an explicit
+   confirm, never on blur, so a stray tab-away can't silently commit junk. */
+function shopWireTypeahead(input, listEl, onPick){
+  input.addEventListener('focus', () => { shopEnsureCatalog(); });
+  input.addEventListener('input', async () => {
+    delete input.dataset.productId;
+    const q = input.value.trim().toLowerCase();
+    if (!q){ listEl.innerHTML = ''; listEl.classList.remove('show'); return; }
+    const catalog = await shopEnsureCatalog();
+    const hits = catalog
+      .map(p => ({ p, s: searchScore(p.name, q) }))
+      .filter(o => o.s !== Infinity)
+      .sort((a, b) => a.s - b.s || a.p.name.length - b.p.name.length)
+      .slice(0, 6);
+    listEl.innerHTML = hits.map(({ p }) => `<div class="ta-item" data-id="${esc(p.id)}" data-name="${esc(p.name)}">${esc(p.name)}</div>`).join('');
+    listEl.classList.toggle('show', hits.length > 0);
+    listEl.querySelectorAll('.ta-item').forEach(el => el.addEventListener('mousedown', e => {
+      e.preventDefault(); // keep focus on input so this doesn't fire a blur first
+      input.value = el.dataset.name;
+      input.dataset.productId = el.dataset.id;
+      listEl.innerHTML = ''; listEl.classList.remove('show');
+      onPick(el.dataset.name, el.dataset.id);
+    }));
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){
+      e.preventDefault();
+      listEl.innerHTML = ''; listEl.classList.remove('show');
+      onPick(input.value.trim(), input.dataset.productId || null);
+    }
+  });
+}
+
+/* Tap an existing row's name to fix a typo or a wrong match, in place. */
+function shopEnterEditMode(row){
+  const nameEl = row.querySelector('.sname');
+  if (!nameEl || row.querySelector('.sedit-input')) return;
+  const current = row.dataset.name;
+  const wrap = document.createElement('div');
+  wrap.className = 'tawrap';
+  wrap.innerHTML = `<input type="text" class="sedit-input" value="${esc(current)}" autocomplete="off" /><div class="ta-list"></div>`;
+  nameEl.replaceWith(wrap);
+  const input = wrap.querySelector('input');
+  const suggest = wrap.querySelector('.ta-list');
+  let committed = false;
+  async function commit(name, productId){
+    if (!name || (name === current && !productId)){ renderShopSheet(shopLastData); return; }
+    committed = true;
+    try {
+      const payload = { item_id: row.dataset.id };
+      if (productId) payload.product_id = productId; else payload.name = name;
+      await apiPost('/api/shopping/update', payload);
+      const data = await apiGet('/api/shopping/list');
+      renderShopSheet(data);
+      updateShopHeroCount(data);
+    } catch (err){
+      showError(err);
+      renderShopSheet(shopLastData);
+    }
+  }
+  shopWireTypeahead(input, suggest, commit);
+  input.addEventListener('blur', () => setTimeout(() => { if (!committed) renderShopSheet(shopLastData); }, 200));
+  input.focus();
+  input.select();
+}
 
 function shopSheetHTML(data){
   const items = data.items || [];
@@ -2154,13 +2253,12 @@ function shopSheetHTML(data){
       <div id="shoplist">${items.map(shopItemRowHTML).join('') || '<div class="sheet-error">Die Liste ist leer.</div>'}</div>
       <button class="shopadd" type="button" id="shopAddTrigger"><span>＋</span> Artikel hinzufügen</button>
       <div class="shopaddpanel" id="shopAddPanel">
-        <input type="text" id="shopAddName" placeholder="z. B. Zitronen" />
-        <div class="chiprow" id="shopAddChips">
-          <span class="schip active" data-amt="1">1 Stück</span><span class="schip" data-amt="2">2 Stück</span>
-          <span class="schip" data-amt="500" data-unit="g">500 g</span><span class="schip" data-amt="1" data-unit="kg">1 kg</span>
+        <div class="tawrap">
+          <input type="text" id="shopAddName" placeholder="z. B. Zitronen" autocomplete="off" />
+          <div class="ta-list" id="shopAddSuggest"></div>
         </div>
         <div class="row" style="margin-top:11px;">
-          <button class="btn ghost" type="button" id="shopAddCancel">Abbrechen</button>
+          <button class="btn ghost" type="button" id="shopAddCancel">Fertig</button>
           <button class="btn solid" type="button" id="shopAddSubmit">Hinzufügen</button>
         </div>
       </div>
@@ -2174,25 +2272,31 @@ function shopSheetHTML(data){
 
 function renderShopSheet(data){
   shopLastRev = data.rev;
+  shopLastData = data;
   openSheet(shopSheetHTML(data));
   wireClose();
+  const panel = document.getElementById('shopAddPanel');
+  const nameInput = document.getElementById('shopAddName');
   document.getElementById('shopAddTrigger').addEventListener('click', () => {
-    document.getElementById('shopAddPanel').classList.add('show');
+    shopAddPanelOpen = true;
+    panel.classList.add('show');
+    nameInput.focus();
   });
   document.getElementById('shopAddCancel').addEventListener('click', () => {
-    document.getElementById('shopAddPanel').classList.remove('show');
+    shopAddPanelOpen = false;
+    panel.classList.remove('show');
   });
-  document.querySelectorAll('#shopAddChips .schip').forEach(c => c.addEventListener('click', () => {
-    document.querySelectorAll('#shopAddChips .schip').forEach(x => x.classList.remove('active'));
-    c.classList.add('active');
-  }));
-  document.getElementById('shopAddSubmit').addEventListener('click', shopSubmitManualAdd);
+  document.getElementById('shopAddSubmit').addEventListener('click', () => shopSubmitManualAdd(nameInput.value.trim(), nameInput.dataset.productId || null));
+  shopWireTypeahead(nameInput, document.getElementById('shopAddSuggest'), shopSubmitManualAdd);
+  if (shopAddPanelOpen){ panel.classList.add('show'); nameInput.focus(); }
   document.querySelectorAll('#shoplist [data-act="shop-done"]').forEach(b => b.addEventListener('click', shopToggleDone));
   document.querySelectorAll('#shoplist [data-act="shop-buy"]').forEach(b => b.addEventListener('click', shopBuyOne));
+  document.querySelectorAll('#shoplist [data-act="shop-edit"]').forEach(el => el.addEventListener('click', () => shopEnterEditMode(el.closest('.srow'))));
   document.querySelectorAll('#suggestlist [data-act="shop-add-suggestion"]').forEach(b => b.addEventListener('click', shopAddSuggestion));
 }
 
 async function openShoppingList(){
+  shopAddPanelOpen = false;
   try {
     const data = await apiGet('/api/shopping/list');
     renderShopSheet(data);
@@ -2286,15 +2390,13 @@ async function shopAddSuggestion(e){
   }
 }
 
-async function shopSubmitManualAdd(){
+async function shopSubmitManualAdd(name, productId){
   const nameInput = document.getElementById('shopAddName');
-  const name = nameInput.value.trim();
+  name = (name || '').trim();
   if (!name){ nameInput.focus(); return; }
-  const activeChip = document.querySelector('#shopAddChips .schip.active');
-  const amount = activeChip ? (Number(activeChip.dataset.amt) || 1) : 1;
-  const unit = activeChip ? activeChip.dataset.unit : undefined;
   try {
-    await apiPost('/api/shopping/add', { name, amount, unit, source: 'manual' });
+    await apiPost('/api/shopping/add', { name, product_id: productId || undefined, amount: 1, source: 'manual' });
+    shopAddPanelOpen = true; // stay open for the next item — rapid multi-add
     const data = await apiGet('/api/shopping/list');
     renderShopSheet(data);
     updateShopHeroCount(data);
