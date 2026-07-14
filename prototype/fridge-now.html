@@ -739,7 +739,7 @@
   .swipe-del {
     position: absolute;
     right: 0; top: 0; bottom: 0; width: 88px;
-    background: #e03232;
+    background: var(--cool);
     color: #fff;
     font-family: "Hanken Grotesk", sans-serif;
     font-size: 13px; font-weight: 600;
@@ -747,12 +747,12 @@
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 2px;
     /* Hidden (and unpainted) until a swipe is actually in progress. This
-       guarantees the red panel can never show through behind the row during
+       guarantees the panel can never show through behind the row during
        fast scrolling, regardless of how the browser composites layers. */
     opacity: 0; visibility: hidden;
   }
   .swipe-row.swiping .swipe-del { opacity: 1; visibility: visible; }
-  .swipe-del:active { background: #bf1f1f; }
+  .swipe-del:active { background: #2d7a4f; }
   .item.swipe-snapping {
     transition: transform .22s cubic-bezier(.25, 1, .5, 1), box-shadow .2s, border-color .2s;
   }
@@ -1953,11 +1953,10 @@ function itemEl(it, meta, delay){
   row.className = 'swipe-row';
   const delBtn = document.createElement('button');
   delBtn.className = 'swipe-del';
-  delBtn.innerHTML = '🗑<span>Wegwerfen</span>';
+  delBtn.innerHTML = '✓<span>Verbraucht</span>';
   delBtn.addEventListener('click', e => {
     e.stopPropagation();
-    const amount = Number(it.amount) || 1;
-    writeRemove(it, el, '/api/toss', { product_id: it.id, amount, confirm: true }, `<b>${esc(it.name)}</b> weggeworfen`);
+    consume(it, el);
   });
   row.appendChild(delBtn);
   row.appendChild(el);
