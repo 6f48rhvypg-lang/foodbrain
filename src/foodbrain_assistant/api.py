@@ -455,6 +455,39 @@ class FoodBrainAPI:
             raise ApiError(400, str(exc)) from exc
         return {"name": name, "mode": habit["mode"], "ok": True}
 
+    def shopping_staples(self) -> dict:
+        """Every learned habit, staple or not, for the "Vorräte verwalten" settings
+        screen — unlike :meth:`shopping_list`'s suggestion feed, this is unfiltered:
+        it includes staples with no current restock need and ones the user has
+        turned ``off``, since the user needs to see and re-pin those too."""
+        catalog = {str(p["id"]): p["name"] for p in self._catalog()}
+        habits = shoppingstore.habits(self._shopping_path())
+        staples = []
+        for key, habit in habits.items():
+            stats = shoppingstore.habit_stats(habit)
+            product_id = habit.get("product_id") or None
+            name = catalog.get(str(product_id), "") if product_id else ""
+            staples.append(
+                {
+                    "name": name or key,
+                    "product_id": product_id,
+                    "mode": habit.get("mode"),
+                    "buy_count": len(habit.get("buys") or []),
+                    "typical_amount": stats["typical_amount"],
+                    "median_interval_days": stats["median_interval_days"],
+                    "is_staple": stats["is_staple"],
+                }
+            )
+        staples.sort(key=lambda s: (-s["buy_count"], s["name"]))
+        return {"staples": staples}
+
+    def shopping_get_diet_focus(self) -> dict:
+        """The persisted diet-focus setting — sticky until the user changes it."""
+        return shoppingstore.get_diet_focus(self._shopping_path())
+
+    def shopping_set_diet_focus(self, *, chips: Optional[List[str]] = None, freetext: str = "") -> dict:
+        return shoppingstore.set_diet_focus(self._shopping_path(), chips=chips, freetext=freetext)
+
     def shopping_commit_bought(self, items: List[dict]) -> dict:
         """Book checked-off items into Grocy stock and remove them from the list.
 

@@ -46,9 +46,13 @@ Routes::
     POST /api/shopping/update         {"item_id", "done"?, "amount"?}
     POST /api/shopping/remove         {"item_id"}
     POST /api/shopping/staple         {"name", "product_id"?, "mode"}  (auto/suggest/off/null)
+    GET  /api/shopping/staples        -> every learned habit (unfiltered) for the
+                                          "Vorräte verwalten" settings screen
     POST /api/shopping/commit-bought  {"items": [{"item_id"?, "name", "product_id"?,
                                        "amount"?, "unit"?, "location"?}]}
-    POST /api/shopping/diet           {"focus"}  -> LLM diet-focus suggestions
+    POST /api/shopping/diet           {"focus"}  -> LLM diet-focus suggestions (on-demand)
+    GET  /api/shopping/diet-focus     -> the persisted diet-focus setting
+    POST /api/shopping/diet-focus     {"chips"?: [...], "freetext"?}  -> persist it, sticky
 
 CORS is permissive so the SPA can be developed from a separate dev origin.
 """
@@ -126,6 +130,10 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.get_icons())
                 elif route == "/api/shopping/list":
                     self._send(200, api.shopping_list())
+                elif route == "/api/shopping/staples":
+                    self._send(200, api.shopping_staples())
+                elif route == "/api/shopping/diet-focus":
+                    self._send(200, api.shopping_get_diet_focus())
                 else:
                     raise ApiError(404, f"no route for GET {route}")
             except ApiError as exc:
@@ -359,6 +367,15 @@ def make_handler(api: FoodBrainAPI, ui_html: Optional[bytes] = None):
                     self._send(200, api.shopping_commit_bought(_items(body)))
                 elif route == "/api/shopping/diet":
                     self._send(200, api.shopping_diet(_require(body, "focus")))
+                elif route == "/api/shopping/diet-focus":
+                    chips = body.get("chips")
+                    self._send(
+                        200,
+                        api.shopping_set_diet_focus(
+                            chips=_str_list(chips) if isinstance(chips, list) else None,
+                            freetext=str(body.get("freetext", "")),
+                        ),
+                    )
                 else:
                     raise ApiError(404, f"no route for POST {route}")
             except ApiError as exc:

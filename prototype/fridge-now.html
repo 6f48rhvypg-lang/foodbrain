@@ -1096,6 +1096,95 @@
     color: var(--ink-faint); letter-spacing: .12em; padding: 18px 2px;
   }
 
+  /* ---------- shopping list: hero + badge-strip rows (Konzept 1) ---------- */
+  .shophero { background: linear-gradient(110deg, var(--warm), var(--hot)); margin-top: 10px; }
+  .shophero .csub { display: flex; align-items: center; gap: 5px; opacity: .9; }
+  .shophero .cdot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent-ink); opacity: .85;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-ink) 25%, transparent);
+  }
+  .srow {
+    position: relative; display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; column-gap: 13px; padding: 12px 14px; margin-bottom: 9px;
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden; transition: opacity .2s var(--ease);
+  }
+  .srow::before { content: ""; position: absolute; left: 0; top: 13px; bottom: 13px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c, transparent); }
+  .srow.bought { opacity: .5; }
+  .srow.removing { animation: collapseOut .32s var(--ease) forwards; }
+  .sdone {
+    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; cursor: pointer;
+    border: 2px solid var(--line); background: var(--surface-2); display: grid; place-items: center;
+    font-size: 14px; color: transparent; transition: all .15s var(--ease);
+  }
+  .sdone.checked { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .sdone.checked::after { content: "✓"; }
+  .sbody { min-width: 0; }
+  .sname { font-family: "Fraunces", serif; font-weight: 600; font-size: 16px; color: var(--ink); }
+  .srow.bought .sname { text-decoration: line-through; color: var(--ink-dim); }
+  .smeta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .samt { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
+  .sbadge {
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 10px; letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 999px; color: var(--c); background: var(--cbg);
+    border: 1px solid color-mix(in srgb, var(--c) 28%, transparent);
+  }
+  .sreason { font-family: "Hanken Grotesk", sans-serif; font-size: 12.5px; color: var(--ink-dim); margin-top: 4px; line-height: 1.35; }
+  .sbuy, .sadd {
+    flex: 0 0 auto; cursor: pointer; border: none; font-family: "Hanken Grotesk", sans-serif; font-weight: 700;
+    box-shadow: var(--shadow); transition: filter .15s, transform .12s var(--ease);
+  }
+  .sbuy:active, .sadd:active { transform: scale(.94); }
+  .sbuy { font-size: 12.5px; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 9px 14px; white-space: nowrap; }
+  .sbuy:disabled { background: var(--staple); opacity: .7; cursor: default; }
+  .sadd { width: 36px; height: 36px; border-radius: 50%; font-size: 19px; color: var(--accent-ink); background: var(--accent); display: grid; place-items: center; line-height: 1; }
+  .shopadd {
+    display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; text-align: left;
+    background: var(--surface); border: 1px dashed var(--line); border-radius: 14px;
+    padding: 13px 14px; margin-top: 10px; font-family: "Hanken Grotesk", sans-serif; font-weight: 700;
+    font-size: 14px; color: var(--ink-dim); transition: border-color .15s;
+  }
+  .shopadd:hover { border-color: var(--accent); color: var(--accent); }
+  .shopaddpanel { display: none; margin-top: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 14px; padding: 13px 14px; }
+  .shopaddpanel.show { display: block; }
+  .shopaddpanel input[type=text] {
+    width: 100%; font-family: "Hanken Grotesk", sans-serif; font-size: 14px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: 10px; padding: 10px 12px;
+  }
+  .shopaddpanel .chiprow { display: flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; }
+  .schip {
+    flex: 0 0 auto; cursor: pointer; user-select: none; border: 1px solid var(--line-soft);
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-dim); background: var(--surface);
+    border-radius: 999px; padding: 7px 13px; transition: all .2s var(--ease); white-space: nowrap;
+  }
+  .schip.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+  /* ---------- Vorräte verwalten: staples + diet focus (settings sheet) ---------- */
+  .strow {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 12px;
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 11px 13px; margin-bottom: 9px;
+  }
+  .sticon { width: 38px; height: 38px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); display: grid; place-items: center; font-size: 19px; flex: 0 0 auto; }
+  .stbody { min-width: 0; }
+  .stname { font-family: "Fraunces", serif; font-weight: 600; font-size: 15px; color: var(--ink); }
+  .stmeta { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; }
+  .stmode { display: flex; gap: 3px; background: var(--surface-2); border-radius: 10px; padding: 3px; flex: 0 0 auto; }
+  .smopt {
+    border: none; background: transparent; cursor: pointer; padding: 7px 9px; border-radius: 8px;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; color: var(--ink-faint);
+    transition: all .15s var(--ease);
+  }
+  .smopt.active { background: var(--accent); color: var(--accent-ink); }
+  .dietblock { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 15px; }
+  .dchip-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .dfree {
+    width: 100%; margin-top: 12px; font-family: "Hanken Grotesk", sans-serif; font-size: 14px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 12px; padding: 11px 12px;
+    resize: vertical; min-height: 56px;
+  }
+  .dupdated { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); margin-top: 9px; }
+
   /* ---------- recipe-wait animation: Remy strolls with a tomato ---------- */
   .cookloader { --fur:#b9af9f; --fur-dk:#a4998857; --belly:#ddd5c6; --pink:#e3a79b; --pink-dk:#cf8f83; }
   .cl-stage {
@@ -1171,6 +1260,11 @@
       <span class="ci">🍳</span><span>Was sollen wir kochen?</span><span class="csub">Ideen · Rezepte</span>
     </button>
 
+    <button id="shopHero" class="cookhero shophero" type="button" title="Einkaufsliste öffnen">
+      <span class="ci">🛒</span><span>Einkaufsliste</span>
+      <span class="csub"><span class="cdot"></span><span id="shopHeroSub">wird geladen …</span></span>
+    </button>
+
     <main id="shelves"><!-- rendered --></main>
 
     <div class="hint" id="hint">tipp einen Artikel an für Aktionen · 🍳 für Koch-Ideen</div>
@@ -1193,10 +1287,10 @@
   <div class="pop" id="pop">
     <div class="pk">Fälligkeitsdatum ändern</div>
     <div class="grid">
-      <div class="chip" data-add="1">+1 Tag</div>
       <div class="chip" data-add="3">+3 Tage</div>
       <div class="chip" data-add="7">+1 Woche</div>
-      <div class="chip" data-add="0">heute</div>
+      <div class="chip" data-add="30">+1 Monat</div>
+      <div class="chip" data-add="182">+6 Monate</div>
     </div>
     <input type="date" id="dateInput" />
   </div>
@@ -1214,6 +1308,7 @@
   <!-- theme picker popover -->
   <div class="pop themepop" id="themePop">
     <button class="topt" type="button" id="bookOpt"><span class="ti">📖</span><span>Meine Rezepte</span></button>
+    <button class="topt" type="button" id="staplesOpt"><span class="ti">🥫</span><span>Vorräte verwalten</span></button>
     <button class="topt" type="button" id="settingsOpt"><span class="ti">⚙️</span><span>Einstellungen</span></button>
     <div class="popdiv"></div>
     <div class="pk">Farbthema</div>
@@ -1988,6 +2083,330 @@ function openCookHub(){
   document.getElementById('hubCombine').addEventListener('click', ()=>{ closeSheet(); enterCombine(); });
 }
 document.getElementById('cookHero').addEventListener('click', openCookHub);
+
+/* ============================================================
+   Einkaufsliste (shopping list) — hero, list sheet, settings sheet.
+   Backed by /api/shopping/{list,add,update,remove,staple,staples,
+   commit-bought,diet-focus}. ============================================ */
+
+const SHOP_SIGNAL_META = {
+  manual:   { label: 'Manuell',           tone: 'staple' },
+  depleted: { label: 'Aufgebraucht',      tone: 'hot' },
+  low_qty:  { label: 'Fast leer',         tone: 'warm' },
+  interval: { label: 'Überfällig',        tone: 'cool' },
+  diet:     { label: 'Ernährungsfokus',   tone: 'accent' },
+  recipe:   { label: 'Für ein Rezept',    tone: 'staple' },
+  frequent: { label: 'Oft gekauft',       tone: 'staple' },
+};
+const SHOP_TONE = {
+  hot:    'var(--hot)',
+  warm:   'var(--warm)',
+  cool:   'var(--cool)',
+  staple: 'var(--staple)',
+  accent: 'var(--accent)',
+};
+function shopAmountLabel(amount, unit){
+  const n = Number(amount) || 0;
+  const nStr = n % 1 === 0 ? String(n) : String(n.toFixed(1)).replace('.', ',');
+  return unit ? `${nStr} ${esc(unit)}` : nStr;
+}
+function shopBadge(key){
+  const meta = SHOP_SIGNAL_META[key] || SHOP_SIGNAL_META.manual;
+  return `<span class="sbadge" style="--c:${SHOP_TONE[meta.tone]}">${esc(meta.label)}</span>`;
+}
+function shopItemRowHTML(it){
+  const meta = SHOP_SIGNAL_META[it.source] || SHOP_SIGNAL_META.manual;
+  return `<div class="srow${it.done ? ' bought' : ''}" data-id="${esc(it.id)}" data-name="${esc(it.name)}"
+      data-product-id="${esc(it.product_id || '')}" data-amount="${esc(it.amount)}" style="--c:${SHOP_TONE[meta.tone]}">
+    <button class="sdone${it.done ? ' checked' : ''}" type="button" data-act="shop-done" aria-label="im Einkaufswagen"></button>
+    <div class="sbody">
+      <div class="sname">${esc(it.name)}</div>
+      <div class="smeta"><span class="samt">${shopAmountLabel(it.amount)}</span>${it.source !== 'manual' ? shopBadge(it.source) : ''}</div>
+      ${it.reason ? `<div class="sreason">${esc(it.reason)}</div>` : ''}
+    </div>
+    <button class="sbuy" type="button" data-act="shop-buy">✓ gekauft</button>
+  </div>`;
+}
+function shopSuggestionRowHTML(s){
+  const meta = SHOP_SIGNAL_META[s.signal] || SHOP_SIGNAL_META.manual;
+  return `<div class="srow sugg" data-name="${esc(s.name)}" data-product-id="${esc(s.product_id || '')}"
+      data-amount="${esc(s.suggested_amount || 1)}" data-unit="${esc(s.unit || '')}" data-signal="${esc(s.signal)}"
+      data-reason="${esc(s.reason || '')}" style="--c:${SHOP_TONE[meta.tone]}">
+    <div class="sbody">
+      <div class="sname">${esc(s.name)}</div>
+      <div class="smeta"><span class="samt">${shopAmountLabel(s.suggested_amount, s.unit)}</span>${shopBadge(s.signal)}</div>
+      <div class="sreason">${esc(s.reason)}</div>
+    </div>
+    <button class="sadd" type="button" data-act="shop-add-suggestion" aria-label="zur Liste hinzufügen">+</button>
+  </div>`;
+}
+
+let shopPollTimer = null;
+let shopLastRev = null;
+
+function shopSheetHTML(data){
+  const items = data.items || [];
+  const suggestions = data.suggestions || [];
+  return `
+    <h3>🛒 Einkaufsliste</h3>
+    <section class="shelf">
+      <div class="shelf-head"><span class="sicon">✓</span><h2>Auf der Liste</h2><span class="count">${items.length}</span></div>
+      <div id="shoplist">${items.map(shopItemRowHTML).join('') || '<div class="sheet-error">Die Liste ist leer.</div>'}</div>
+      <button class="shopadd" type="button" id="shopAddTrigger"><span>＋</span> Artikel hinzufügen</button>
+      <div class="shopaddpanel" id="shopAddPanel">
+        <input type="text" id="shopAddName" placeholder="z. B. Zitronen" />
+        <div class="chiprow" id="shopAddChips">
+          <span class="schip active" data-amt="1">1 Stück</span><span class="schip" data-amt="2">2 Stück</span>
+          <span class="schip" data-amt="500" data-unit="g">500 g</span><span class="schip" data-amt="1" data-unit="kg">1 kg</span>
+        </div>
+        <div class="row" style="margin-top:11px;">
+          <button class="btn ghost" type="button" id="shopAddCancel">Abbrechen</button>
+          <button class="btn solid" type="button" id="shopAddSubmit">Hinzufügen</button>
+        </div>
+      </div>
+    </section>
+    <section class="shelf">
+      <div class="shelf-head"><span class="sicon">💡</span><h2>Vorschläge</h2><span class="count">${suggestions.length}</span></div>
+      <div id="suggestlist">${suggestions.length ? suggestions.map(shopSuggestionRowHTML).join('') : '<div class="sheet-error">Keine Vorschläge — dein Vorrat ist gut gefüllt.</div>'}</div>
+    </section>
+    <div class="row" style="margin-top:14px;"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`;
+}
+
+function renderShopSheet(data){
+  shopLastRev = data.rev;
+  openSheet(shopSheetHTML(data));
+  wireClose();
+  document.getElementById('shopAddTrigger').addEventListener('click', () => {
+    document.getElementById('shopAddPanel').classList.add('show');
+  });
+  document.getElementById('shopAddCancel').addEventListener('click', () => {
+    document.getElementById('shopAddPanel').classList.remove('show');
+  });
+  document.querySelectorAll('#shopAddChips .schip').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('#shopAddChips .schip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+  }));
+  document.getElementById('shopAddSubmit').addEventListener('click', shopSubmitManualAdd);
+  document.querySelectorAll('#shoplist [data-act="shop-done"]').forEach(b => b.addEventListener('click', shopToggleDone));
+  document.querySelectorAll('#shoplist [data-act="shop-buy"]').forEach(b => b.addEventListener('click', shopBuyOne));
+  document.querySelectorAll('#suggestlist [data-act="shop-add-suggestion"]').forEach(b => b.addEventListener('click', shopAddSuggestion));
+}
+
+async function openShoppingList(){
+  try {
+    const data = await apiGet('/api/shopping/list');
+    renderShopSheet(data);
+    updateShopHeroCount(data);
+    shopStartPolling();
+  } catch (err){ showError(err); }
+}
+
+function shopStartPolling(){
+  clearInterval(shopPollTimer);
+  shopPollTimer = setInterval(async () => {
+    const sheetEl = document.getElementById('sheet');
+    if (!sheetEl.classList.contains('show') || !document.getElementById('shoplist')){
+      clearInterval(shopPollTimer);
+      shopPollTimer = null;
+      return;
+    }
+    try {
+      const data = await apiGet('/api/shopping/list');
+      updateShopHeroCount(data);
+      if (data.rev !== shopLastRev) renderShopSheet(data);
+    } catch (_) { /* offline blip — next tick retries */ }
+  }, 20000);
+}
+
+function updateShopHeroCount(data){
+  const el = document.getElementById('shopHeroSub');
+  if (el) el.textContent = `${data.items.length} auf der Liste · ${data.suggestions.length} Vorschläge`;
+}
+
+async function refreshShopCounts(){
+  try { updateShopHeroCount(await apiGet('/api/shopping/list')); } catch (_) {}
+}
+
+async function shopToggleDone(e){
+  const btn = e.currentTarget;
+  const row = btn.closest('.srow');
+  const checked = !btn.classList.contains('checked');
+  btn.classList.toggle('checked', checked);
+  row.classList.toggle('bought', checked);
+  try {
+    await apiPost('/api/shopping/update', { item_id: row.dataset.id, done: checked });
+  } catch (err){
+    btn.classList.toggle('checked', !checked);
+    row.classList.toggle('bought', !checked);
+    showError(err);
+  }
+}
+
+async function shopBuyOne(e){
+  const btn = e.currentTarget;
+  const row = btn.closest('.srow');
+  btn.disabled = true;
+  const payload = {
+    item_id: row.dataset.id,
+    name: row.dataset.name,
+    product_id: row.dataset.productId || undefined,
+    amount: Number(row.dataset.amount) || 1,
+  };
+  try {
+    const out = await apiPost('/api/shopping/commit-bought', { items: [payload] });
+    if (out.failed && out.failed.length) throw new Error(out.failed[0].error || 'fehlgeschlagen');
+    row.classList.add('removing');
+    setTimeout(() => { row.remove(); refreshShopCounts(); }, 320);
+    showSnack(`<b>${esc(row.dataset.name)}</b> verbucht`);
+  } catch (err){
+    btn.disabled = false;
+    showError(err);
+  }
+}
+
+async function shopAddSuggestion(e){
+  const btn = e.currentTarget;
+  const row = btn.closest('.srow');
+  btn.disabled = true;
+  try {
+    await apiPost('/api/shopping/add', {
+      name: row.dataset.name,
+      product_id: row.dataset.productId || undefined,
+      amount: Number(row.dataset.amount) || 1,
+      unit: row.dataset.unit || undefined,
+      source: row.dataset.signal,
+      reason: row.dataset.reason,
+    });
+    const data = await apiGet('/api/shopping/list');
+    renderShopSheet(data);
+    updateShopHeroCount(data);
+  } catch (err){
+    btn.disabled = false;
+    showError(err);
+  }
+}
+
+async function shopSubmitManualAdd(){
+  const nameInput = document.getElementById('shopAddName');
+  const name = nameInput.value.trim();
+  if (!name){ nameInput.focus(); return; }
+  const activeChip = document.querySelector('#shopAddChips .schip.active');
+  const amount = activeChip ? (Number(activeChip.dataset.amt) || 1) : 1;
+  const unit = activeChip ? activeChip.dataset.unit : undefined;
+  try {
+    await apiPost('/api/shopping/add', { name, amount, unit, source: 'manual' });
+    const data = await apiGet('/api/shopping/list');
+    renderShopSheet(data);
+    updateShopHeroCount(data);
+    showSnack(`<b>${esc(name)}</b> hinzugefügt`);
+  } catch (err){ showError(err); }
+}
+
+document.getElementById('shopHero').addEventListener('click', openShoppingList);
+refreshShopCounts();
+
+/* ---- Vorräte verwalten: staple mode-pinning + persistent diet focus ---- */
+
+const DIET_FOCUS_PRESETS = ['Proteinreich', 'Mehr Gemüse', 'Weniger Zucker', 'Vorrat auffüllen', 'Low-Carb'];
+let dietFocusTimer = null;
+
+function shopRelTime(ts){
+  if (!ts) return '';
+  const days = Math.round((Date.now() - new Date(ts).getTime()) / 86400000);
+  if (days <= 0) return 'heute';
+  if (days === 1) return 'vor 1 Tag';
+  return `vor ${days} Tagen`;
+}
+function stapleRowHTML(st){
+  const mode = st.mode || 'suggest';
+  const bits = [`${st.buy_count || 0}× gekauft`];
+  if (st.median_interval_days) bits.push(`alle ~${Math.round(st.median_interval_days)} Tage`);
+  if (!st.mode) bits.push('Standard');
+  return `<div class="strow" data-name="${esc(st.name)}" data-product-id="${esc(st.product_id || '')}">
+    <div class="sticon">🥫</div>
+    <div class="stbody"><div class="stname">${esc(st.name)}</div><div class="stmeta">${esc(bits.join(' · '))}</div></div>
+    <div class="stmode" role="group" aria-label="Modus für ${esc(st.name)}">
+      <button class="smopt${mode === 'auto' ? ' active' : ''}" type="button" data-mode="auto">Auto</button>
+      <button class="smopt${mode === 'suggest' ? ' active' : ''}" type="button" data-mode="suggest">Vorschlag</button>
+      <button class="smopt${mode === 'off' ? ' active' : ''}" type="button" data-mode="off">Aus</button>
+    </div>
+  </div>`;
+}
+function dietFocusHTML(focus){
+  const active = focus.chips || [];
+  return `<div class="dietblock">
+    <div class="dchip-grid" id="dietChipGrid">${DIET_FOCUS_PRESETS.map(p => `
+      <button class="schip${active.includes(p) ? ' active' : ''}" type="button" data-chip="${esc(p)}">${esc(p)}</button>
+    `).join('')}</div>
+    <textarea class="dfree" id="dietFreetext" placeholder="Eigene Notiz …" rows="2">${esc(focus.freetext || '')}</textarea>
+    <div class="dupdated" id="dietUpdated">${focus.updated_ts ? 'zuletzt geändert ' + shopRelTime(focus.updated_ts) : 'noch nicht gesetzt'}</div>
+  </div>`;
+}
+
+async function openStaplesSettings(){
+  try {
+    const [staplesData, focus] = await Promise.all([
+      apiGet('/api/shopping/staples'),
+      apiGet('/api/shopping/diet-focus'),
+    ]);
+    const staples = staplesData.staples || [];
+    openSheet(`
+      <h3>🥫 Vorräte verwalten</h3>
+      <div class="h3sub">Modus pro Artikel · Ernährungsfokus</div>
+      <div id="staplelist">${staples.length ? staples.map(stapleRowHTML).join('') : '<div class="sheet-error">Noch keine gelernten Vorräte.</div>'}</div>
+      <div class="pgroup" style="margin-top:22px;"><div class="pgi">Ernährungsfokus</div></div>
+      ${dietFocusHTML(focus)}
+      <div class="row" style="margin-top:16px;"><button class="btn ghost" id="closeSheet" style="flex:1">Schließen</button></div>`);
+    wireClose();
+    wireStapleRows();
+    wireDietFocus();
+  } catch (err){ showError(err); }
+}
+
+function wireStapleRows(){
+  document.querySelectorAll('#staplelist .strow').forEach(row => {
+    row.querySelectorAll('.smopt').forEach(btn => btn.addEventListener('click', async () => {
+      const mode = btn.dataset.mode;
+      const prevActive = row.querySelector('.smopt.active');
+      row.querySelectorAll('.smopt').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      try {
+        await apiPost('/api/shopping/staple', {
+          name: row.dataset.name, product_id: row.dataset.productId || undefined, mode,
+        });
+      } catch (err){
+        row.querySelectorAll('.smopt').forEach(b => b.classList.remove('active'));
+        if (prevActive) prevActive.classList.add('active');
+        showError(err);
+      }
+    }));
+  });
+}
+
+function wireDietFocus(){
+  const grid = document.getElementById('dietChipGrid');
+  const freetext = document.getElementById('dietFreetext');
+  function currentChips(){
+    return [...document.querySelectorAll('#dietChipGrid .schip.active')].map(c => c.dataset.chip);
+  }
+  function persist(){
+    clearTimeout(dietFocusTimer);
+    dietFocusTimer = setTimeout(async () => {
+      try {
+        await apiPost('/api/shopping/diet-focus', { chips: currentChips(), freetext: freetext.value });
+        const cap = document.getElementById('dietUpdated');
+        if (cap) cap.textContent = 'zuletzt geändert gerade eben';
+      } catch (err){ showError(err); }
+    }, 500);
+  }
+  grid.querySelectorAll('.schip').forEach(c => c.addEventListener('click', () => { c.classList.toggle('active'); persist(); }));
+  freetext.addEventListener('input', persist);
+}
+
+document.getElementById('staplesOpt').addEventListener('click', () => {
+  themePop.classList.remove('show');
+  openStaplesSettings();
+});
 
 /* ---- selection ---- */
 function toggleSelect(id, el){

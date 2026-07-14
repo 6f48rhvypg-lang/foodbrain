@@ -238,6 +238,36 @@ class ShoppingApiTest(unittest.TestCase):
         with self.assertRaises(ApiError):
             self._api(FakeGrocy()).shopping_staple("Kaffee", mode="bogus")
 
+    # --- staples roster (unfiltered, for the settings screen) ---
+
+    def test_staples_includes_off_and_not_currently_due_habits(self) -> None:
+        client = FakeGrocy(products=[{"id": "9", "name": "Senf"}])
+        api = self._api(client)
+        for _ in range(3):
+            shoppingstore.record_buy(self.store, name="Senf", product_id="9", amount=1)
+        shoppingstore.set_mode(self.store, name="Senf", product_id="9", mode="off")
+        out = api.shopping_staples()
+        row = next(s for s in out["staples"] if s["name"] == "Senf")
+        self.assertEqual(row["mode"], "off")
+        self.assertEqual(row["buy_count"], 3)
+        self.assertTrue(row["is_staple"])
+
+    def test_staples_falls_back_to_habit_key_when_product_unresolved(self) -> None:
+        api = self._api(FakeGrocy())
+        shoppingstore.record_buy(self.store, name="Freitext-Ding", amount=1)
+        out = api.shopping_staples()
+        self.assertEqual(out["staples"][0]["name"], "freitext-ding")
+        self.assertIsNone(out["staples"][0]["product_id"])
+
+    # --- diet focus (sticky) ---
+
+    def test_diet_focus_get_set_round_trip(self) -> None:
+        api = self._api(FakeGrocy())
+        self.assertEqual(api.shopping_get_diet_focus()["chips"], [])
+        written = api.shopping_set_diet_focus(chips=["Proteinreich"], freetext="mehr Gemüse")
+        self.assertEqual(written["chips"], ["Proteinreich"])
+        self.assertEqual(api.shopping_get_diet_focus()["freetext"], "mehr Gemüse")
+
     # --- commit bought ---
 
     def test_commit_bought_adds_stock_records_buy_and_clears_list(self) -> None:
@@ -500,6 +530,26 @@ class ShoppingHttpSmokeTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
         self.assertEqual(self.client.stock["1"], 1.0)
+
+    def test_staples_endpoint(self) -> None:
+        self._post("/api/shopping/staple", {"name": "Kaffee", "mode": "auto"})
+        status, body = self._get("/api/shopping/staples")
+        self.assertEqual(status, 200)
+        self.assertTrue(any(s["name"] == "kaffee" and s["mode"] == "auto" for s in body["staples"]))
+
+    def test_diet_focus_endpoint_round_trip(self) -> None:
+        status, body = self._get("/api/shopping/diet-focus")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["chips"], [])
+
+        status, body = self._post(
+            "/api/shopping/diet-focus", {"chips": ["Proteinreich"], "freetext": "mehr Gemüse"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["chips"], ["Proteinreich"])
+
+        status, body = self._get("/api/shopping/diet-focus")
+        self.assertEqual(body["freetext"], "mehr Gemüse")
 
 
 if __name__ == "__main__":

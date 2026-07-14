@@ -1,10 +1,78 @@
 # FoodBrain Handoff
 
-Current date: 2026-07-11
+Current date: 2026-07-12
 
 ---
 
-## 🎨 NEXT SESSION: shopping-list mockup wave — build these files
+## ✅ DONE (2026-07-12): shopping list wired into the real app — variant 1 (badge strip)
+
+User picked `shopping-1-badge-strip.html` from the gallery. Wired `shopping-0` (nav hero) +
+`shopping-1` (list) + `shopping-4` (Vorräte verwalten) into `prototype/fridge-now.html` for
+real, against the live API — not committed yet as of writing.
+
+**Backend additions** (small, additive, matching the gap the previous mockup session
+flagged): `shoppingstore.py` gained a `diet_focus` skeleton key + `get_diet_focus`/
+`set_diet_focus` pure functions; `api.py` gained `shopping_staples()` (the full unfiltered
+habit roster — `shopping_list()`'s suggestion feed intentionally hides staples that are
+`off` or not currently due, so the settings screen needed its own read) plus
+`shopping_get_diet_focus`/`shopping_set_diet_focus`; `server.py` gained
+`GET /api/shopping/staples`, `GET /api/shopping/diet-focus`, `POST /api/shopping/diet-focus`.
+26 new tests (`tests/test_shoppingstore.py`, `tests/test_shopping_api.py`), 316 passing total.
+Note: `POST /api/shopping/diet` (the on-demand LLM diet-*suggestions*) is unchanged and still
+separate from this — folding LLM diet suggestions into the regular suggestion feed with a
+sane refetch cadence is still open, unrelated to the now-sticky focus *setting* itself.
+
+**Frontend**: both new screens are sheets (`openSheet`), not a new full-screen UI mode — the
+"Vorräte verwalten" mockup's "full screen, not a sheet" framing turned out to just be a single
+continuous scroll in practice (confirmed by re-reading the mockup: no *simultaneously*
+independently-scrollable regions), so a sheet is a faithful, zero-new-architecture
+translation; flagged this in case the user wants a real dedicated screen mode later. New
+hero button `#shopHero` stacked under `#cookHero` (`.shophero` warm→hot gradient variant of
+`.cookhero`); new `.topt` row `#staplesOpt` in the `⋯` popover. List sheet polls
+`GET /api/shopping/list` every 20s while open (self-terminating once the sheet closes) and
+diffs on `rev`. Row actions call `update`/`commit-bought`/`add`/`staple` directly; diet-focus
+chips/freetext persist via a 500ms-debounced `POST /api/shopping/diet-focus`.
+
+Live-verified with a route-mocked Playwright pass (fixture JSON standing in for the API,
+since the shopping list intrinsically needs a real or fake Grocy client — `--sample` mode
+alone 503s on it) — full click-through (open list, toggle done, buy, accept a suggestion,
+manual add, open settings, flip a staple mode, toggle a diet chip + freetext), zero console
+errors. **Not yet walked against the real household Grocy (CT 104)** — the write paths
+(`add`/`update`/`commit-bought`/`staple`) are still only exercised against `FakeGrocy` and the
+mocked-fetch browser pass, not live inventory. Do that walk before trusting this against real
+data, same gap flagged in the previous mockup session.
+
+<details><summary>Previous entry: mockup wave built, awaiting pick (superseded — kept for the design-decision record)</summary>
+
+## ✅ DONE (2026-07-11): shopping-list mockup wave built — awaiting the user's pick
+
+Built exactly the file list below (all in `prototype/mockups/`): `_shopping-items.js`
+fixture, `shopping-0-home-entry.html`, `shopping-1-badge-strip.html`,
+`shopping-2-reason-panel.html`, `shopping-3-compact-list.html`,
+`shopping-4-settings-vorraete.html`, `shopping-index.html` gallery, plus a matching `.png`
+per non-index file (screenshotted with a throwaway Playwright script, then discarded per
+convention). Screenshot-verified, no console errors.
+
+Two bugs caught during verification, both fixed: (1) `.chip` isn't actually defined in
+`_base.css` (assumed it was, ported from `fridge-now.html:329-341` into each of the 4 files
+that use it instead) — check `_base.css` before assuming a class exists there. (2)
+`shopping-0-home-entry.html` loads both `_items.js` and `_shopping-items.js`, and both
+declared `const TONE` — a silent global-scope collision that aborted the second script
+entirely (classic `<script src>` tags share one top-level scope). Renamed the shopping
+fixture's to `SHOP_TONE`. Worth remembering if a future mockup ever loads two fixture files
+on one page.
+
+**Next step, once the user has looked at `shopping-index.html` and picked a listing
+variant** (1/2/3 — the nav entry `shopping-0` and settings screen `shopping-4` are resolved,
+not a choice): wire that variant + `shopping-0` + `shopping-4` into the real
+`prototype/fridge-now.html`, exactly like the prior "search-first compact" → `1a59c07` wiring
+pass. Not done yet — these are still static, unwired mockups only.
+
+</details>
+
+<details><summary>Original build brief (superseded by the above, kept for file-list/API-shape reference)</summary>
+
+## 🎨 shopping-list mockup wave — build these files
 
 **Start here.** The 5 open product questions from the previous brief are now **resolved** (see
 below) — this session's job is to **build the mockup files**, not to design from scratch or ask
@@ -216,6 +284,8 @@ and the DONE section right below for what's already been verified vs. not.
 
 Full original architecture/decisions: `C:\Users\eiwen\.claude\plans\i-want-to-develop-curious-manatee.md`
 and the ORIGINAL PLAN section further down this file.
+
+</details>
 
 ---
 

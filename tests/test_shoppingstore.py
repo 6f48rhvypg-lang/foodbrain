@@ -17,7 +17,10 @@ class ShoppingStoreTest(unittest.TestCase):
 
     def test_missing_file_returns_skeleton(self) -> None:
         data = shoppingstore.load(self.path)
-        self.assertEqual(data, {"overlay": {}, "habits": {}})
+        self.assertEqual(
+            data,
+            {"overlay": {}, "habits": {}, "diet_focus": {"chips": [], "freetext": "", "updated_ts": None}},
+        )
 
     def test_atomic_write_leaves_no_tmp(self) -> None:
         shoppingstore.set_overlay(self.path, "1", source="manual")
@@ -171,6 +174,39 @@ class ShoppingStoreTest(unittest.TestCase):
         habit = shoppingstore.load(self.path)["habits"]["milch"]
         self.assertIsNone(habit["mode"])  # invalid mode dropped, not crashed
         self.assertEqual(habit["buys"], [])
+
+    # --- diet focus (sticky) ---
+
+    def test_diet_focus_defaults_empty(self) -> None:
+        focus = shoppingstore.get_diet_focus(self.path)
+        self.assertEqual(focus, {"chips": [], "freetext": "", "updated_ts": None})
+
+    def test_diet_focus_set_then_get_round_trips(self) -> None:
+        written = shoppingstore.set_diet_focus(
+            self.path, chips=["Proteinreich", "Mehr Gemüse"], freetext="weniger Zucker"
+        )
+        self.assertIsNotNone(written["updated_ts"])
+        read = shoppingstore.get_diet_focus(self.path)
+        self.assertEqual(read["chips"], ["Proteinreich", "Mehr Gemüse"])
+        self.assertEqual(read["freetext"], "weniger Zucker")
+        self.assertEqual(read["updated_ts"], written["updated_ts"])
+
+    def test_diet_focus_set_drops_blank_chips(self) -> None:
+        written = shoppingstore.set_diet_focus(self.path, chips=["", "  ", "Low-Carb"], freetext="")
+        self.assertEqual(written["chips"], ["Low-Carb"])
+
+    def test_diet_focus_set_replaces_not_merges(self) -> None:
+        shoppingstore.set_diet_focus(self.path, chips=["Proteinreich"], freetext="alt")
+        second = shoppingstore.set_diet_focus(self.path, chips=["Low-Carb"], freetext="neu")
+        self.assertEqual(second["chips"], ["Low-Carb"])
+        self.assertEqual(second["freetext"], "neu")
+
+    def test_partial_file_normalizes_bogus_diet_focus(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps({"diet_focus": {"chips": "not-a-list"}}), encoding="utf-8")
+        focus = shoppingstore.load(self.path)["diet_focus"]
+        self.assertEqual(focus["chips"], [])
+        self.assertEqual(focus["freetext"], "")
 
 
 if __name__ == "__main__":

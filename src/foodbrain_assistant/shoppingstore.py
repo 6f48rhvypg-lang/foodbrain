@@ -42,7 +42,7 @@ def _now_iso() -> str:
 
 
 def _skeleton() -> dict:
-    return {"overlay": {}, "habits": {}}
+    return {"overlay": {}, "habits": {}, "diet_focus": {"chips": [], "freetext": "", "updated_ts": None}}
 
 
 def load(path) -> dict:
@@ -212,6 +212,28 @@ def habit_stats(habit: Optional[dict]) -> dict:
     }
 
 
+# --- diet focus: a sticky preference, not a one-off ask ---------------------
+
+
+def get_diet_focus(path) -> dict:
+    """The persisted diet-focus setting: ``{chips, freetext, updated_ts}``."""
+    return dict(load(path).get("diet_focus", {"chips": [], "freetext": "", "updated_ts": None}))
+
+
+def set_diet_focus(path, *, chips: Optional[List[str]] = None, freetext: str = "") -> dict:
+    """Replace the diet-focus setting; applies instantly, no save button upstream."""
+    entry = {
+        "chips": [str(c).strip() for c in (chips or []) if str(c).strip()],
+        "freetext": str(freetext or "").strip(),
+        "updated_ts": _now_iso(),
+    }
+    with _LOCK:
+        data = load(path)
+        data["diet_focus"] = entry
+        save(path, data)
+    return dict(entry)
+
+
 # --- internals ---------------------------------------------------------------
 
 
@@ -262,6 +284,14 @@ def _normalize(data: dict) -> dict:
                 "removals": _clean_events(habit.get("removals"), with_amount=False),
                 "mode": mode if mode in _MODES else None,
             }
+    diet_focus = data.get("diet_focus")
+    if isinstance(diet_focus, dict):
+        chips = diet_focus.get("chips")
+        skel["diet_focus"] = {
+            "chips": [str(c) for c in chips] if isinstance(chips, list) else [],
+            "freetext": str(diet_focus.get("freetext") or ""),
+            "updated_ts": str(diet_focus.get("updated_ts") or "") or None,
+        }
     return skel
 
 
