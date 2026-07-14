@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Shopping 4 · Vorräte verwalten</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* KONZEPT 4 — Vorräte verwalten:
+     a full screen, not a sheet — two independently-scrollable, open-ended
+     blocks (staples, diet focus) don't fit openSheet's bounded pattern.
+     Reached from the ⋯ overflow (#themePop) via a new .topt row — shown
+     illustratively at the top so it's clear how a user gets here. */
+  .concept-tag {
+    display:inline-flex; align-items:center; gap:7px; font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint);
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:999px;
+    padding:6px 12px; margin-bottom:14px; box-shadow:var(--shadow);
+  }
+  .concept-tag b { color:var(--accent); }
+  .app { padding-top:20px; }
+
+  /* illustrative entry point: a fragment of the real ⋯ popover */
+  .entrynote { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint); letter-spacing:.04em; margin-bottom:8px; }
+  .popfrag { width:230px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:8px; margin-bottom:22px; }
+  .topt {
+    display:flex; align-items:center; gap:9px; width:100%; padding:10px 10px; border-radius:10px;
+    border:1px solid transparent; background:transparent; cursor:default;
+    font-family:"Hanken Grotesk",sans-serif; font-weight:600; font-size:13.5px; color:var(--ink); text-align:left;
+  }
+  .topt .ti { width:16px; flex:0 0 auto; text-align:center; font-size:14px; }
+  .topt.active { border-color:var(--accent); background:var(--surface-2); color:var(--accent); }
+  .topt .check { margin-left:auto; opacity:1; color:var(--accent); }
+
+  header.pagehead { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .backbtn {
+    width:36px; height:36px; border-radius:50%; flex:0 0 auto; cursor:pointer;
+    background:var(--surface); border:1px solid var(--line); color:var(--ink-dim);
+    font-size:16px; display:grid; place-items:center; box-shadow:var(--shadow);
+  }
+  h1.pagetitle { font-family:"Fraunces",serif; font-weight:600; font-size:23px; letter-spacing:-.01em; color:var(--ink); }
+  .pagesub { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); margin:2px 0 0 46px; }
+
+  .block { margin-top:26px; }
+  .blockhead { display:flex; align-items:baseline; gap:8px; padding:0 2px; margin-bottom:10px; }
+  .blockhead h2 { font-family:"Fraunces",serif; font-weight:600; font-size:16.5px; color:var(--ink); }
+  .blockhead .bsub { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint); }
+
+  /* staple rows */
+  .stlist { display:flex; flex-direction:column; gap:9px; }
+  .strow {
+    display:grid; grid-template-columns:auto 1fr auto; align-items:center; column-gap:12px;
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:11px 13px;
+  }
+  .sticon { width:38px; height:38px; border-radius:12px; background:var(--surface-2); border:1px solid var(--line-soft); display:grid; place-items:center; font-size:19px; flex:0 0 auto; }
+  .stbody { min-width:0; }
+  .stname { font-family:"Fraunces",serif; font-weight:600; font-size:15px; color:var(--ink); }
+  .stmeta { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint); margin-top:2px; }
+  .stmode { display:flex; gap:3px; background:var(--surface-2); border-radius:10px; padding:3px; flex:0 0 auto; }
+  .smopt {
+    border:none; background:transparent; cursor:pointer; padding:7px 9px; border-radius:8px;
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600; color:var(--ink-faint);
+    transition:all .15s var(--ease);
+  }
+  .smopt.active { background:var(--accent); color:var(--accent-ink); }
+
+  /* diet focus */
+  .dietblock {
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:16px 15px;
+  }
+  .dchip-grid { display:flex; flex-wrap:wrap; gap:8px; }
+  .dfree {
+    width:100%; margin-top:12px; font-family:"Hanken Grotesk",sans-serif; font-size:14px; color:var(--ink);
+    background:var(--surface-2); border:1px solid var(--line-soft); border-radius:12px; padding:11px 12px;
+    resize:vertical; min-height:56px;
+  }
+  .dupdated { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint); margin-top:9px; }
+
+  /* .chip isn't in _base.css yet (ported from fridge-now.html:329-341) */
+  .chip {
+    flex:0 0 auto; cursor:pointer; user-select:none; border:1px solid var(--line-soft);
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-dim); background:var(--surface);
+    border-radius:999px; padding:7px 13px; transition:all .2s var(--ease); white-space:nowrap; box-shadow:var(--shadow);
+  }
+  .chip.active { color:var(--accent-ink); background:var(--accent); border-color:var(--accent); font-weight:600; }
+</style>
+</head><body>
+  <div class="app">
+    <div class="concept-tag">Konzept 4 — <b>Vorräte verwalten</b></div>
+
+    <div class="entrynote">Erreicht über den ⋯-Button auf der Startseite:</div>
+    <div class="popfrag">
+      <button class="topt" type="button"><span class="ti">📖</span><span>Meine Rezepte</span></button>
+      <button class="topt active" type="button"><span class="ti">🥫</span><span>Vorräte verwalten</span><span class="check">✓</span></button>
+      <button class="topt" type="button"><span class="ti">⚙️</span><span>Einstellungen</span></button>
+    </div>
+
+    <header class="pagehead">
+      <button class="backbtn" type="button" aria-label="Zurück">←</button>
+      <div>
+        <h1 class="pagetitle">Vorräte verwalten</h1>
+      </div>
+    </header>
+    <div class="pagesub">Modus pro Artikel &middot; Ernährungsfokus</div>
+
+    <section class="block">
+      <div class="blockhead"><h2>Vorräte</h2><span class="bsub">Auto · Vorschlag · Aus</span></div>
+      <div class="stlist" id="staplelist"></div>
+    </section>
+
+    <section class="block">
+      <div class="blockhead"><h2>Ernährungsfokus</h2><span class="bsub">wirkt auf künftige Vorschläge</span></div>
+      <div class="dietblock" id="dietchips"></div>
+    </section>
+  </div>
+  <script src="_shopping-items.js"></script>
+</body></html>

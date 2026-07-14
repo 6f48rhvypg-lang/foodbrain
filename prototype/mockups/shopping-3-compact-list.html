@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Shopping 3 · Compact List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* KONZEPT 3 — Compact List:
+     dense rows, hairline dividers, no badge pill — the signal is only a
+     left accent-bar color plus a small glyph. The reason drops to a
+     monospace caption. Trailing "✓ gekauft" is a large, easy tap-target
+     since that's the one action this whole screen exists for. */
+  .concept-tag {
+    display:inline-flex; align-items:center; gap:7px; font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint);
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:999px;
+    padding:6px 12px; margin-bottom:14px; box-shadow:var(--shadow);
+  }
+  .concept-tag b { color:var(--accent); }
+  .app { padding-top:20px; }
+  h1.pagetitle {
+    font-family:"Fraunces",serif; font-weight:600; font-size:26px; letter-spacing:-.01em;
+    color:var(--ink); margin-bottom:2px;
+  }
+  .sectiontitle { display:flex; align-items:center; gap:8px; margin:24px 0 2px; padding:0 2px; }
+  .sectiontitle h2 {
+    font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:12px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink);
+  }
+  .sectiontitle .count { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-faint); margin-left:auto; }
+  .devtoggle {
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint);
+    cursor:pointer; text-decoration:underline; background:none; border:none;
+  }
+
+  .dlist { background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .srow {
+    position:relative; display:flex; align-items:center; gap:10px;
+    padding:11px 14px 11px 16px; border-bottom:1px solid var(--line-soft);
+  }
+  .srow:last-child { border-bottom:none; }
+  .srow::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--c,transparent); }
+  .srow.bought { opacity:.45; }
+
+  .sglyph { flex:0 0 auto; font-size:13px; width:16px; text-align:center; }
+  .sdone { display:none; } /* the glyph + strike-through carries the state in this concept */
+
+  .sbody { flex:1 1 auto; min-width:0; }
+  .snameline { display:flex; align-items:baseline; gap:8px; }
+  .sname { font-family:"Hanken Grotesk",sans-serif; font-weight:700; font-size:14.5px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bought .sname { text-decoration:line-through; color:var(--ink-dim); }
+  .samt { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint); flex:0 0 auto; }
+  .sbadge { display:none; }
+  .sreason {
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-faint);
+    margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  .sbuy, .sadd { flex:0 0 auto; cursor:pointer; border:none; transition:filter .15s, transform .12s var(--ease); }
+  .sbuy:active, .sadd:active { transform:scale(.94); }
+  .sbuy {
+    position:relative; width:44px; height:44px; border-radius:12px; color:transparent; background:var(--accent);
+    overflow:hidden;
+  }
+  .sbuy::after {
+    content:"✓"; position:absolute; inset:0; display:grid; place-items:center;
+    font-size:19px; color:var(--accent-ink); line-height:1;
+  }
+  .sbuy:disabled { background:var(--staple); opacity:.7; cursor:default; }
+  .sadd {
+    width:44px; height:44px; border-radius:12px; font-size:20px; color:var(--accent); background:var(--surface-2);
+    border:1.5px solid var(--accent); display:grid; place-items:center; line-height:1;
+  }
+
+  .iadd {
+    display:flex; align-items:center; gap:10px; width:100%; cursor:pointer; text-align:left;
+    background:var(--surface); border:1px dashed var(--line); border-radius:var(--radius-sm);
+    padding:11px 14px; margin-top:9px; font-family:"Hanken Grotesk",sans-serif; font-weight:700;
+    font-size:13.5px; color:var(--ink-dim); transition:border-color .15s;
+  }
+  .iadd:hover { border-color:var(--accent); color:var(--accent); }
+  .addpanel { display:none; margin-top:9px; background:var(--surface-2); border:1px solid var(--line-soft); border-radius:var(--radius-sm); padding:12px 13px; }
+  .addpanel.show { display:block; }
+  .addpanel input[type=text] {
+    width:100%; font-family:"Hanken Grotesk",sans-serif; font-size:14px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:10px; padding:9px 11px;
+  }
+  .addpanel .chiprow { display:flex; gap:7px; margin-top:9px; flex-wrap:wrap; }
+  .addpanel .row { display:flex; gap:8px; margin-top:11px; }
+  .btn { flex:1; border:none; border-radius:12px; padding:10px; font-family:"Hanken Grotesk",sans-serif; font-weight:700; font-size:13.5px; cursor:pointer; }
+  .btn.solid { background:var(--accent); color:var(--accent-ink); }
+  .btn.ghost { background:var(--surface); border:1px solid var(--line); color:var(--ink-dim); }
+
+  /* .chip isn't in _base.css yet (ported from fridge-now.html:329-341) */
+  .chip {
+    flex:0 0 auto; cursor:pointer; user-select:none; border:1px solid var(--line-soft);
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-dim); background:var(--surface);
+    border-radius:999px; padding:7px 13px; transition:all .2s var(--ease); white-space:nowrap; box-shadow:var(--shadow);
+  }
+  .chip.active { color:var(--accent-ink); background:var(--accent); border-color:var(--accent); font-weight:600; }
+</style>
+</head><body>
+  <div class="app">
+    <div class="concept-tag">Konzept 3 — <b>Compact List</b></div>
+    <h1 class="pagetitle">🛒 Einkaufsliste</h1>
+
+    <div class="sectiontitle"><h2>Auf der Liste</h2><span class="count" id="shopCount"></span></div>
+    <div class="dlist" id="shoplist"></div>
+    <button class="iadd" type="button" id="iaddBtn"><span class="he">＋</span> Artikel hinzufügen</button>
+    <div class="addpanel" id="addPanel">
+      <input type="text" placeholder="z. B. Zitronen" />
+      <div class="chiprow">
+        <span class="chip active">1 Stück</span><span class="chip">2 Stück</span><span class="chip">500 g</span><span class="chip">1 kg</span>
+      </div>
+      <div class="row">
+        <button class="btn ghost" type="button" id="addCancel">Abbrechen</button>
+        <button class="btn solid" type="button" disabled title="Mockup — nicht verdrahtet">Hinzufügen</button>
+      </div>
+    </div>
+
+    <div class="sectiontitle"><h2>Vorschläge</h2><span class="count" id="suggCount"></span><button class="devtoggle" id="emptyToggle" type="button">leer/voll umschalten</button></div>
+    <div class="dlist" id="suggestlist"></div>
+  </div>
+  <script src="_shopping-items.js"></script>
+  <script>
+    // KONZEPT 3 only: swap the badge pill for a single glyph prefix, matching
+    // "source via left accent-bar color + emoji only" — done by post-processing
+    // the shared fixture's row markup rather than duplicating render logic.
+    const SIGNAL_GLYPH = { manual:'✎', depleted:'⛔', low_qty:'◐', interval:'⏰', diet:'🌿', recipe:'🍳', frequent:'🔁' };
+    function decorate() {
+      document.querySelectorAll('#shoplist .srow, #suggestlist .srow').forEach(row => {
+        let glyph = row.querySelector('.sglyph');
+        if (!glyph) {
+          glyph = document.createElement('span');
+          glyph.className = 'sglyph';
+          row.insertBefore(glyph, row.firstChild);
+        }
+        glyph.textContent = SIGNAL_GLYPH[row.dataset.source] || SIGNAL_GLYPH.manual;
+      });
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(decorate, 0);
+      // the fixture re-renders #shoplist/#suggestlist on toggle/move — watch both
+      // rather than hooking every code path that mutates them.
+      const mo = new MutationObserver(() => decorate());
+      ['shoplist', 'suggestlist'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) mo.observe(el, { childList: true });
+      });
+    });
+    document.getElementById('iaddBtn').addEventListener('click', () => document.getElementById('addPanel').classList.add('show'));
+    document.getElementById('addCancel').addEventListener('click', () => document.getElementById('addPanel').classList.remove('show'));
+    document.querySelectorAll('.addpanel .chip').forEach(c => c.addEventListener('click', () => {
+      document.querySelectorAll('.addpanel .chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+    }));
+    document.getElementById('emptyToggle').addEventListener('click', toggleEmptySuggestions);
+  </script>
+</body></html>
