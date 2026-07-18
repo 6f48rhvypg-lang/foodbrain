@@ -217,13 +217,21 @@ pin a staple's suggestion behavior, tracked (has a `product_id`) or not. 400 on 
 string.
 
 **`POST /api/shopping/commit-bought`** `{items: [{item_id?, name, product_id?, amount?, unit?,
-location?}]}` → `{added: [{name, product_id, amount, ok}], failed: [{name, error}], ok}`. This is
-the "I bought everything checked off" action: books each item into Grocy stock (creating the
-product if it's new), records a buy for the learning engine, and removes it from the Grocy list
-+ overlay. `item_id` is optional per-row (include it so the row gets removed from the list; omit
-it for a manual "I also bought X, not on the list" add). Per-item failures don't block the rest
-— show `failed` inline like the cook-commit flow does (`fridge-now.html:3241`
+location?}]}` → `{added: [{name, product_id, amount, best_before_date, ok}], failed: [{name,
+error}], ok}`. This is the "I bought everything checked off" action: books each item into Grocy
+stock (creating the product if it's new), records a buy for the learning engine, and removes it
+from the Grocy list + overlay. `item_id` is optional per-row (include it so the row gets removed
+from the list; omit it for a manual "I also bought X, not on the list" add). Per-item failures
+don't block the rest — show `failed` inline like the cook-commit flow does (`fridge-now.html:3241`
 `"Nicht verbucht: ..."` pattern).
+
+Unlike voice intake (which asks the model for a `freshness_days` estimate per item as part of
+understanding the transcript), the shopping list has no such round trip, so `commit-bought` runs
+its own one-shot batch estimate (`shopping_llm.estimate_shelf_life`, model = `openrouter_model`)
+across all items in the request before booking, and stamps each item's `best_before_date`
+accordingly. This is best-effort: no OpenRouter key configured, or the call failing, just books
+every item with no date (`best_before_date: null`) exactly as before this existed — never blocks
+or fails the purchase.
 
 **`POST /api/shopping/diet`** `{focus}` (free-text focus string, e.g. "proteinreich", "mehr
 Gemüse", "Vorrat auffüllen") → `{focus, items: [{name, amount, unit, reason}]}` (amount/unit may

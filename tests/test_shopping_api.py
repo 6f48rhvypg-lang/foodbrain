@@ -15,6 +15,7 @@ from foodbrain_assistant import shoppingstore
 from foodbrain_assistant.api import ApiError, FoodBrainAPI
 from foodbrain_assistant.config import Settings
 from foodbrain_assistant.grocy_client import GrocyClientError
+from foodbrain_assistant.llm import LlmError
 from foodbrain_assistant.models import StockEntry, StockItem
 from foodbrain_assistant.server import make_handler
 
@@ -40,6 +41,7 @@ class FakeGrocy:
         self._pid = 100
         self._sid = 100
         self.calls: list = []
+        self.last_best_before = None
 
     # master data
     def get_products(self):
@@ -63,6 +65,7 @@ class FakeGrocy:
     def add_stock(self, product_id, amount=1.0, *, best_before_date=None, location_id=None):
         pid = str(product_id)
         self.stock[pid] = self.stock.get(pid, 0.0) + amount
+        self.last_best_before = best_before_date
         tx = self._new_tx(pid, +amount)
         self.calls.append(("add", pid, amount))
         return [{"transaction_id": tx}]
@@ -299,6 +302,10 @@ class ShoppingApiTest(unittest.TestCase):
 
     # --- commit bought ---
 
+    @staticmethod
+    def _no_estimate(items, **kwargs):
+        return {}
+
     def test_commit_bought_adds_stock_records_buy_and_clears_list(self) -> None:
         client = FakeGrocy(
             products=[{"id": "5", "name": "Kaffee"}],
@@ -306,7 +313,7 @@ class ShoppingApiTest(unittest.TestCase):
             shopping_list=[{"id": "1", "product_id": "5", "note": None, "amount": 1, "done": "0"}],
         )
         shoppingstore.set_overlay(self.store, "1", source="manual")
-        out = self._api(client).shopping_commit_bought(
+        out = self._api(client, shelf_life_estimator=self._no_estimate).shopping_commit_bought(
             [{"item_id": "1", "name": "Kaffee", "product_id": "5", "amount": 1}]
         )
         self.assertEqual(out["added"][0]["product_id"], "5")
@@ -318,19 +325,54 @@ class ShoppingApiTest(unittest.TestCase):
 
     def test_commit_bought_creates_new_product_when_unmatched(self) -> None:
         client = FakeGrocy()
-        out = self._api(client).shopping_commit_bought([{"name": "Senf", "amount": 1}])
+        out = self._api(client, shelf_life_estimator=self._no_estimate).shopping_commit_bought(
+            [{"name": "Senf", "amount": 1}]
+        )
         self.assertTrue(out["added"][0]["ok"])
         self.assertEqual(len(client.products), 1)
 
     def test_commit_bought_isolates_failures(self) -> None:
         client = FakeGrocy()
-        out = self._api(client).shopping_commit_bought([{"name": ""}, {"name": "Senf", "amount": 1}])
+        out = self._api(client, shelf_life_estimator=self._no_estimate).shopping_commit_bought(
+            [{"name": ""}, {"name": "Senf", "amount": 1}]
+        )
         self.assertEqual(len(out["failed"]), 1)
         self.assertEqual(len(out["added"]), 1)
 
     def test_commit_bought_requires_items(self) -> None:
         with self.assertRaises(ApiError):
             self._api(FakeGrocy()).shopping_commit_bought([])
+
+    def test_commit_bought_books_estimated_best_before_date(self) -> None:
+        client = FakeGrocy(stock={"5": 0.0})
+        estimator = lambda items, **kwargs: {"kaffee": 30}
+        out = self._api(client, shelf_life_estimator=estimator).shopping_commit_bought(
+            [{"name": "Kaffee", "amount": 1}]
+        )
+        self.assertEqual(out["added"][0]["best_before_date"], (TODAY + timedelta(days=30)).isoformat())
+        pid = out["added"][0]["product_id"]
+        self.assertEqual(client.calls[-1], ("add", pid, 1))
+        self.assertEqual(client.last_best_before, TODAY + timedelta(days=30))
+
+    def test_commit_bought_without_llm_configured_books_no_date(self) -> None:
+        client = FakeGrocy(stock={"5": 0.0})
+        out = self._api(
+            client, settings=_settings(openrouter_api_key=None)
+        ).shopping_commit_bought([{"name": "Kaffee", "amount": 1}])
+        self.assertIsNone(out["added"][0]["best_before_date"])
+        self.assertIsNone(client.last_best_before)
+
+    def test_commit_bought_estimate_failure_still_books_without_date(self) -> None:
+        client = FakeGrocy(stock={"5": 0.0})
+
+        def failing_estimator(items, **kwargs):
+            raise LlmError("boom")
+
+        out = self._api(client, shelf_life_estimator=failing_estimator).shopping_commit_bought(
+            [{"name": "Kaffee", "amount": 1}]
+        )
+        self.assertTrue(out["ok"])
+        self.assertIsNone(out["added"][0]["best_before_date"])
 
     # --- diet suggestions ---
 
@@ -492,6 +534,7 @@ class ShoppingHttpSmokeTest(unittest.TestCase):
             shopping_store_path=self.store,
             write_client_factory=lambda: self.client,
             product_catalog_provider=self.client.get_products,
+            shelf_life_estimator=lambda items, **kwargs: {},
             source="test",
         )
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(api))

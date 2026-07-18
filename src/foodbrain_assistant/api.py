@@ -28,7 +28,7 @@ write operations fail closed with a 403-style :class:`ApiError`.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -128,6 +128,12 @@ class FoodBrainAPI:
     # settings.data_dir, mirroring cook_store_path.
     diet_suggester: Optional[Callable[..., dict]] = None
     shopping_store_path: Optional[object] = None  # str | Path
+    # Best-effort MHD (best-before) estimate for shopping-list purchases, which —
+    # unlike voice intake — never asked the model for a shelf life. Injectable
+    # for tests; None runs the real shopping_llm.estimate_shelf_life, and any
+    # failure/missing config just books items without a date (unchanged from
+    # before this existed).
+    shelf_life_estimator: Optional[Callable[..., Dict[str, int]]] = None
 
     # --- reads -----------------------------------------------------------
 
@@ -522,6 +528,9 @@ class FoodBrainAPI:
         Reuses the intake add path (create-or-reuse product, add pack) and
         records a ``buy`` event per item so the suggestion engine learns the
         household's rhythm. Per-item resilience mirrors ``intake_commit``.
+
+        Also estimates a best-before date per item up front (one call for the
+        whole batch) — the shopping list has no MHD input, unlike voice intake.
         """
         if not items:
             raise ApiError(400, "no items to commit")
@@ -531,18 +540,35 @@ class FoodBrainAPI:
             _NameResolver(client.get_locations(), self.settings.intake_default_location),
         )
         product_index = _ProductIndex(client.get_products(), self.aliases)
+        freshness = self._estimate_shelf_life(items)
         added: List[dict] = []
         failed: List[dict] = []
         for raw in items:
             name = str(raw.get("name") or "").strip()
             try:
-                added.append(self._shopping_commit_one(client, raw, resolvers, product_index))
+                added.append(
+                    self._shopping_commit_one(client, raw, resolvers, product_index, freshness)
+                )
             except GrocyWriteDisabledError as exc:
                 raise ApiError(403, str(exc)) from exc
             except (GrocyClientError, ApiError) as exc:
                 message = exc.message if isinstance(exc, ApiError) else str(exc)
                 failed.append({"name": name or "?", "error": message})
         return {"added": added, "failed": failed, "ok": not failed}
+
+    def _estimate_shelf_life(self, items: List[dict]) -> Dict[str, int]:
+        """Best-effort {lowercased name: days-until-best-before} for a purchase
+        batch; empty when the LLM isn't configured or the call fails, so booking
+        falls back to no date exactly as before this existed."""
+        estimator = self.shelf_life_estimator
+        if estimator is None:
+            if not self.settings.intake_enabled:
+                return {}
+            estimator = shopping_llm.estimate_shelf_life
+        try:
+            return estimator(items, model=self.settings.openrouter_model, settings=self.settings) or {}
+        except (LlmError, LlmNotConfigured):
+            return {}
 
     def shopping_diet(self, focus: str) -> dict:
         """LLM-suggested items serving a diet focus (mehr Gemüse, proteinreich, ...).
@@ -568,7 +594,9 @@ class FoodBrainAPI:
         except (LlmError, LlmNotConfigured) as exc:
             raise self._llm_error(exc) from exc
 
-    def _shopping_commit_one(self, client, raw: dict, resolvers, product_index) -> dict:
+    def _shopping_commit_one(
+        self, client, raw: dict, resolvers, product_index, freshness: Dict[str, int]
+    ) -> dict:
         units, locations = resolvers
         name = str(raw.get("name") or "").strip()
         if not name:
@@ -585,7 +613,9 @@ class FoodBrainAPI:
                     name, qu_id_stock=units.resolve(raw.get("unit")), location_id=location_id
                 )
                 product_index.add(name, product_id)
-        client.add_stock(product_id, amount, location_id=location_id)
+        days = freshness.get(name.lower())
+        best_before = self.today_provider() + timedelta(days=days) if days else None
+        client.add_stock(product_id, amount, best_before_date=best_before, location_id=location_id)
         shoppingstore.record_buy(
             self._shopping_path(), name=name, product_id=product_id, amount=amount
         )
@@ -596,7 +626,13 @@ class FoodBrainAPI:
             except GrocyClientError:
                 pass
             shoppingstore.remove_overlay(self._shopping_path(), item_id)
-        return {"name": name, "product_id": product_id, "amount": amount, "ok": True}
+        return {
+            "name": name,
+            "product_id": product_id,
+            "amount": amount,
+            "best_before_date": best_before.isoformat() if best_before else None,
+            "ok": True,
+        }
 
     _SHOPPING_SIGNAL_RANK = {"depleted": 0, "low_qty": 1, "interval": 2}
 

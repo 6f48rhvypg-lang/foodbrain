@@ -9,7 +9,7 @@ Every suggestion the model returns carries a plain-language ``reason`` — the
 shopping list's hard requirement that nothing gets added silently.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .llm import Transport, post_chat_json
 
@@ -58,6 +58,63 @@ def _diet_user_message(*, focus: str, inventory_lines: List[str], taste: dict) -
     lines.append("Mag: " + (", ".join(taste.get("likes", [])) or "—"))
     lines.append("Mag nicht: " + (", ".join(taste.get("dislikes", [])) or "—"))
     return "\n".join(lines)
+
+
+_SHELF_LIFE_SYSTEM = (
+    "Du schätzt für gerade eingekaufte Lebensmittel, wie viele Tage sie ab heute "
+    "typischerweise halten (bis zum Mindesthaltbarkeitsdatum), bei üblicher "
+    "Lagerung (Kühlschrank für Frischware, sonst Vorrat/Tiefkühler wie für das "
+    "jeweilige Produkt typisch). Nutze dein Wissen über normale Haltbarkeiten "
+    "(z.B. frische Milch ~10 Tage, Joghurt ~14, Bananen ~5, Kartoffeln ~60, "
+    "Tiefkühlgemüse ~180, Konserven ~730, frisches Brot ~4).\n\n"
+    "Antworte für JEDEN Artikel in der Liste mit dem Namen (exakt wie angegeben, "
+    "zur Zuordnung) und deiner Schätzung 'freshness_days' als ganze Zahl. Nur "
+    "wenn du wirklich nicht schätzen kannst: null.\n\n"
+    "Antworte mit NUR diesem JSON:\n"
+    '{"items": [{"name": str, "freshness_days": number|null}]}'
+)
+
+
+def estimate_shelf_life(
+    items: List[dict],
+    *,
+    model: str,
+    settings,
+    transport: Optional[Transport] = None,
+) -> Dict[str, int]:
+    """Best-effort MHD estimate (days from today, per lowercased item name) for a
+    batch of just-bought items.
+
+    Booking a shopping-list purchase has no clarifying-question round trip like
+    voice intake does, so this is a single one-shot call. Callers treat this as
+    best-effort: an item the model couldn't estimate (or any call failure) is
+    simply omitted, and the caller books it without a best-before date — exactly
+    the behaviour before this existed.
+    """
+    names = [str(item.get("name") or "").strip() for item in items]
+    names = [n for n in names if n]
+    if not names:
+        return {}
+    user = "Gerade gekaufte Artikel:\n" + "\n".join(f"- {n}" for n in names)
+    data = post_chat_json(
+        settings=settings, model=model, system=_SHELF_LIFE_SYSTEM, user=user, transport=transport
+    )
+    result: Dict[str, int] = {}
+    rows = data.get("items") if isinstance(data.get("items"), list) else []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip().lower()
+        days = row.get("freshness_days")
+        if not name or days is None:
+            continue
+        try:
+            days_int = int(round(float(days)))
+        except (TypeError, ValueError):
+            continue
+        if days_int > 0:
+            result[name] = days_int
+    return result
 
 
 def _clean_item(row) -> Optional[dict]:
